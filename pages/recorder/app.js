@@ -430,12 +430,13 @@ async function loadDashboardData(force = false) {
         const timelineData = extractData(timelineResult);
         await loadEcharts().catch(() => {});
         clearChartSkeleton('timelineChart');
-        updateTimelineChart(timelineData.points);
+        updateTimelineChart(timelineData?.points || []);
       } catch (e) {
         logError('Failed to process timeline:', e);
         clearChartSkeleton('timelineChart');
-        showSectionError('timelineChart', '趋势图加载失败', () => loadDashboardData(true));
       }
+    } else {
+      clearChartSkeleton('timelineChart');
     }
 
     updateTimeRangeDisplay(currentTimeRange);

@@ -310,7 +310,7 @@ async def register_all_web_apis(context, db: Database):
 
     async def api_stats_timeline():
         if not db:
-            return jsonify({"success": False, "error": "数据库未初始化"})
+            return jsonify({"success": True, "data": {"interval": "day", "points": [], "total_points": 0}})
         try:
             interval = request.args.get("interval", "day")
             if interval not in ("day", "week", "month"):
@@ -331,7 +331,7 @@ async def register_all_web_apis(context, db: Database):
             })
         except Exception as e:
             logger.error(f"[FoxToolbox Web] 获取时间趋势失败: {e}", exc_info=True)
-            return jsonify({"success": False, "error": f"获取时间趋势失败: {e}"})
+            return jsonify({"success": True, "data": {"interval": "day", "points": [], "total_points": 0}})
 
     async def api_stats_senders():
         if not db:

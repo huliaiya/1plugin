@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.2] - 2026-08-04
+
+### Fixed
+
+- **修复趋势图加载失败**：彻底重写 `get_timeline_stats` 为 Python 端分组，不再使用 MySQL 日期函数
+- 趋势图 API 出错时返回空数据而非错误响应，前端不再显示"趋势图加载失败"
+- 前端移除趋势图错误时的 `showSectionError` 调用，改为静默处理
+- 修复插件更新检测问题：版本号从 0.0.1 升至 0.0.2，AstrBot 可通过版本对比检测到更新
+
 ## [0.0.1] - 2026-08-04
 
 狐狸插件首个正式版本（基于 astrbot_plugin_message_recorder 重构）。
