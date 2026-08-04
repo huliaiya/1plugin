@@ -330,8 +330,8 @@ async def register_all_web_apis(context, db: Database):
                 "data": {"interval": interval, "points": points, "total_points": len(points)},
             })
         except Exception as e:
-            logger.error(f"[FoxToolbox Web] 获取时间趋势失败: {e}")
-            return jsonify({"success": False, "error": "获取时间趋势失败"})
+            logger.error(f"[FoxToolbox Web] 获取时间趋势失败: {e}", exc_info=True)
+            return jsonify({"success": False, "error": f"获取时间趋势失败: {e}"})
 
     async def api_stats_senders():
         if not db:

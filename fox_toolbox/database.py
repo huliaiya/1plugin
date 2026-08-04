@@ -843,14 +843,7 @@ class Database:
         platform: Optional[str] = None,
         group_id: Optional[str] = None,
     ) -> List[Dict]:
-        """按时间间隔统计消息数量（MySQL 5.7 兼容）"""
-        if interval == "week":
-            time_expr = "DATE_FORMAT(FROM_UNIXTIME(`timestamp` DIV 1000), '%x-W%v')"
-        elif interval == "month":
-            time_expr = "DATE_FORMAT(FROM_UNIXTIME(`timestamp` DIV 1000), '%Y-%m')"
-        else:
-            time_expr = "DATE_FORMAT(FROM_UNIXTIME(`timestamp` DIV 1000), '%Y-%m-%d')"
-
+        """按时间间隔统计消息数量（Python 端分组，彻底兼容 MySQL 5.7）"""
         conditions = []
         params: List[Any] = []
         if start_time:
@@ -869,31 +862,46 @@ class Database:
         where_clause = " AND ".join(conditions) if conditions else "1=1"
 
         sql = f"""
-            SELECT
-                {time_expr} AS `date`,
-                COUNT(*) AS `count`,
-                SUM(CASE WHEN message_type = 'group'
-                    THEN 1 ELSE 0 END) AS group_count,
-                SUM(CASE WHEN message_type = 'private'
-                    THEN 1 ELSE 0 END) AS private_count
+            SELECT `timestamp`, `message_type`
             FROM messages
             WHERE {where_clause}
-            GROUP BY {time_expr}
-            ORDER BY {time_expr} ASC
         """
+        from collections import OrderedDict
+        from datetime import datetime as _dt
+
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(sql, params)
                 rows = await cur.fetchall()
-        return [
-            {
-                "date": row[0],
-                "count": row[1],
-                "group_count": row[2],
-                "private_count": row[3],
-            }
-            for row in rows
-        ]
+
+        groups: "OrderedDict[str, Dict]" = OrderedDict()
+        for row in rows:
+            ts_ms = row[0]
+            msg_type = row[1] or ""
+            dt = _dt.fromtimestamp(ts_ms / 1000)
+
+            if interval == "week":
+                iso_year, iso_week = dt.isocalendar()[0], dt.isocalendar()[1]
+                key = f"{iso_year}-W{iso_week:02d}"
+            elif interval == "month":
+                key = dt.strftime("%Y-%m")
+            else:
+                key = dt.strftime("%Y-%m-%d")
+
+            if key not in groups:
+                groups[key] = {
+                    "date": key,
+                    "count": 0,
+                    "group_count": 0,
+                    "private_count": 0,
+                }
+            groups[key]["count"] += 1
+            if msg_type == "group":
+                groups[key]["group_count"] += 1
+            elif msg_type == "private":
+                groups[key]["private_count"] += 1
+
+        return list(groups.values())
 
     async def get_sender_ranking(
         self,
