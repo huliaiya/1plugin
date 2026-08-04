@@ -843,27 +843,21 @@ class Database:
         platform: Optional[str] = None,
         group_id: Optional[str] = None,
     ) -> List[Dict]:
-        """按时间间隔统计消息数量"""
+        """按时间间隔统计消息数量（MySQL 5.7 兼容）"""
         if interval == "week":
-            time_format = (
-                "DATE_FORMAT(FROM_UNIXTIME(timestamp / 1000), '%x-W%v')"
-            )
+            time_expr = "DATE_FORMAT(FROM_UNIXTIME(`timestamp` DIV 1000), '%x-W%v')"
         elif interval == "month":
-            time_format = (
-                "DATE_FORMAT(FROM_UNIXTIME(timestamp / 1000), '%Y-%m')"
-            )
+            time_expr = "DATE_FORMAT(FROM_UNIXTIME(`timestamp` DIV 1000), '%Y-%m')"
         else:
-            time_format = (
-                "DATE_FORMAT(FROM_UNIXTIME(timestamp / 1000), '%Y-%m-%d')"
-            )
+            time_expr = "DATE_FORMAT(FROM_UNIXTIME(`timestamp` DIV 1000), '%Y-%m-%d')"
 
         conditions = []
         params: List[Any] = []
         if start_time:
-            conditions.append("timestamp >= %s")
+            conditions.append("`timestamp` >= %s")
             params.append(start_time)
         if end_time:
-            conditions.append("timestamp <= %s")
+            conditions.append("`timestamp` <= %s")
             params.append(end_time)
         if platform:
             conditions.append("platform = %s")
@@ -876,7 +870,7 @@ class Database:
 
         sql = f"""
             SELECT
-                {time_format} AS `date`,
+                {time_expr} AS `date`,
                 COUNT(*) AS `count`,
                 SUM(CASE WHEN message_type = 'group'
                     THEN 1 ELSE 0 END) AS group_count,
@@ -884,8 +878,8 @@ class Database:
                     THEN 1 ELSE 0 END) AS private_count
             FROM messages
             WHERE {where_clause}
-            GROUP BY `date`
-            ORDER BY `date` ASC
+            GROUP BY {time_expr}
+            ORDER BY {time_expr} ASC
         """
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:

@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🦊 狐狸工具箱
+# 🦊 狐狸插件
 
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E4.16%2C%3C5-blue?style=for-the-badge)](https://github.com/Soulter/astrbot)
 [![Python](https://img.shields.io/badge/Python-3.12+-green?style=for-the-badge)](https://www.python.org/)
@@ -12,7 +12,7 @@
 
 ---
 
-## 为什么选择狐狸工具箱？
+## 为什么选择狐狸插件？
 
 > **安装即用，零配置起步** — 插件会自动记录经过 AstrBot 的每一条消息，无需任何手动操作。需要更多功能时再按需开启。
 
@@ -20,7 +20,7 @@
 - 管理多个平台的机器人，希望统一归档所有对话？
 - 想在自己的插件中查询历史消息，却不想自己写数据库层？
 
-**狐狸工具箱** 就是为此而生 —— 装上就忘，需要时随时搜索、导出、分析。
+**狐狸插件** 就是为此而生 —— 装上就忘，需要时随时搜索、导出、分析。
 
 ---
 
@@ -72,7 +72,7 @@
 
 ### 方式一：插件市场（推荐）
 
-在 AstrBot WebUI 的 **插件市场** 中搜索「**狐狸工具箱**」并一键安装
+在 AstrBot WebUI 的 **插件市场** 中搜索「**狐狸插件**」并一键安装
 
 ### 方式二：手动安装
 
@@ -230,7 +230,7 @@ Web 面板采用 **Liquid Glass** 液态玻璃设计风格，通过现代 CSS �
 from astrbot.api.star import Context
 
 async def get_fox_toolbox_api(context: Context):
-    """获取狐狸工具箱 API"""
+    """获取狐狸插件 API"""
     recorder = context.get_registered_star("astrbot_plugin_fox_toolbox")
     if recorder:
         plugin_instance = getattr(recorder, "star_cls", None)
@@ -548,6 +548,23 @@ ruff format .
 
 ---
 
+## 📝 更新日志
+
+### v0.0.1（2026-08-04）
+
+**首个正式版本**，基于 [astrbot_plugin_message_recorder](https://github.com/leafliber/astrbot_plugin_message_recorder) 重构。
+
+- 插件更名为「狐狸插件」，存储引擎从 SQLite 迁移至 MySQL 5.7
+- Web 管理面板采用 Liquid Glass 液态玻璃设计风格
+- 修复趋势图加载失败问题（MySQL 5.7 下 `FROM_UNIXTIME` + `GROUP BY` 别名兼容性）
+- 修复 `_conf_schema.json` 中 JSON 语法错误（未转义双引号导致插件安装失败）
+- 移除非标准的根目录 `__init__.py`（干扰 AstrBot 插件加载）
+- 修复 SSRF、XSS 等安全问题，修复 ECharts 内存泄漏
+
+完整变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+
+---
+
 ## 📄 许可证
 
 [GNU Affero General Public License v3.0](LICENSE)
@@ -557,7 +574,7 @@ ruff format .
 ## 🙏 致谢
 
 - [AstrBot](https://github.com/Soulter/astrbot) - 强大的多平台聊天机器人框架，本插件基于其插件体系开发
-- [astrbot_plugin_message_recorder](https://github.com/leafliber/astrbot_plugin_message_recorder) - 原项目 **消息记录器**，由 [Leafiber](https://github.com/leafliber) 开发，狐狸工具箱在此基础上进行存储引擎迁移和二次开发
+- [astrbot_plugin_message_recorder](https://github.com/leafliber/astrbot_plugin_message_recorder) - 原项目 **消息记录器**，由 [Leafiber](https://github.com/leafliber) 开发，狐狸插件在此基础上进行存储引擎迁移和二次开发
 - [aiomysql](https://github.com/aio-libs/aiomysql) - 异步 MySQL 驱动库
 - [aiohttp](https://github.com/aio-libs/aiohttp) - 异步 HTTP 客户端，用于多媒体文件下载
 

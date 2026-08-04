@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.1] - 2026-08-04
 
-狐狸工具箱首个正式版本（基于 astrbot_plugin_message_recorder 重构）。
+狐狸插件首个正式版本（基于 astrbot_plugin_message_recorder 重构）。
 
 ### Changed
 
-- **插件更名**：从 `astrbot_plugin_message_recorder`（消息记录器）更名为 `astrbot_plugin_fox_toolbox`（狐狸工具箱）
+- **插件更名**：从 `astrbot_plugin_message_recorder`（消息记录器）更名为 `astrbot_plugin_fox_toolbox`（狐狸插件）
 - **存储引擎迁移**：从 SQLite（aiosqlite）全面迁移至 MySQL 5.7（aiomysql），MySQL 成为唯一存储方式
 - **核心目录更名**：`message_recorder/` 目录更名为 `fox_toolbox/`
 - **全文搜索迁移**：从 SQLite FTS5 迁移至 MySQL FULLTEXT 索引（ngram 分词器，支持中文）
@@ -46,8 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 修复 web_api.py 中 asyncio 任务未被跟踪的问题（添加 _background_tasks 集合）
 - 优化 database.py 的 N+1 查询问题（get_unreferenced_media_paths 改为批量查询）
 - 修复插件安装问题：移除非标准的根目录 `__init__.py`
+- 修复 `_conf_schema.json` 中 JSON 语法错误（hint 字段未转义双引号导致安装失败）
 - 修复 metadata.yaml 中无效的 `webchat` 平台声明
 - 移除未使用的 `register` 导入
+- **修复趋势图加载失败**：`get_timeline_stats` SQL 查询在 MySQL 5.7 下兼容性问题
+  - `timestamp` 列名添加反引号避免保留字冲突
+  - 使用 `DIV` 替代 `/` 确保整数除法（避免 DECIMAL 类型问题）
+  - `GROUP BY` / `ORDER BY` 使用完整表达式替代别名（避免 `ONLY_FULL_GROUP_BY` 模式冲突）
 
 ### Removed
 

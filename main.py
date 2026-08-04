@@ -1,4 +1,4 @@
-"""狐狸工具箱 - AstrBot 消息记录器插件主入口（MySQL 5.7 存储）"""
+"""狐狸插件 - AstrBot 消息记录器插件主入口（MySQL 5.7 存储）"""
 
 import asyncio
 import json
