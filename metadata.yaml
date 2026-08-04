@@ -1,8 +1,8 @@
 name: astrbot_plugin_fox_toolbox
-desc: 自动记录所有平台的聊天消息到 MySQL 5.7，提供 Web 管理面板、全文搜索、数据导入导出和供其他插件调用的查询 API
+desc: 狐狸工具箱 - AstrBot 插件
 version: 0.0.4
 author: Leafiber
-repo: https://github.com/leafliber/astrbot_plugin_fox_toolbox
+repo: https://github.com/huliaiya/1plugin
 display_name: 狐狸工具箱
 support_platforms:
   - aiocqhttp
