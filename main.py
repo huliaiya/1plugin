@@ -36,6 +36,12 @@ _CONTENT_TYPE_LABELS = {
     "Plain": "",
     "Image": "[图片]",
     "File": "[文件]",
+    "FileDocument": "[文档]",
+    "FileAudio": "[音频]",
+    "FileArchive": "[压缩包]",
+    "FileCode": "[代码]",
+    "FileImage": "[图片文件]",
+    "FileVideo": "[视频文件]",
     "Video": "[视频]",
     "Record": "[语音]",
     "At": "[@]",
@@ -57,6 +63,95 @@ _CONTENT_TYPE_LABELS = {
     "MiniApp": "[小程序]",
     "Poke": "[戳一戳]",
 }
+
+# 文件扩展名 -> 子类型分类
+_FILE_EXT_CATEGORIES = {
+    # 文档
+    "pdf": "FileDocument", "doc": "FileDocument", "docx": "FileDocument",
+    "xls": "FileDocument", "xlsx": "FileDocument", "ppt": "FileDocument",
+    "pptx": "FileDocument", "txt": "FileDocument", "md": "FileDocument",
+    "wps": "FileDocument", "odt": "FileDocument", "ods": "FileDocument",
+    "odp": "FileDocument", "rtf": "FileDocument", "pages": "FileDocument",
+    "epub": "FileDocument", "mobi": "FileDocument",
+    "csv": "FileDocument", "log": "FileDocument", "key": "FileDocument",
+    "numbers": "FileDocument", "tex": "FileDocument", "chm": "FileDocument",
+    "djvu": "FileDocument", "fb2": "FileDocument", "azw": "FileDocument",
+    "azw3": "FileDocument",
+    # 音频（非语音消息的音频文件）
+    "mp3": "FileAudio", "flac": "FileAudio", "aac": "FileAudio",
+    "m4a": "FileAudio", "wma": "FileAudio", "ogg": "FileAudio",
+    "ape": "FileAudio", "alac": "FileAudio", "opus": "FileAudio",
+    "mid": "FileAudio", "midi": "FileAudio",
+    "wav": "FileAudio", "amr": "FileAudio", "aiff": "FileAudio",
+    "au": "FileAudio", "dsf": "FileAudio", "dff": "FileAudio",
+    "mka": "FileAudio", "weba": "FileAudio",
+    # 压缩包
+    "zip": "FileArchive", "rar": "FileArchive", "7z": "FileArchive",
+    "tar": "FileArchive", "gz": "FileArchive", "bz2": "FileArchive",
+    "xz": "FileArchive", "tgz": "FileArchive",
+    "iso": "FileArchive", "jar": "FileArchive", "cab": "FileArchive",
+    "deb": "FileArchive", "rpm": "FileArchive", "pkg": "FileArchive",
+    "msi": "FileArchive", "lz": "FileArchive", "lzma": "FileArchive",
+    "zst": "FileArchive", "ar": "FileArchive", "cpio": "FileArchive",
+    # 代码/程序
+    "py": "FileCode", "js": "FileCode", "ts": "FileCode", "java": "FileCode",
+    "c": "FileCode", "cpp": "FileCode", "h": "FileCode", "go": "FileCode",
+    "rs": "FileCode", "rb": "FileCode", "php": "FileCode", "sh": "FileCode",
+    "html": "FileCode", "css": "FileCode", "json": "FileCode", "xml": "FileCode",
+    "yml": "FileCode", "yaml": "FileCode", "sql": "FileCode", "bat": "FileCode",
+    "apk": "FileCode", "exe": "FileCode", "dmg": "FileCode", "ipa": "FileCode",
+    "kt": "FileCode", "swift": "FileCode", "scala": "FileCode", "dart": "FileCode",
+    "lua": "FileCode", "r": "FileCode", "jl": "FileCode", "clj": "FileCode",
+    "ps1": "FileCode", "ini": "FileCode", "toml": "FileCode", "conf": "FileCode",
+    "vim": "FileCode", "gradle": "FileCode", "cmake": "FileCode",
+    "makefile": "FileCode", "dockerfile": "FileCode", "asm": "FileCode",
+    "vbs": "FileCode", "pl": "FileCode", "groovy": "FileCode",
+    "elixir": "FileCode", "erl": "FileCode", "hs": "FileCode", "ml": "FileCode",
+    "fs": "FileCode", "nim": "FileCode", "cr": "FileCode", "zig": "FileCode",
+    "v": "FileCode", "obj": "FileCode",
+    # 图片文件（作为文件发送的图片，非 Image 组件）
+    "jpg": "FileImage", "jpeg": "FileImage", "png": "FileImage",
+    "gif": "FileImage", "webp": "FileImage", "bmp": "FileImage",
+    "svg": "FileImage", "ico": "FileImage", "tiff": "FileImage",
+    "heic": "FileImage", "heif": "FileImage", "raw": "FileImage",
+    "psd": "FileImage", "cr2": "FileImage", "nef": "FileImage",
+    "arw": "FileImage", "dng": "FileImage", "avif": "FileImage",
+    "jfif": "FileImage", "hdr": "FileImage",
+    # 视频文件（作为文件发送的视频，非 Video 组件）
+    "mp4": "FileVideo", "avi": "FileVideo", "mkv": "FileVideo",
+    "mov": "FileVideo", "wmv": "FileVideo", "flv": "FileVideo",
+    "webm": "FileVideo", "m4v": "FileVideo", "3gp": "FileVideo",
+    "mpeg": "FileVideo", "mpg": "FileVideo", "ts": "FileVideo",
+    "vob": "FileVideo", "m2ts": "FileVideo", "f4v": "FileVideo",
+    "ogv": "FileVideo", "mts": "FileVideo", "rm": "FileVideo",
+    "rmvb": "FileVideo",
+}
+
+
+def _classify_file_component(comp_data: dict) -> str:
+    """根据文件名/URL 扩展名分类 File 组件的子类型。
+    
+    返回子类型字符串（如 FileDocument, FileAudio 等），
+    无法识别时返回 "File"。
+    """
+    # 尝试从 name、file、url、path 中提取文件名
+    filename = ""
+    for key in ("name", "file", "url", "path"):
+        val = comp_data.get(key)
+        if isinstance(val, str) and val:
+            filename = val
+            break
+    
+    if not filename:
+        return "File"
+    
+    # 提取扩展名（小写，去掉查询参数）
+    filename_clean = filename.split("?")[0].split("#")[0]
+    if "." not in filename_clean:
+        return "File"
+    
+    ext = filename_clean.rsplit(".", 1)[-1].lower()
+    return _FILE_EXT_CATEGORIES.get(ext, "File")
 
 
 def _generate_message_summary(chain_data: list) -> str:
@@ -306,7 +401,18 @@ class MessageRecorder(Star):
                     record.message_chain = json.dumps(chain_data, ensure_ascii=False)
 
                     # 提取内容类型，用于统计和搜索
-                    comp_types = [c.get("type", "") for c in chain_data if isinstance(c, dict)]
+                    # 对 File 组件根据扩展名进一步细分类别
+                    comp_types = []
+                    for c in chain_data:
+                        if not isinstance(c, dict):
+                            continue
+                        raw_type = c.get("type", "")
+                        if raw_type == "File":
+                            # 细分文件子类型
+                            subtype = _classify_file_component(c)
+                            comp_types.append(subtype)
+                        else:
+                            comp_types.append(raw_type)
                     if comp_types:
                         record.content_types = ",".join(comp_types)
 

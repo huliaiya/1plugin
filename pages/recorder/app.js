@@ -635,7 +635,7 @@ function updateContentTypeChart(types) {
   if (!contentTypeChart || !types?.length) return;
 
   const data = types.map(t => ({ name: t.label, value: t.count }));
-  const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#95a5a6', '#34495e', '#7f8c8d'];
+  const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#95a5a6', '#34495e', '#7f8c8d', '#16a085', '#c0392b', '#2980b9', '#8e44ad', '#d35400', '#27ae60'];
 
   contentTypeChart.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
@@ -677,7 +677,7 @@ function updatePlatformDetailTable(platforms) {
   const tbody = document.getElementById('platformDetailBody');
   if (!tbody) return;
   if (!platforms?.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="padding:16px;text-align:center;color:#999;">暂无数据</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" style="padding:16px;text-align:center;color:#999;">暂无数据</td></tr>';
     return;
   }
   tbody.innerHTML = platforms.map(p => {
@@ -689,9 +689,13 @@ function updatePlatformDetailTable(platforms) {
       <td style="padding:8px;text-align:right;">${fmt(p.private_count)}</td>
       <td style="padding:8px;text-align:right;">${fmt(p.channel_count)}</td>
       <td style="padding:8px;text-align:right;">${fmt(p.image_count)}</td>
-      <td style="padding:8px;text-align:right;">${fmt(p.file_count)}</td>
       <td style="padding:8px;text-align:right;">${fmt(p.video_count)}</td>
       <td style="padding:8px;text-align:right;">${fmt(p.voice_count)}</td>
+      <td style="padding:8px;text-align:right;">${fmt(p.document_count)}</td>
+      <td style="padding:8px;text-align:right;">${fmt(p.audio_count)}</td>
+      <td style="padding:8px;text-align:right;">${fmt(p.archive_count)}</td>
+      <td style="padding:8px;text-align:right;">${fmt(p.code_count)}</td>
+      <td style="padding:8px;text-align:right;">${fmt(p.other_file_count)}</td>
     </tr>`;
   }).join('');
 }

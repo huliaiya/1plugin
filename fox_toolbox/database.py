@@ -790,23 +790,29 @@ class Database:
         return stats
 
     async def get_content_type_stats(self) -> List[Dict]:
-        """获取消息内容类型统计（文字/图片/文件/视频/语音等）"""
+        """获取消息内容类型统计（文字/图片/文件/视频/语音/文档/音频/压缩包等）"""
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
-                # 使用 LIKE 查询统计各类型组件出现次数
-                # content_types 存储逗号分隔的组件类型，如 "Plain,Image"
+                # content_types 存储逗号分隔的组件类型，如 "Plain,Image" 或 "FileDocument"
+                # 使用 FIND_IN_SET 精确匹配逗号分隔值，避免 LIKE '%Image%' 误匹配 FileImage
                 await cur.execute("""
                     SELECT
                         COUNT(*) AS total,
-                        SUM(CASE WHEN content_types LIKE '%Plain%' THEN 1 ELSE 0 END) AS text_count,
-                        SUM(CASE WHEN content_types LIKE '%Image%' THEN 1 ELSE 0 END) AS image_count,
-                        SUM(CASE WHEN content_types LIKE '%File%' THEN 1 ELSE 0 END) AS file_count,
-                        SUM(CASE WHEN content_types LIKE '%Video%' THEN 1 ELSE 0 END) AS video_count,
-                        SUM(CASE WHEN content_types LIKE '%Record%' THEN 1 ELSE 0 END) AS voice_count,
-                        SUM(CASE WHEN content_types LIKE '%At%' THEN 1 ELSE 0 END) AS at_count,
-                        SUM(CASE WHEN content_types LIKE '%Reply%' THEN 1 ELSE 0 END) AS reply_count,
-                        SUM(CASE WHEN content_types LIKE '%Face%' THEN 1 ELSE 0 END) AS face_count,
-                        SUM(CASE WHEN content_types LIKE '%Json%' OR content_types LIKE '%Xml%' OR content_types LIKE '%Card%' THEN 1 ELSE 0 END) AS rich_count,
+                        SUM(CASE WHEN FIND_IN_SET('Plain', content_types) > 0 THEN 1 ELSE 0 END) AS text_count,
+                        SUM(CASE WHEN FIND_IN_SET('Image', content_types) > 0 THEN 1 ELSE 0 END) AS image_count,
+                        SUM(CASE WHEN FIND_IN_SET('Video', content_types) > 0 THEN 1 ELSE 0 END) AS video_count,
+                        SUM(CASE WHEN FIND_IN_SET('Record', content_types) > 0 THEN 1 ELSE 0 END) AS voice_count,
+                        SUM(CASE WHEN FIND_IN_SET('FileDocument', content_types) > 0 THEN 1 ELSE 0 END) AS document_count,
+                        SUM(CASE WHEN FIND_IN_SET('FileAudio', content_types) > 0 THEN 1 ELSE 0 END) AS audio_count,
+                        SUM(CASE WHEN FIND_IN_SET('FileArchive', content_types) > 0 THEN 1 ELSE 0 END) AS archive_count,
+                        SUM(CASE WHEN FIND_IN_SET('FileCode', content_types) > 0 THEN 1 ELSE 0 END) AS code_count,
+                        SUM(CASE WHEN FIND_IN_SET('FileImage', content_types) > 0 THEN 1 ELSE 0 END) AS file_image_count,
+                        SUM(CASE WHEN FIND_IN_SET('FileVideo', content_types) > 0 THEN 1 ELSE 0 END) AS file_video_count,
+                        SUM(CASE WHEN FIND_IN_SET('File', content_types) > 0 THEN 1 ELSE 0 END) AS other_file_count,
+                        SUM(CASE WHEN FIND_IN_SET('At', content_types) > 0 OR FIND_IN_SET('AtAll', content_types) > 0 THEN 1 ELSE 0 END) AS at_count,
+                        SUM(CASE WHEN FIND_IN_SET('Reply', content_types) > 0 THEN 1 ELSE 0 END) AS reply_count,
+                        SUM(CASE WHEN FIND_IN_SET('Face', content_types) > 0 THEN 1 ELSE 0 END) AS face_count,
+                        SUM(CASE WHEN FIND_IN_SET('Json', content_types) > 0 OR FIND_IN_SET('Xml', content_types) > 0 OR FIND_IN_SET('Card', content_types) > 0 THEN 1 ELSE 0 END) AS rich_count,
                         SUM(CASE WHEN content_types IS NULL OR content_types = '' THEN 1 ELSE 0 END) AS unknown_count
                     FROM messages
                 """)
@@ -818,16 +824,26 @@ class Database:
         labels = {
             "text": "文字",
             "image": "图片",
-            "file": "文件",
             "video": "视频",
             "voice": "语音",
+            "document": "文档",
+            "audio": "音频文件",
+            "archive": "压缩包",
+            "code": "代码/程序",
+            "file_image": "图片文件",
+            "file_video": "视频文件",
+            "other_file": "其他文件",
             "at": "@提及",
             "reply": "回复",
             "face": "表情",
             "rich": "富文本/卡片",
             "unknown": "未知/其他",
         }
-        keys = ["text", "image", "file", "video", "voice", "at", "reply", "face", "rich", "unknown"]
+        keys = [
+            "text", "image", "video", "voice",
+            "document", "audio", "archive", "code", "file_image", "file_video", "other_file",
+            "at", "reply", "face", "rich", "unknown",
+        ]
 
         result = []
         for i, key in enumerate(keys):
@@ -846,6 +862,7 @@ class Database:
         """获取各平台的详细统计（消息数、群聊数、私聊数等）"""
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
+                # 使用 FIND_IN_SET 精确匹配，避免 LIKE '%Image%' 误匹配 FileImage
                 await cur.execute("""
                     SELECT
                         platform,
@@ -853,10 +870,14 @@ class Database:
                         SUM(CASE WHEN message_type = 'group' THEN 1 ELSE 0 END) AS group_count,
                         SUM(CASE WHEN message_type = 'private' THEN 1 ELSE 0 END) AS private_count,
                         SUM(CASE WHEN message_type = 'channel' THEN 1 ELSE 0 END) AS channel_count,
-                        SUM(CASE WHEN content_types LIKE '%Image%' THEN 1 ELSE 0 END) AS image_count,
-                        SUM(CASE WHEN content_types LIKE '%File%' THEN 1 ELSE 0 END) AS file_count,
-                        SUM(CASE WHEN content_types LIKE '%Video%' THEN 1 ELSE 0 END) AS video_count,
-                        SUM(CASE WHEN content_types LIKE '%Record%' THEN 1 ELSE 0 END) AS voice_count,
+                        SUM(CASE WHEN FIND_IN_SET('Image', content_types) > 0 THEN 1 ELSE 0 END) AS image_count,
+                        SUM(CASE WHEN FIND_IN_SET('Video', content_types) > 0 THEN 1 ELSE 0 END) AS video_count,
+                        SUM(CASE WHEN FIND_IN_SET('Record', content_types) > 0 THEN 1 ELSE 0 END) AS voice_count,
+                        SUM(CASE WHEN FIND_IN_SET('FileDocument', content_types) > 0 THEN 1 ELSE 0 END) AS document_count,
+                        SUM(CASE WHEN FIND_IN_SET('FileAudio', content_types) > 0 THEN 1 ELSE 0 END) AS audio_count,
+                        SUM(CASE WHEN FIND_IN_SET('FileArchive', content_types) > 0 THEN 1 ELSE 0 END) AS archive_count,
+                        SUM(CASE WHEN FIND_IN_SET('FileCode', content_types) > 0 THEN 1 ELSE 0 END) AS code_count,
+                        SUM(CASE WHEN FIND_IN_SET('File', content_types) > 0 THEN 1 ELSE 0 END) AS other_file_count,
                         MIN(timestamp) AS oldest,
                         MAX(timestamp) AS newest
                     FROM messages
@@ -897,11 +918,15 @@ class Database:
                 "private_count": row[3] or 0,
                 "channel_count": row[4] or 0,
                 "image_count": row[5] or 0,
-                "file_count": row[6] or 0,
-                "video_count": row[7] or 0,
-                "voice_count": row[8] or 0,
-                "oldest_timestamp": row[9],
-                "newest_timestamp": row[10],
+                "video_count": row[6] or 0,
+                "voice_count": row[7] or 0,
+                "document_count": row[8] or 0,
+                "audio_count": row[9] or 0,
+                "archive_count": row[10] or 0,
+                "code_count": row[11] or 0,
+                "other_file_count": row[12] or 0,
+                "oldest_timestamp": row[13],
+                "newest_timestamp": row[14],
             })
         return result
 

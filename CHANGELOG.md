@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.5] - 2026-08-04
+
+### Added
+
+- **文件类型细分**：File 组件根据扩展名自动分类为文档/音频/压缩包/代码/图片/视频六种子类型
+- **更多文件扩展名支持**：新增 50+ 种文件扩展名分类（csv, log, wav, amr, heic, iso, jar, kt, swift, scala 等）
+- **平台详情表格新增列**：压缩包、代码/程序两列（共 13 列）
+- `media_downloader.py` 的 `KNOWN_EXTENSIONS` 同步扩展，确保文件保存时正确识别扩展名
+
+### Fixed
+
+- **修复统计误匹配**：SQL 查询从 `LIKE '%Image%'` 改为 `FIND_IN_SET('Image', content_types)`
+  - `LIKE '%Image%'` 会同时匹配 `Image` 和 `FileImage`，导致图片计数偏高
+  - `LIKE '%Video%'` 会同时匹配 `Video` 和 `FileVideo`，导致视频计数偏高
+  - `LIKE '%File%'` 需要复杂的 NOT LIKE 排除链，容易遗漏
+  - `FIND_IN_SET` 精确匹配逗号分隔值，彻底解决子串误匹配问题
+- **修复 At 类型误匹配**：`LIKE '%At%'` 会匹配 `AtAll`，改用 `FIND_IN_SET('At')` + `FIND_IN_SET('AtAll')`
+
+### Changed
+
+- `get_content_type_stats` 和 `get_platform_detail_stats` 的 SQL 全部改用 `FIND_IN_SET`
+- `get_platform_detail_stats` 新增 `archive_count` 和 `code_count` 返回字段
+- 前端 `updatePlatformDetailTable` 同步渲染新增的压缩包和代码列
+
 ## [0.0.4] - 2026-08-05
 
 ### Added

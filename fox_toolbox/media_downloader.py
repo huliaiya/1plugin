@@ -41,12 +41,21 @@ CONTENT_TYPE_EXT = {
 }
 
 KNOWN_EXTENSIONS = {
-    "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg",
-    "mp4", "avi", "mkv", "mov", "webm",
-    "mp3", "wav", "ogg", "amr", "flac", "silk", "aac",
+    "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "ico", "tiff",
+    "heic", "heif", "avif", "jfif",
+    "mp4", "avi", "mkv", "mov", "webm", "wmv", "flv", "m4v", "3gp",
+    "mpeg", "mpg", "ts", "m2ts", "ogv", "rm", "rmvb",
+    "mp3", "wav", "ogg", "amr", "flac", "silk", "aac", "m4a", "wma",
+    "ape", "alac", "opus", "aiff", "au",
     "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
-    "zip", "rar", "7z", "tar", "gz",
-    "txt", "json", "xml", "csv",
+    "txt", "md", "csv", "log", "rtf", "odt", "ods", "odp",
+    "epub", "mobi", "azw", "azw3",
+    "zip", "rar", "7z", "tar", "gz", "bz2", "xz", "tgz",
+    "iso", "jar", "cab", "deb", "rpm", "pkg", "msi",
+    "py", "js", "ts", "java", "c", "cpp", "h", "go", "rs", "rb",
+    "php", "sh", "html", "css", "json", "xml", "yml", "yaml", "sql",
+    "bat", "apk", "exe", "dmg", "ipa", "kt", "swift", "scala", "dart",
+    "lua", "r", "jl", "clj", "ps1", "ini", "toml", "conf",
 }
 
 THUMBNAIL_MAX_SIZE = 320
