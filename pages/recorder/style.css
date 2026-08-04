@@ -77,16 +77,16 @@ a:focus-visible,
   animation: flowRightToLeft 8s linear infinite;
 }
 
-/* 动态渐变背景 —— 为玻璃效果提供色彩底衬 */
+/* 彩虹渐变背景 —— 与参考文件一致 */
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background:
-    radial-gradient(1200px 600px at 10% 5%, rgba(79, 195, 247, 0.12) 0%, transparent 55%),
-    radial-gradient(1000px 500px at 90% 15%, rgba(41, 182, 246, 0.12) 0%, transparent 50%),
-    radial-gradient(900px 600px at 50% 95%, rgba(100, 181, 246, 0.1) 0%, transparent 55%),
-    radial-gradient(800px 400px at 85% 85%, rgba(129, 212, 250, 0.08) 0%, transparent 45%),
-    radial-gradient(700px 500px at 20% 70%, rgba(77, 208, 225, 0.08) 0%, transparent 45%),
-    linear-gradient(135deg, #f0f4ff 0%, #e3f2fd 25%, #e1f5fe 50%, #e3f2fd 75%, #e0f7fa 100%);
+    radial-gradient(1200px 600px at 10% 5%, rgba(240, 98, 146, 0.1) 0%, transparent 55%),
+    radial-gradient(1000px 500px at 90% 15%, rgba(100, 181, 246, 0.1) 0%, transparent 50%),
+    radial-gradient(900px 600px at 50% 95%, rgba(129, 199, 132, 0.08) 0%, transparent 55%),
+    radial-gradient(800px 400px at 85% 85%, rgba(255, 183, 77, 0.08) 0%, transparent 45%),
+    radial-gradient(700px 500px at 20% 70%, rgba(186, 104, 200, 0.08) 0%, transparent 45%),
+    linear-gradient(135deg, #f0f4ff 0%, #f5f3ff 25%, #fef9e7 50%, #fce4ec 75%, #e8f5e9 100%);
   background-attachment: fixed;
   color: var(--text-on-glass);
   line-height: 1.6;
