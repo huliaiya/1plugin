@@ -31,6 +31,55 @@ from fox_toolbox.web_api import register_all_web_apis, cleanup_expired_tasks
 MAX_CONCURRENT_SAVES = 8
 MAX_CONCURRENT_DOWNLOADS = 4
 
+# 内容类型 -> 摘要文本的映射
+_CONTENT_TYPE_LABELS = {
+    "Plain": "",
+    "Image": "[图片]",
+    "File": "[文件]",
+    "Video": "[视频]",
+    "Record": "[语音]",
+    "At": "[@]",
+    "AtAll": "[@全体]",
+    "Face": "[表情]",
+    "Reply": "[回复]",
+    "Xml": "[XML]",
+    "Json": "[JSON]",
+    "Card": "[卡片]",
+    "Music": "[音乐分享]",
+    "TTS": "[TTS]",
+    "Forward": "[合并转发]",
+    "Contact": "[名片]",
+    "Location": "[位置]",
+    "Markdown": "[Markdown]",
+    "Rps": "[猜拳]",
+    "Dice": "[骰子]",
+    "Shake": "[抖动窗口]",
+    "MiniApp": "[小程序]",
+    "Poke": "[戳一戳]",
+}
+
+
+def _generate_message_summary(chain_data: list) -> str:
+    """从消息链生成摘要文本（用于 message_str 为空时的回退）"""
+    parts = []
+    for comp in chain_data:
+        if not isinstance(comp, dict):
+            continue
+        comp_type = comp.get("type", "")
+        if comp_type == "Plain":
+            text = comp.get("text", "")
+            if text:
+                parts.append(text)
+        else:
+            label = _CONTENT_TYPE_LABELS.get(comp_type, f"[{comp_type}]")
+            if label:
+                parts.append(label)
+    summary = "".join(parts).strip()
+    # 限制长度
+    if len(summary) > 200:
+        summary = summary[:200] + "..."
+    return summary
+
 
 class MessageRecorder(Star):
     """消息记录器插件主类"""
@@ -255,6 +304,19 @@ class MessageRecorder(Star):
                             await asyncio.gather(*download_tasks, return_exceptions=True)
 
                     record.message_chain = json.dumps(chain_data, ensure_ascii=False)
+
+                    # 提取内容类型，用于统计和搜索
+                    comp_types = [c.get("type", "") for c in chain_data if isinstance(c, dict)]
+                    if comp_types:
+                        record.content_types = ",".join(comp_types)
+
+                    # 如果 message_str 为空，从消息链生成摘要
+                    if not record.message_str:
+                        record.message_str = _generate_message_summary(chain_data)
+
+            # 即使没有消息链，也尝试设置一个基础的 message_str
+            if not record.message_str:
+                record.message_str = ""
 
             if self.config.get("save_raw_message", False):
                 raw_msg = message_obj.raw_message

@@ -58,6 +58,7 @@ def _format_message(msg: MessageRecord) -> Dict[str, Any]:
         "channel_id": msg.channel_id,
         "message_type": msg.message_type,
         "message_str": msg.message_str,
+        "content_types": msg.content_types,
         "reply_to_id": msg.reply_to_id,
         "timestamp": msg.timestamp,
         "formatted_time": _format_timestamp(msg.timestamp),
@@ -370,6 +371,26 @@ async def register_all_web_apis(context, db: Database):
         except Exception as e:
             logger.error(f"[FoxToolbox Web] 获取群组统计失败: {e}")
             return jsonify({"success": False, "error": "获取群组统计失败"})
+
+    async def api_stats_content_types():
+        if not db:
+            return jsonify({"success": True, "data": {"types": [], "total": 0}})
+        try:
+            types = await db.get_content_type_stats()
+            return jsonify({"success": True, "data": {"types": types, "total": len(types)}})
+        except Exception as e:
+            logger.error(f"[FoxToolbox Web] 获取内容类型统计失败: {e}")
+            return jsonify({"success": True, "data": {"types": [], "total": 0}})
+
+    async def api_stats_platforms_detail():
+        if not db:
+            return jsonify({"success": True, "data": {"platforms": []}})
+        try:
+            platforms = await db.get_platform_detail_stats()
+            return jsonify({"success": True, "data": {"platforms": platforms, "total": len(platforms)}})
+        except Exception as e:
+            logger.error(f"[FoxToolbox Web] 获取平台详情统计失败: {e}")
+            return jsonify({"success": True, "data": {"platforms": []}})
 
     # ========== Messages APIs ==========
 
@@ -891,6 +912,8 @@ async def register_all_web_apis(context, db: Database):
     context.register_web_api(f"{prefix}/stats/timeline", api_stats_timeline, ["GET"], "获取时间趋势")
     context.register_web_api(f"{prefix}/stats/senders", api_stats_senders, ["GET"], "获取发送者排行")
     context.register_web_api(f"{prefix}/stats/groups", api_stats_groups, ["GET"], "获取群组排行")
+    context.register_web_api(f"{prefix}/stats/content-types", api_stats_content_types, ["GET"], "获取内容类型统计")
+    context.register_web_api(f"{prefix}/stats/platforms", api_stats_platforms_detail, ["GET"], "获取平台详情统计")
     context.register_web_api(f"{prefix}/messages", api_messages, ["GET"], "查询消息列表")
     context.register_web_api(f"{prefix}/message/detail", api_message_detail, ["GET"], "获取消息详情")
     context.register_web_api(f"{prefix}/message/context", api_message_context, ["GET"], "获取消息上下文")

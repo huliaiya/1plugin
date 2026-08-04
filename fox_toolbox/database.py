@@ -17,7 +17,7 @@ _SELECT_COLUMNS = """
     id, platform, message_id, session_id, group_id, channel_id,
     sender_id, sender_name, message_type,
     message_str, message_chain, raw_message,
-    reply_to_id, content_hash, timestamp, created_at
+    reply_to_id, content_hash, content_types, timestamp, created_at
 """
 
 
@@ -37,8 +37,9 @@ def _row_to_record(row) -> MessageRecord:
         raw_message=row[11],
         reply_to_id=row[12],
         content_hash=row[13],
-        timestamp=row[14],
-        created_at=row[15],
+        content_types=row[14],
+        timestamp=row[15],
+        created_at=row[16],
     )
 
 
@@ -110,6 +111,7 @@ class Database:
                                 raw_message LONGTEXT,
                                 reply_to_id VARCHAR(128) DEFAULT NULL,
                                 content_hash VARCHAR(64) DEFAULT NULL,
+                                content_types VARCHAR(256) DEFAULT NULL,
                                 timestamp BIGINT NOT NULL,
                                 created_at BIGINT NOT NULL,
                                 INDEX idx_platform (platform),
@@ -256,6 +258,7 @@ class Database:
             record.raw_message,
             record.reply_to_id,
             record.content_hash,
+            record.content_types,
             record.timestamp,
             record.created_at,
         )
@@ -265,8 +268,8 @@ class Database:
                 platform, message_id, session_id, group_id, channel_id,
                 sender_id, sender_name, message_type,
                 message_str, message_chain, raw_message,
-                reply_to_id, content_hash, timestamp, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                reply_to_id, content_hash, content_types, timestamp, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
 
         async with self._write_lock:
@@ -306,8 +309,8 @@ class Database:
                 platform, message_id, session_id, group_id, channel_id,
                 sender_id, sender_name, message_type,
                 message_str, message_chain, raw_message,
-                reply_to_id, content_hash, timestamp, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                reply_to_id, content_hash, content_types, timestamp, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
 
         saved = 0
@@ -339,6 +342,7 @@ class Database:
                                 record.raw_message,
                                 record.reply_to_id,
                                 record.content_hash,
+                                record.content_types,
                                 record.timestamp,
                                 record.created_at,
                             )
@@ -785,6 +789,122 @@ class Database:
 
         return stats
 
+    async def get_content_type_stats(self) -> List[Dict]:
+        """获取消息内容类型统计（文字/图片/文件/视频/语音等）"""
+        async with self._pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # 使用 LIKE 查询统计各类型组件出现次数
+                # content_types 存储逗号分隔的组件类型，如 "Plain,Image"
+                await cur.execute("""
+                    SELECT
+                        COUNT(*) AS total,
+                        SUM(CASE WHEN content_types LIKE '%Plain%' THEN 1 ELSE 0 END) AS text_count,
+                        SUM(CASE WHEN content_types LIKE '%Image%' THEN 1 ELSE 0 END) AS image_count,
+                        SUM(CASE WHEN content_types LIKE '%File%' THEN 1 ELSE 0 END) AS file_count,
+                        SUM(CASE WHEN content_types LIKE '%Video%' THEN 1 ELSE 0 END) AS video_count,
+                        SUM(CASE WHEN content_types LIKE '%Record%' THEN 1 ELSE 0 END) AS voice_count,
+                        SUM(CASE WHEN content_types LIKE '%At%' THEN 1 ELSE 0 END) AS at_count,
+                        SUM(CASE WHEN content_types LIKE '%Reply%' THEN 1 ELSE 0 END) AS reply_count,
+                        SUM(CASE WHEN content_types LIKE '%Face%' THEN 1 ELSE 0 END) AS face_count,
+                        SUM(CASE WHEN content_types LIKE '%Json%' OR content_types LIKE '%Xml%' OR content_types LIKE '%Card%' THEN 1 ELSE 0 END) AS rich_count,
+                        SUM(CASE WHEN content_types IS NULL OR content_types = '' THEN 1 ELSE 0 END) AS unknown_count
+                    FROM messages
+                """)
+                row = await cur.fetchone()
+
+        if not row:
+            return []
+
+        labels = {
+            "text": "文字",
+            "image": "图片",
+            "file": "文件",
+            "video": "视频",
+            "voice": "语音",
+            "at": "@提及",
+            "reply": "回复",
+            "face": "表情",
+            "rich": "富文本/卡片",
+            "unknown": "未知/其他",
+        }
+        keys = ["text", "image", "file", "video", "voice", "at", "reply", "face", "rich", "unknown"]
+
+        result = []
+        for i, key in enumerate(keys):
+            count = row[i + 1] or 0
+            if count > 0:
+                result.append({
+                    "type": key,
+                    "label": labels[key],
+                    "count": count,
+                })
+
+        result.sort(key=lambda x: x["count"], reverse=True)
+        return result
+
+    async def get_platform_detail_stats(self) -> List[Dict]:
+        """获取各平台的详细统计（消息数、群聊数、私聊数等）"""
+        async with self._pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("""
+                    SELECT
+                        platform,
+                        COUNT(*) AS total,
+                        SUM(CASE WHEN message_type = 'group' THEN 1 ELSE 0 END) AS group_count,
+                        SUM(CASE WHEN message_type = 'private' THEN 1 ELSE 0 END) AS private_count,
+                        SUM(CASE WHEN message_type = 'channel' THEN 1 ELSE 0 END) AS channel_count,
+                        SUM(CASE WHEN content_types LIKE '%Image%' THEN 1 ELSE 0 END) AS image_count,
+                        SUM(CASE WHEN content_types LIKE '%File%' THEN 1 ELSE 0 END) AS file_count,
+                        SUM(CASE WHEN content_types LIKE '%Video%' THEN 1 ELSE 0 END) AS video_count,
+                        SUM(CASE WHEN content_types LIKE '%Record%' THEN 1 ELSE 0 END) AS voice_count,
+                        MIN(timestamp) AS oldest,
+                        MAX(timestamp) AS newest
+                    FROM messages
+                    GROUP BY platform
+                    ORDER BY total DESC
+                """)
+                rows = await cur.fetchall()
+
+        platform_names = {
+            "aiocqhttp": "QQ (NapCat)",
+            "qq_official": "QQ官方",
+            "qq_official_webhook": "QQ官方(Webhook)",
+            "telegram": "Telegram",
+            "discord": "Discord",
+            "kook": "KOOK",
+            "slack": "Slack",
+            "dingtalk": "钉钉",
+            "lark": "飞书",
+            "wecom": "企业微信",
+            "wecom_ai_bot": "企微AI助手",
+            "weixin_oc": "微信客服",
+            "weixin_official_account": "微信公众号",
+            "line": "LINE",
+            "misskey": "Misskey",
+            "mattermost": "Mattermost",
+            "satori": "Satori",
+            "vocechat": "VoCE",
+            "matrix": "Matrix",
+        }
+
+        result = []
+        for row in rows:
+            result.append({
+                "platform": row[0],
+                "platform_name": platform_names.get(row[0], row[0]),
+                "total": row[1],
+                "group_count": row[2] or 0,
+                "private_count": row[3] or 0,
+                "channel_count": row[4] or 0,
+                "image_count": row[5] or 0,
+                "file_count": row[6] or 0,
+                "video_count": row[7] or 0,
+                "voice_count": row[8] or 0,
+                "oldest_timestamp": row[9],
+                "newest_timestamp": row[10],
+            })
+        return result
+
     async def cleanup_by_age(self, retention_days: int) -> tuple:
         """清理超过保留天数的消息，返回 (删除数量, 被删记录的媒体路径列表)"""
         if retention_days <= 0:
@@ -1210,10 +1330,22 @@ class Database:
 
 # Schema 迁移注册表：version -> async migration function
 # 每个迁移函数接收 aiomysql.Pool 参数
-# 示例:
-#   async def _migrate_v3(pool):
-#       async with pool.acquire() as conn:
-#           async with conn.cursor() as cur:
-#               await cur.execute("ALTER TABLE messages ADD COLUMN new_col TEXT")
-#               await conn.commit()
-_SCHEMA_MIGRATIONS: Dict[int, Any] = {}
+
+
+async def _migrate_v3(pool: aiomysql.Pool) -> None:
+    """v2 → v3: 添加 content_types 列"""
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "ALTER TABLE messages ADD COLUMN content_types VARCHAR(256) DEFAULT NULL "
+                "AFTER content_hash"
+            )
+            await cur.execute(
+                "ALTER TABLE messages ADD INDEX idx_content_types (content_types)"
+            )
+            await conn.commit()
+
+
+_SCHEMA_MIGRATIONS: Dict[int, Any] = {
+    3: _migrate_v3,
+}

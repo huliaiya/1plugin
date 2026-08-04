@@ -332,6 +332,8 @@ function initNavToggle() {
 
 let timelineChart = null;
 let platformChart = null;
+let contentTypeChart = null;
+let platformDetailChart = null;
 let senderChart = null;
 let groupChart = null;
 let currentTimeRange = 'last30d';
@@ -373,12 +375,14 @@ function clearStatSkeleton(id) {
 
 function clearChartSkeleton(id) {
   const el = document.getElementById(id);
-  const chartMap = { timelineChart, platformChart, senderChart, groupChart };
+  const chartMap = { timelineChart, platformChart, contentTypeChart, platformDetailChart, senderChart, groupChart };
   const instance = chartMap[id];
   if (instance) {
     instance.dispose();
     if (id === 'timelineChart') timelineChart = null;
     else if (id === 'platformChart') platformChart = null;
+    else if (id === 'contentTypeChart') contentTypeChart = null;
+    else if (id === 'platformDetailChart') platformDetailChart = null;
     else if (id === 'senderChart') senderChart = null;
     else if (id === 'groupChart') groupChart = null;
   }
@@ -400,9 +404,11 @@ async function loadDashboardData(force = false) {
   loadPlatforms(false).catch(() => {});
 
   try {
-    const [statsResult, timelineResult] = await Promise.all([
+    const [statsResult, timelineResult, contentTypesResult, platformsDetailResult] = await Promise.all([
       apiGet('stats').catch(e => { logError('stats failed:', e); return null; }),
       apiGet('stats/timeline', { interval: 'day' }).catch(e => { logError('timeline failed:', e); return null; }),
+      apiGet('stats/content-types').catch(e => { logError('content-types failed:', e); return null; }),
+      apiGet('stats/platforms').catch(e => { logError('platforms detail failed:', e); return null; }),
     ]);
 
     if (statsResult) {
@@ -437,6 +443,35 @@ async function loadDashboardData(force = false) {
       }
     } else {
       clearChartSkeleton('timelineChart');
+    }
+
+    if (contentTypesResult) {
+      try {
+        const ctData = extractData(contentTypesResult);
+        await loadEcharts().catch(() => {});
+        clearChartSkeleton('contentTypeChart');
+        updateContentTypeChart(ctData?.types || []);
+      } catch (e) {
+        logError('Failed to process content types:', e);
+        clearChartSkeleton('contentTypeChart');
+      }
+    } else {
+      clearChartSkeleton('contentTypeChart');
+    }
+
+    if (platformsDetailResult) {
+      try {
+        const pdData = extractData(platformsDetailResult);
+        await loadEcharts().catch(() => {});
+        clearChartSkeleton('platformDetailChart');
+        updatePlatformDetailChart(pdData?.platforms || []);
+        updatePlatformDetailTable(pdData?.platforms || []);
+      } catch (e) {
+        logError('Failed to process platform detail:', e);
+        clearChartSkeleton('platformDetailChart');
+      }
+    } else {
+      clearChartSkeleton('platformDetailChart');
     }
 
     updateTimeRangeDisplay(currentTimeRange);
@@ -506,6 +541,8 @@ function ensureChart(id) {
 function handleChartResize() {
   timelineChart?.resize();
   platformChart?.resize();
+  contentTypeChart?.resize();
+  platformDetailChart?.resize();
   senderChart?.resize();
   groupChart?.resize();
 }
@@ -513,6 +550,8 @@ function handleChartResize() {
 function cleanupAllCharts() {
   if (timelineChart) { timelineChart.dispose(); timelineChart = null; }
   if (platformChart) { platformChart.dispose(); platformChart = null; }
+  if (contentTypeChart) { contentTypeChart.dispose(); contentTypeChart = null; }
+  if (platformDetailChart) { platformDetailChart.dispose(); platformDetailChart = null; }
   if (senderChart) { senderChart.dispose(); senderChart = null; }
   if (groupChart) { groupChart.dispose(); groupChart = null; }
   window.removeEventListener('resize', handleChartResize);
@@ -588,6 +627,73 @@ function updateGroupChart(groups) {
     yAxis: { type: 'category', data: groups.map(g => truncate(g.group_id, 20)).reverse(), axisLabel: { width: 100, overflow: 'truncate' } },
     series: [{ type: 'bar', data: groups.map(g => g.count).reverse(), itemStyle: { color: '#27ae60', borderRadius: [0, 4, 4, 0] } }]
   });
+}
+
+function updateContentTypeChart(types) {
+  if (!echartsLoaded) return;
+  if (!contentTypeChart) contentTypeChart = ensureChart('contentTypeChart');
+  if (!contentTypeChart || !types?.length) return;
+
+  const data = types.map(t => ({ name: t.label, value: t.count }));
+  const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#95a5a6', '#34495e', '#7f8c8d'];
+
+  contentTypeChart.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    legend: { orient: 'vertical', right: '5%', top: 'center', textStyle: { fontSize: 11 } },
+    color: colors,
+    series: [{
+      type: 'pie', radius: ['35%', '65%'], center: ['35%', '50%'],
+      avoidLabelOverlap: false,
+      itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 2 },
+      label: { show: false, position: 'center' },
+      emphasis: { label: { show: true, fontSize: 16, fontWeight: 'bold' } },
+      labelLine: { show: false },
+      data
+    }]
+  });
+}
+
+function updatePlatformDetailChart(platforms) {
+  if (!echartsLoaded) return;
+  if (!platformDetailChart) platformDetailChart = ensureChart('platformDetailChart');
+  if (!platformDetailChart || !platforms?.length) return;
+
+  const names = platforms.map(p => truncate(p.platform_name || p.platform, 12));
+  platformDetailChart.setOption({
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: { data: ['群聊', '私聊', '频道'] },
+    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    xAxis: { type: 'category', data: names, axisLabel: { rotate: 30, fontSize: 10 } },
+    yAxis: { type: 'value' },
+    series: [
+      { name: '群聊', type: 'bar', stack: 'total', data: platforms.map(p => p.group_count), itemStyle: { color: '#3498db' } },
+      { name: '私聊', type: 'bar', stack: 'total', data: platforms.map(p => p.private_count), itemStyle: { color: '#e74c3c' } },
+      { name: '频道', type: 'bar', stack: 'total', data: platforms.map(p => p.channel_count), itemStyle: { color: '#2ecc71' } },
+    ]
+  });
+}
+
+function updatePlatformDetailTable(platforms) {
+  const tbody = document.getElementById('platformDetailBody');
+  if (!tbody) return;
+  if (!platforms?.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="padding:16px;text-align:center;color:#999;">暂无数据</td></tr>';
+    return;
+  }
+  tbody.innerHTML = platforms.map(p => {
+    const fmt = n => n > 0 ? formatNumber(n) : '<span style="color:#555;">0</span>';
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding:8px;">${escapeHtml(p.platform_name || p.platform)}</td>
+      <td style="padding:8px;text-align:right;font-weight:600;">${formatNumber(p.total)}</td>
+      <td style="padding:8px;text-align:right;">${fmt(p.group_count)}</td>
+      <td style="padding:8px;text-align:right;">${fmt(p.private_count)}</td>
+      <td style="padding:8px;text-align:right;">${fmt(p.channel_count)}</td>
+      <td style="padding:8px;text-align:right;">${fmt(p.image_count)}</td>
+      <td style="padding:8px;text-align:right;">${fmt(p.file_count)}</td>
+      <td style="padding:8px;text-align:right;">${fmt(p.video_count)}</td>
+      <td style="padding:8px;text-align:right;">${fmt(p.voice_count)}</td>
+    </tr>`;
+  }).join('');
 }
 
 // ========== Search ==========

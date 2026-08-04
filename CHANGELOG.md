@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.4] - 2026-08-05
+
+### Added
+
+- **消息内容类型统计**：仪表盘新增内容类型分布饼图（文字/图片/文件/视频/语音/表情/回复等）
+- **平台详情统计**：仪表盘新增平台消息详情柱状图 + 详细数据表格（各平台的群聊/私聊/频道/图片/文件/视频/语音数量）
+- 新增 `content_types` 数据库字段，记录每条消息包含的组件类型
+- 新增 API 端点：`stats/content-types`、`stats/platforms`
+
+### Fixed
+
+- **修复图片/文件/视频等非文本消息不记录的问题**：消息链中的组件类型现在会被提取并存储
+- 非文本消息的 `message_str` 现在会自动生成摘要（如 `[图片]`、`[文件]`、`[视频]`），方便搜索和展示
+
+### Changed
+
+- Schema 版本从 v2 升级至 v3（自动迁移添加 `content_types` 列）
+- `MessageRecord` 新增 `content_types` 字段
+- 消息列表 API 响应新增 `content_types` 字段
+
 ## [0.0.3] - 2026-08-04
 
 ### Added

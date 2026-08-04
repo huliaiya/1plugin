@@ -5,7 +5,7 @@ from typing import Optional, List
 import json
 
 PLUGIN_DIR_NAME = "astrbot_plugin_fox_toolbox"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 VALID_MESSAGE_TYPES = {"group", "private", "channel", "forum"}
 
 # 已弃用的数据库表列表
@@ -36,6 +36,7 @@ class MessageRecord:
     raw_message: Optional[str] = None
     reply_to_id: Optional[str] = None
     content_hash: Optional[str] = None
+    content_types: Optional[str] = None
     timestamp: int = 0
     created_at: int = 0
 

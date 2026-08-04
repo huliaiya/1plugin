@@ -51,6 +51,41 @@
         </div>
       </div>
 
+      <div class="charts-grid">
+        <div class="chart-container">
+          <div class="chart-title">消息内容类型分布</div>
+          <div class="chart-box" id="contentTypeChart"></div>
+        </div>
+        <div class="chart-container">
+          <div class="chart-title">平台消息详情</div>
+          <div class="chart-box" id="platformDetailChart"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">平台统计详情</div>
+        <div class="table-wrapper" style="overflow-x:auto;">
+          <table class="data-table" id="platformDetailTable" style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+            <thead>
+              <tr style="text-align:left;border-bottom:2px solid rgba(255,255,255,0.1);">
+                <th style="padding:8px;">平台</th>
+                <th style="padding:8px;text-align:right;">总消息</th>
+                <th style="padding:8px;text-align:right;">群聊</th>
+                <th style="padding:8px;text-align:right;">私聊</th>
+                <th style="padding:8px;text-align:right;">频道</th>
+                <th style="padding:8px;text-align:right;">图片</th>
+                <th style="padding:8px;text-align:right;">文件</th>
+                <th style="padding:8px;text-align:right;">视频</th>
+                <th style="padding:8px;text-align:right;">语音</th>
+              </tr>
+            </thead>
+            <tbody id="platformDetailBody">
+              <tr><td colspan="9" style="padding:16px;text-align:center;color:#999;">加载中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-header">时间范围（用于排行统计）</div>
         <div class="time-selector">
