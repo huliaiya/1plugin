@@ -13,7 +13,7 @@ if str(plugin_root) not in sys.path:
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star
 
 from fox_toolbox.database import Database
 from fox_toolbox.api import MessageRecorderAPI
