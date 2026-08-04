@@ -1074,12 +1074,15 @@ class Database:
                     "count": 0,
                     "group_count": 0,
                     "private_count": 0,
+                    "channel_count": 0,
                 }
             groups[key]["count"] += 1
             if msg_type == "group":
                 groups[key]["group_count"] += 1
             elif msg_type == "private":
                 groups[key]["private_count"] += 1
+            elif msg_type == "channel":
+                groups[key]["channel_count"] += 1
 
         return list(groups.values())
 

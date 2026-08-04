@@ -184,6 +184,17 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function safeUrl(url) {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url, window.location.origin);
+    if (['http:', 'https:'].includes(parsed.protocol)) {
+      return parsed.href;
+    }
+  } catch (e) {}
+  return '';
+}
+
 function truncate(str, maxLen = 100) {
   if (!str) return '';
   if (str.length <= maxLen) return str;
@@ -984,7 +995,7 @@ async function showMessageDetail(messageId) {
       ${msg.message_chain?.length ? `
       <div class="detail-section mt-2">
         <h4>消息链</h4>
-        ${msg.message_chain.map(c => `<div class="chain-item"><span class="chain-type">${escapeHtml(c.type)}</span>${c.text ? escapeHtml(c.text) : ''}${c.url ? `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">[链接]</a>` : ''}${c.local_path ? `<span class="chain-media">[本地文件: ${escapeHtml(c.local_path)}]</span>` : ''}</div>`).join('')}
+        ${msg.message_chain.map(c => `<div class="chain-item"><span class="chain-type">${escapeHtml(c.type)}</span>${c.text ? escapeHtml(c.text) : ''}${c.url ? `<a href="${safeUrl(c.url)}" target="_blank" rel="noopener noreferrer">[链接]</a>` : ''}${c.local_path ? `<span class="chain-media">[本地文件: ${escapeHtml(c.local_path)}]</span>` : ''}</div>`).join('')}
       </div>` : ''}
       ${msg.raw_message ? `
       <div class="detail-section mt-2">
