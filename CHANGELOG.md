@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 初始弃用表：`messages_fts`（原 SQLite FTS5 虚拟表，迁移到 MySQL 后已无用）
 - 清理逻辑包含表名安全校验，仅允许字母、数字、下划线
 
+### Fixed
+
+- **修复插件更新失败**：`metadata.yaml` 的 `repo` 字段添加 `/tree/main` 分支指定
+  - AstrBot 强制更新在未指定分支时默认下载 `master` 分支，但本仓库使用 `main`，导致更新失败
+  - 显式指定 `main` 分支后，强制更新可正常工作
+
 ### Changed
 
 - `database.py` 导入 `DEPRECATED_TABLES`，`init()` 中新增 `_cleanup_deprecated_tables()` 调用
