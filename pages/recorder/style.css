@@ -400,6 +400,8 @@ body {
   min-height: 300px;
   overflow: hidden;
   contain: layout paint;
+  transform: translateZ(0);
+  animation: cardAppear 0.4s ease both, cardFloat 8s ease-in-out infinite;
 }
 
 .chart-container::before {
@@ -435,6 +437,12 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* 图表容器浮动相位错开 */
+.charts-grid .chart-container:nth-child(1) { animation: cardAppear 0.4s ease both, cardFloat 8s ease-in-out 0s infinite; }
+.charts-grid .chart-container:nth-child(2) { animation: cardAppear 0.4s ease 80ms both, cardFloat 8s ease-in-out -2s infinite; }
+.charts-grid .chart-container:nth-child(3) { animation: cardAppear 0.4s ease 160ms both, cardFloat 8s ease-in-out -4s infinite; }
+.charts-grid .chart-container:nth-child(4) { animation: cardAppear 0.4s ease 240ms both, cardFloat 8s ease-in-out -6s infinite; }
 
 /* ============================================================
    时间选择器
@@ -604,6 +612,8 @@ body {
   margin-bottom: 1rem;
   overflow: hidden;
   contain: layout paint;
+  transform: translateZ(0);
+  animation: cardAppear 0.4s ease both, cardFloat 8s ease-in-out infinite;
 }
 
 .filter-section::before {
@@ -1292,7 +1302,13 @@ body {
   .stat-card:nth-child(1),
   .stat-card:nth-child(2),
   .stat-card:nth-child(3),
-  .stat-card:nth-child(4) {
+  .stat-card:nth-child(4),
+  .chart-container,
+  .charts-grid .chart-container:nth-child(1),
+  .charts-grid .chart-container:nth-child(2),
+  .charts-grid .chart-container:nth-child(3),
+  .charts-grid .chart-container:nth-child(4),
+  .filter-section {
     animation: none;
   }
 }

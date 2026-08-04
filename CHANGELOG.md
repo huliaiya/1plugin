@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.6] - 2026-08-05
+
+### Fixed
+
+- **修复时间趋势图频道数据不显示**：`get_timeline_stats` 未返回 `channel_count` 字段，导致前端频道折线图始终为 0
+- **修复消息链 URL 的 XSS 漏洞**：新增 `safeUrl()` 函数，仅允许 `http`/`https` 协议，防止 `javascript:` 等恶意协议
+- 前端时间趋势图 `setOption` 添加 `notMerge: true`，确保频道数据系列完整渲染
+- 所有数据系列添加 `|| 0` 回退，防止 `undefined` 导致折线断裂
+
+### Added
+
+- **全卡片浮动动画**：图表容器（`.chart-container`）、筛选区（`.filter-section`）现在与统计卡片、内容卡片一样拥有浮动动画效果
+- 图表容器浮动相位错开（波浪效果），各容器以不同延迟浮动，视觉更自然
+- 时间趋势图四条数据线添加明确颜色：总消息（蓝）、群聊（绿）、私聊（橙）、频道（红）
+
+### Changed
+
+- `cardFloat` 动画统一应用于所有玻璃卡片元素（`.card`、`.stat-card`、`.chart-container`、`.filter-section`）
+- `prefers-reduced-motion` 媒体查询同步更新，覆盖所有新增浮动元素
+
 ## [0.0.5] - 2026-08-04
 
 ### Added

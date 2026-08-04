@@ -586,12 +586,12 @@ function updateTimelineChart(points) {
     xAxis: { type: 'category', data: points.map(p => p.date), axisLabel: { rotate: 45 } },
     yAxis: { type: 'value' },
     series: [
-      { name: '总消息', type: 'line', data: points.map(p => p.count), smooth: true, areaStyle: { opacity: 0.3 } },
-      { name: '群聊', type: 'line', data: points.map(p => p.group_count), smooth: true },
-      { name: '私聊', type: 'line', data: points.map(p => p.private_count), smooth: true },
-      { name: '频道', type: 'line', data: points.map(p => p.channel_count), smooth: true }
+      { name: '总消息', type: 'line', data: points.map(p => p.count || 0), smooth: true, areaStyle: { opacity: 0.3 }, itemStyle: { color: '#4fc3f7' }, lineStyle: { width: 2 } },
+      { name: '群聊', type: 'line', data: points.map(p => p.group_count || 0), smooth: true, itemStyle: { color: '#66bb6a' }, lineStyle: { width: 2 } },
+      { name: '私聊', type: 'line', data: points.map(p => p.private_count || 0), smooth: true, itemStyle: { color: '#ffa726' }, lineStyle: { width: 2 } },
+      { name: '频道', type: 'line', data: points.map(p => p.channel_count || 0), smooth: true, itemStyle: { color: '#ef5350' }, lineStyle: { width: 2 } }
     ]
-  });
+  }, true);
 }
 
 function updatePlatformChart(platformStats) {
