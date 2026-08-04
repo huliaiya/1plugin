@@ -60,6 +60,19 @@ a:focus-visible,
   100% { background-position: -300% center; }
 }
 
+/* 背景动态流动动画 */
+@keyframes bgFlow {
+  0%   { background-position: 0% 0%, 100% 0%, 50% 100%, 0% 100%, 100% 100%, 0% 0%; }
+  50%  { background-position: 100% 50%, 0% 50%, 50% 0%, 100% 0%, 0% 50%, 100% 50%; }
+  100% { background-position: 0% 100%, 100% 100%, 50% 0%, 0% 0%, 100% 0%, 0% 100%; }
+}
+
+/* 卡片边框流动光效动画 */
+@keyframes borderFlow {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+
 /* 蓝色渐变背景（用于按钮、激活状态、徽章等） */
 .rainbow-bg {
   background: linear-gradient(270deg, #4fc3f7, #29b6f6, #03a9f4, #64b5f6, #81d4fa, #b3e5fc, #4dd0e1, #4fc3f7);
@@ -94,6 +107,26 @@ body {
   display: flex;
   flex-direction: column;
   -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+
+/* 动态流动背景层 —— 全屏彩虹流动效果 */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(800px 500px at 15% 10%, rgba(240, 98, 146, 0.15) 0%, transparent 50%),
+    radial-gradient(700px 400px at 85% 20%, rgba(100, 181, 246, 0.15) 0%, transparent 50%),
+    radial-gradient(600px 500px at 50% 90%, rgba(129, 199, 132, 0.12) 0%, transparent 50%),
+    radial-gradient(500px 400px at 80% 80%, rgba(255, 183, 77, 0.1) 0%, transparent 50%),
+    radial-gradient(600px 400px at 10% 60%, rgba(186, 104, 200, 0.1) 0%, transparent 50%);
+  background-size: 200% 200%, 200% 200%, 200% 200%, 200% 200%, 200% 200%;
+  background-repeat: no-repeat;
+  animation: bgFlow 20s ease-in-out infinite;
+  will-change: background-position;
 }
 
 /* ============================================================
@@ -117,8 +150,16 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(120deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 40% 60%, rgba(255,255,255,0.15) 100%);
+  background: linear-gradient(120deg,
+    rgba(240, 98, 146, 0.08) 0%,
+    rgba(100, 181, 246, 0.1) 25%,
+    rgba(129, 199, 132, 0.06) 50%,
+    rgba(255, 183, 77, 0.06) 75%,
+    rgba(186, 104, 200, 0.08) 100%);
+  background-size: 300% 300%;
+  animation: borderFlow 15s linear infinite;
   mix-blend-mode: screen;
+  will-change: background-position;
 }
 
 .nav-container {
@@ -254,15 +295,23 @@ body {
   overflow: hidden;
 }
 
-/* 玻璃高光斜向反射 */
+/* 卡片动态流动边框光效 */
 .card::before {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
   border-radius: inherit;
-  background: linear-gradient(120deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 40% 60%, rgba(255,255,255,0.12) 100%);
+  background: linear-gradient(120deg,
+    rgba(240, 98, 146, 0.12) 0%,
+    rgba(100, 181, 246, 0.12) 25%,
+    rgba(129, 199, 132, 0.1) 50%,
+    rgba(255, 183, 77, 0.1) 75%,
+    rgba(186, 104, 200, 0.12) 100%);
+  background-size: 300% 300%;
+  animation: borderFlow 12s linear infinite;
   mix-blend-mode: screen;
+  will-change: background-position;
 }
 
 @keyframes cardAppear {
@@ -309,17 +358,20 @@ body {
   box-shadow: var(--glass-shadow-hover);
 }
 
-/* 内部流动光斑 */
+/* 内部动态流动彩色光斑 */
 .stat-card::after {
   content: "";
   position: absolute;
   inset: -10%;
   pointer-events: none;
   background:
-    radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,0.3), transparent 60%),
-    radial-gradient(100px 60px at 70% 60%, rgba(255,255,255,0.18), transparent 65%);
+    radial-gradient(120px 80px at 30% 20%, rgba(240, 98, 146, 0.15), transparent 60%),
+    radial-gradient(100px 60px at 70% 60%, rgba(100, 181, 246, 0.15), transparent 65%),
+    radial-gradient(80px 50px at 50% 80%, rgba(129, 199, 132, 0.1), transparent 60%);
+  background-size: 200% 200%;
   filter: blur(12px);
-  animation: drift 14s ease-in-out infinite alternate;
+  animation: drift 14s ease-in-out infinite alternate, borderFlow 10s linear infinite;
+  will-change: transform, background-position;
 }
 
 @keyframes drift {
@@ -400,8 +452,16 @@ body {
   inset: 0;
   pointer-events: none;
   border-radius: inherit;
-  background: linear-gradient(110deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0) 45% 55%, rgba(255,255,255,0.1) 100%);
+  background: linear-gradient(110deg,
+    rgba(100, 181, 246, 0.12) 0%,
+    rgba(240, 98, 146, 0.1) 25%,
+    rgba(129, 199, 132, 0.1) 50%,
+    rgba(255, 183, 77, 0.08) 75%,
+    rgba(186, 104, 200, 0.1) 100%);
+  background-size: 300% 300%;
+  animation: borderFlow 12s linear infinite;
   mix-blend-mode: screen;
+  will-change: background-position;
 }
 
 .chart-title {
@@ -497,8 +557,15 @@ body {
   inset: 0;
   pointer-events: none;
   border-radius: inherit;
-  background: linear-gradient(110deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 50%, rgba(255,255,255,0.08) 100%);
+  background: linear-gradient(110deg,
+    rgba(100, 181, 246, 0.1) 0%,
+    rgba(240, 98, 146, 0.08) 30%,
+    rgba(129, 199, 132, 0.08) 60%,
+    rgba(255, 183, 77, 0.06) 100%);
+  background-size: 300% 300%;
+  animation: borderFlow 14s linear infinite;
   mix-blend-mode: screen;
+  will-change: background-position;
 }
 
 .message-card:hover {
@@ -598,8 +665,16 @@ body {
   inset: 0;
   pointer-events: none;
   border-radius: inherit;
-  background: linear-gradient(120deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0) 40% 60%, rgba(255,255,255,0.1) 100%);
+  background: linear-gradient(120deg,
+    rgba(240, 98, 146, 0.1) 0%,
+    rgba(100, 181, 246, 0.12) 25%,
+    rgba(129, 199, 132, 0.08) 50%,
+    rgba(255, 183, 77, 0.08) 75%,
+    rgba(186, 104, 200, 0.1) 100%);
+  background-size: 300% 300%;
+  animation: borderFlow 12s linear infinite;
   mix-blend-mode: screen;
+  will-change: background-position;
 }
 
 .filter-row {
@@ -846,8 +921,16 @@ body {
   inset: 0;
   pointer-events: none;
   border-radius: inherit;
-  background: linear-gradient(120deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 40% 60%, rgba(255,255,255,0.12) 100%);
+  background: linear-gradient(120deg,
+    rgba(240, 98, 146, 0.1) 0%,
+    rgba(100, 181, 246, 0.1) 25%,
+    rgba(129, 199, 132, 0.08) 50%,
+    rgba(255, 183, 77, 0.06) 75%,
+    rgba(186, 104, 200, 0.08) 100%);
+  background-size: 300% 300%;
+  animation: borderFlow 12s linear infinite;
   mix-blend-mode: screen;
+  will-change: background-position;
 }
 
 @keyframes modalIn {
@@ -1270,11 +1353,21 @@ body {
    尊重减少动画偏好
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {
+  body::after,
   .stat-card::after {
     animation: none;
   }
   .card,
   .stat-card {
+    animation: none;
+  }
+  .card::before,
+  .stat-card::after,
+  .chart-container::before,
+  .filter-section::before,
+  .message-card::before,
+  .navbar::before,
+  .modal-content::before {
     animation: none;
   }
 }
