@@ -192,6 +192,7 @@ class MessageRecorder(Star):
         self._download_semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
         self._initialized: bool = False
         self._init_error: Optional[str] = None
+        self._tg_channel_handlers: list = []  # [(platform, handler), ...]
 
     async def initialize(self):
         """插件初始化"""
@@ -263,6 +264,14 @@ class MessageRecorder(Star):
         if self._media_downloader:
             await self._media_downloader.close()
 
+        # 清理 Telegram 频道消息 handler
+        for tg_platform, handler in self._tg_channel_handlers:
+            try:
+                tg_platform.application.remove_handler(handler)
+            except Exception:
+                pass
+        self._tg_channel_handlers.clear()
+
         if self._db:
             await self._db.close()
         logger.info("[FoxToolbox] 插件已终止")
@@ -329,6 +338,141 @@ class MessageRecorder(Star):
             logger.info("[FoxToolbox] Web API 已注册到 AstrBot Dashboard")
         except Exception as e:
             logger.error(f"[FoxToolbox] 注册 Web API 失败: {e}")
+
+    # ========== Telegram 频道消息捕获 ==========
+
+    @filter.on_astrbot_loaded()
+    async def _setup_telegram_channel_handler(self):
+        """AstrBot 加载完成后，为 Telegram 平台注册频道消息 PTB handler。
+
+        AstrBot 的 Telegram 适配器只处理 update.message，不处理 update.channel_post，
+        导致 Telegram 频道消息被静默丢弃。这里通过在 PTB Application 上注册独立的
+        handler 来捕获频道消息并直接保存到数据库。
+        """
+        if not self._check_initialized():
+            return
+
+        try:
+            from astrbot.core.platform.sources.telegram.tg_adapter import (
+                TelegramPlatformAdapter,
+            )
+
+            tg_platforms = [
+                p for p in self.context.platform_manager.platform_insts
+                if isinstance(p, TelegramPlatformAdapter)
+            ]
+
+            if not tg_platforms:
+                logger.debug("[FoxToolbox] 未找到 Telegram 平台实例，跳过频道消息 handler 注册")
+                return
+
+            from telegram.ext import MessageHandler as PTBMessageHandler
+            from telegram.ext import filters as ptb_filters
+
+            for tg_platform in tg_platforms:
+                handler = PTBMessageHandler(
+                    filters=ptb_filters.UpdateType.CHANNEL_POSTS,
+                    callback=self._on_telegram_channel_post,
+                )
+                tg_platform.application.add_handler(handler)
+                self._tg_channel_handlers.append((tg_platform, handler))
+                logger.info(
+                    f"[FoxToolbox] 已为 Telegram 平台 {tg_platform.meta().id} "
+                    f"注册频道消息 handler"
+                )
+        except ImportError:
+            logger.debug("[FoxToolbox] Telegram 适配器未安装，跳过频道消息 handler 注册")
+        except Exception as e:
+            logger.error(f"[FoxToolbox] 注册 Telegram 频道消息 handler 失败: {e}")
+
+    async def _on_telegram_channel_post(self, update, context):
+        """PTB 回调：处理 Telegram 频道帖子，直接保存到数据库。"""
+        if not self._check_initialized():
+            return
+
+        post = update.channel_post
+        if not post:
+            return
+
+        try:
+            chat_id = str(post.chat.id)
+            message_id = str(post.message_id)
+            sender_id = str(post.sender_chat.id) if post.sender_chat else (
+                str(post.from_user.id) if post.from_user else ""
+            )
+            sender_name = (
+                post.sender_chat.title if post.sender_chat and post.sender_chat.title
+                else (post.from_user.username if post.from_user else "Channel")
+            )
+
+            message_str = post.text or post.caption or ""
+
+            chain_data = []
+            content_types = []
+
+            if post.text:
+                chain_data.append({"type": "Plain", "text": post.text})
+                content_types.append("Plain")
+            if post.caption:
+                if not message_str:
+                    message_str = post.caption
+                if not any(c.get("type") == "Plain" for c in chain_data):
+                    chain_data.append({"type": "Plain", "text": post.caption})
+                    content_types.append("Plain")
+            if post.photo:
+                chain_data.append({"type": "Image", "url": ""})
+                content_types.append("Image")
+            if post.video:
+                chain_data.append({"type": "Video", "url": ""})
+                content_types.append("Video")
+            if post.document:
+                chain_data.append({"type": "File", "name": post.document.file_name or "", "url": ""})
+                content_types.append("File")
+            if post.voice:
+                chain_data.append({"type": "Record", "url": ""})
+                content_types.append("Record")
+            if post.sticker:
+                chain_data.append({"type": "Image", "url": ""})
+                content_types.append("Image")
+
+            if not message_str:
+                message_str = ""
+
+            adapter = get_adapter("telegram")
+            normalized_ts = normalize_timestamp(post.date.timestamp() if post.date else time.time())
+
+            record = MessageRecord(
+                platform="telegram",
+                message_id=adapter.normalize_message_id(message_id),
+                session_id=chat_id,
+                group_id=chat_id,
+                channel_id=chat_id,
+                sender_id=adapter.normalize_sender_id(sender_id),
+                sender_name=adapter.normalize_sender_name(sender_name),
+                message_type="channel",
+                message_str=message_str,
+                timestamp=normalized_ts,
+            )
+
+            if chain_data:
+                record.message_chain = json.dumps(chain_data, ensure_ascii=False)
+                record.content_types = ",".join(content_types)
+
+            record_id = await self._db.save_message(record)
+
+            if record_id != -1:
+                content_preview = (
+                    (message_str[:30] + "...")
+                    if message_str and len(message_str) > 30
+                    else (message_str or "[非文本]")
+                )
+                logger.debug(
+                    f"[FoxToolbox] 频道消息保存成功 #{record_id} | "
+                    f"平台: telegram | 类型: channel | "
+                    f"发送者: {sender_name} | 内容: {content_preview}"
+                )
+        except Exception as e:
+            logger.error(f"[FoxToolbox] 保存 Telegram 频道消息失败: {e}")
 
     # ========== 消息监听 ==========
 
