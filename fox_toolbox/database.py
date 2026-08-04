@@ -8,7 +8,7 @@ from typing import Optional, List, Dict, Any, AsyncGenerator
 
 from astrbot.api import logger
 
-from .models import MessageRecord, QueryFilter, MessageStats, SCHEMA_VERSION
+from .models import MessageRecord, QueryFilter, MessageStats, SCHEMA_VERSION, DEPRECATED_TABLES
 from .time_utils import parse_time_range
 from .serializer import compute_content_hash, extract_media_paths
 
@@ -74,6 +74,7 @@ class Database:
 
         await self._create_tables()
         await self._ensure_schema_version()
+        await self._cleanup_deprecated_tables()
         logger.info(
             f"[FoxToolbox] MySQL 数据库初始化完成: "
             f"{host}:{port}/{database}"
@@ -192,6 +193,40 @@ class Database:
                 except Exception:
                     await conn.rollback()
                     raise
+
+    async def _cleanup_deprecated_tables(self) -> None:
+        """清理已弃用的表（每次启动/重载时自动执行）"""
+        if not DEPRECATED_TABLES:
+            return
+
+        async with self._write_lock:
+            async with self._pool.acquire() as conn:
+                try:
+                    async with conn.cursor() as cur:
+                        await cur.execute("SHOW TABLES")
+                        existing_tables = {row[0] for row in await cur.fetchall()}
+
+                        dropped = 0
+                        for table in DEPRECATED_TABLES:
+                            # 安全校验：表名仅允许字母、数字、下划线
+                            if not all(c.isalnum() or c == "_" for c in table):
+                                logger.warning(
+                                    f"[FoxToolbox] 跳过非法表名: {table}"
+                                )
+                                continue
+                            if table in existing_tables:
+                                logger.info(f"[FoxToolbox] 删除已弃用表: {table}")
+                                await cur.execute(f"DROP TABLE `{table}`")
+                                dropped += 1
+
+                        if dropped > 0:
+                            await conn.commit()
+                            logger.info(
+                                f"[FoxToolbox] 已清理 {dropped} 个弃用表"
+                            )
+                except Exception as e:
+                    await conn.rollback()
+                    logger.error(f"[FoxToolbox] 清理弃用表失败: {e}")
 
     async def save_message(self, record: MessageRecord) -> int:
         """保存消息记录，返回记录 ID（重复消息返回 -1）"""

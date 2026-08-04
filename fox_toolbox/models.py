@@ -8,6 +8,15 @@ PLUGIN_DIR_NAME = "astrbot_plugin_fox_toolbox"
 SCHEMA_VERSION = 2
 VALID_MESSAGE_TYPES = {"group", "private", "channel", "forum"}
 
+# 已弃用的数据库表列表
+# 每次插件启动/重载时会检查并自动删除这些表
+# 当你废弃某个表时，将表名添加到此处即可
+DEPRECATED_TABLES = [
+    # 原 SQLite 时代的 FTS5 虚拟表，迁移到 MySQL 后已弃用
+    "messages_fts",
+    # 预留：未来废弃的表添加到这里
+]
+
 
 @dataclass
 class MessageRecord:

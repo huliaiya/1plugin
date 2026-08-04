@@ -1,6 +1,6 @@
 name: astrbot_plugin_fox_toolbox
 desc: 狐狸插件 - AstrBot 消息记录器插件（MySQL 5.7 存储）
-version: 0.0.2
+version: 0.0.3
 author: Leafiber
 repo: https://github.com/huliaiya/1plugin
 display_name: 狐狸插件
