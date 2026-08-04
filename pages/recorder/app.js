@@ -538,16 +538,21 @@ function ensureChart(id) {
   return el ? echarts.init(el) : null;
 }
 
+let _resizeTimer = null;
 function handleChartResize() {
-  timelineChart?.resize();
-  platformChart?.resize();
-  contentTypeChart?.resize();
-  platformDetailChart?.resize();
-  senderChart?.resize();
-  groupChart?.resize();
+  if (_resizeTimer) clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(() => {
+    timelineChart?.resize();
+    platformChart?.resize();
+    contentTypeChart?.resize();
+    platformDetailChart?.resize();
+    senderChart?.resize();
+    groupChart?.resize();
+  }, 150);
 }
 
 function cleanupAllCharts() {
+  if (_resizeTimer) { clearTimeout(_resizeTimer); _resizeTimer = null; }
   if (timelineChart) { timelineChart.dispose(); timelineChart = null; }
   if (platformChart) { platformChart.dispose(); platformChart = null; }
   if (contentTypeChart) { contentTypeChart.dispose(); contentTypeChart = null; }
