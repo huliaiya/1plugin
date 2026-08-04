@@ -258,8 +258,7 @@ body {
   margin-bottom: 1rem;
   animation: cardAppear 0.4s ease both, cardFloat 7s ease-in-out infinite;
   overflow: hidden;
-  contain: layout paint;
-  transform: translateZ(0);
+  will-change: translate;
 }
 
 /* 卡片静态渐变叠层 */
