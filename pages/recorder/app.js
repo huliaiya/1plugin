@@ -611,7 +611,7 @@ function updateSenderChart(senders) {
     grid: { left: '3%', right: '10%', bottom: '3%', containLabel: true },
     xAxis: { type: 'value' },
     yAxis: { type: 'category', data: senders.map(s => truncate(s.sender_name || s.sender_id, 15)).reverse(), axisLabel: { width: 100, overflow: 'truncate' } },
-    series: [{ type: 'bar', data: senders.map(s => s.count).reverse(), itemStyle: { color: '#3498db', borderRadius: [0, 4, 4, 0] } }]
+    series: [{ type: 'bar', data: senders.map(s => s.count).reverse(), itemStyle: { color: '#ba68c8', borderRadius: [0, 4, 4, 0] } }]
   });
 }
 
@@ -625,7 +625,7 @@ function updateGroupChart(groups) {
     grid: { left: '3%', right: '10%', bottom: '3%', containLabel: true },
     xAxis: { type: 'value' },
     yAxis: { type: 'category', data: groups.map(g => truncate(g.group_id, 20)).reverse(), axisLabel: { width: 100, overflow: 'truncate' } },
-    series: [{ type: 'bar', data: groups.map(g => g.count).reverse(), itemStyle: { color: '#27ae60', borderRadius: [0, 4, 4, 0] } }]
+    series: [{ type: 'bar', data: groups.map(g => g.count).reverse(), itemStyle: { color: '#4dd0e1', borderRadius: [0, 4, 4, 0] } }]
   });
 }
 
@@ -635,7 +635,7 @@ function updateContentTypeChart(types) {
   if (!contentTypeChart || !types?.length) return;
 
   const data = types.map(t => ({ name: t.label, value: t.count }));
-  const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#95a5a6', '#34495e', '#7f8c8d', '#16a085', '#c0392b', '#2980b9', '#8e44ad', '#d35400', '#27ae60'];
+  const colors = ['#f06292', '#ba68c8', '#64b5f6', '#4fc3f7', '#4dd0e1', '#81c784', '#aed581', '#ffb74d', '#ff8a65', '#e57373', '#f06292', '#ba68c8', '#64b5f6', '#4dd0e1', '#81c784', '#ffb74d'];
 
   contentTypeChart.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
@@ -666,9 +666,9 @@ function updatePlatformDetailChart(platforms) {
     xAxis: { type: 'category', data: names, axisLabel: { rotate: 30, fontSize: 10 } },
     yAxis: { type: 'value' },
     series: [
-      { name: '群聊', type: 'bar', stack: 'total', data: platforms.map(p => p.group_count), itemStyle: { color: '#3498db' } },
-      { name: '私聊', type: 'bar', stack: 'total', data: platforms.map(p => p.private_count), itemStyle: { color: '#e74c3c' } },
-      { name: '频道', type: 'bar', stack: 'total', data: platforms.map(p => p.channel_count), itemStyle: { color: '#2ecc71' } },
+      { name: '群聊', type: 'bar', stack: 'total', data: platforms.map(p => p.group_count), itemStyle: { color: '#64b5f6' } },
+      { name: '私聊', type: 'bar', stack: 'total', data: platforms.map(p => p.private_count), itemStyle: { color: '#f06292' } },
+      { name: '频道', type: 'bar', stack: 'total', data: platforms.map(p => p.channel_count), itemStyle: { color: '#81c784' } },
     ]
   });
 }
