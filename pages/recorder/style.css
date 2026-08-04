@@ -373,7 +373,7 @@ body {
 
 @media (max-width: 600px) {
   .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
@@ -1309,5 +1309,406 @@ body {
   .charts-grid .chart-container:nth-child(4),
   .filter-section {
     animation: none;
+  }
+}
+
+/* ============================================================
+   响应式自适应 —— 平板 (769px~1024px)
+   ============================================================ */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .main-content {
+    padding: 1rem 0.8rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.8rem;
+  }
+
+  .stat-card {
+    padding: 1rem;
+  }
+
+  .stat-value {
+    font-size: 1.7rem;
+  }
+
+  .charts-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .chart-box {
+    height: 240px;
+  }
+
+  .card {
+    padding: 1.2rem;
+  }
+
+  .export-options {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .task-stats {
+    grid-template-columns: repeat(5, 1fr);
+  }
+
+  .filter-row {
+    gap: 0.8rem;
+  }
+
+  .filter-input,
+  .filter-select {
+    min-width: 130px;
+  }
+
+  .modal-content {
+    max-width: 95%;
+    max-height: 85vh;
+  }
+}
+
+/* ============================================================
+   响应式自适应 —— 手机 (≤768px)
+   ============================================================ */
+@media (max-width: 768px) {
+  :root {
+    --radius: 12px;
+    --radius-sm: 8px;
+    --glass-blur: blur(10px) saturate(140%);
+    --glass-blur-light: blur(6px) saturate(120%);
+  }
+
+  /* 导航栏 */
+  .navbar {
+    padding: 0.5rem 0.8rem;
+  }
+
+  .nav-brand {
+    font-size: 1.05rem;
+  }
+
+  /* 主内容 */
+  .main-content {
+    padding: 0.8rem 0.6rem;
+  }
+
+  /* 统计卡片 —— 手机端 2 列 */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+  }
+
+  .stat-card {
+    padding: 0.8rem 0.6rem;
+  }
+
+  .stat-value {
+    font-size: 1.4rem;
+    min-height: 1.8rem;
+  }
+
+  .stat-label {
+    font-size: 0.78rem;
+  }
+
+  /* 图表 —— 手机端单列 */
+  .charts-grid {
+    grid-template-columns: 1fr;
+    gap: 0.8rem;
+    margin-bottom: 1rem;
+  }
+
+  .chart-container {
+    min-height: 260px;
+    padding: 0.8rem;
+  }
+
+  .chart-box {
+    height: 220px;
+  }
+
+  .chart-title {
+    font-size: 0.9rem;
+    margin-bottom: 0.4rem;
+  }
+
+  /* 卡片 */
+  .card {
+    padding: 1rem 0.8rem;
+    margin-bottom: 0.8rem;
+  }
+
+  .card-header {
+    font-size: 1rem;
+    margin-bottom: 0.8rem;
+    padding-bottom: 0.5rem;
+  }
+
+  /* 时间选择器 */
+  .time-selector {
+    gap: 0.4rem;
+    margin-bottom: 1rem;
+  }
+
+  .time-btn {
+    padding: 0.4rem 0.7rem;
+    font-size: 0.82rem;
+  }
+
+  /* 数据表格 —— 水平滚动 */
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .data-table {
+    font-size: 0.8rem;
+    min-width: 600px;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 6px 4px;
+    white-space: nowrap;
+  }
+
+  /* 消息卡片 */
+  .message-card {
+    padding: 0.8rem;
+  }
+
+  .message-header {
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    flex-wrap: wrap;
+  }
+
+  .message-platform,
+  .message-type {
+    font-size: 0.72rem;
+    padding: 0.15rem 0.4rem;
+  }
+
+  .message-content {
+    font-size: 0.88rem;
+  }
+
+  .message-actions {
+    font-size: 0.78rem;
+    gap: 0.4rem;
+  }
+
+  /* 筛选区 */
+  .filter-section {
+    padding: 0.8rem;
+  }
+
+  .filter-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .filter-group {
+    width: 100%;
+  }
+
+  .filter-label {
+    min-width: auto;
+    font-size: 0.82rem;
+  }
+
+  .filter-input,
+  .filter-select {
+    width: 100%;
+    min-width: 0;
+    font-size: 0.85rem;
+    padding: 0.45rem 0.6rem;
+  }
+
+  .search-input {
+    min-width: 0;
+  }
+
+  /* 按钮 */
+  .btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+  }
+
+  .btn-sm {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.76rem;
+  }
+
+  /* 分页 */
+  .pagination {
+    gap: 0.3rem;
+    flex-wrap: wrap;
+  }
+
+  .pagination-btn {
+    padding: 0.4rem 0.7rem;
+    font-size: 0.82rem;
+  }
+
+  /* 模态框 */
+  .modal-content {
+    width: 95%;
+    max-width: 95%;
+    max-height: 88vh;
+    border-radius: 12px;
+  }
+
+  .modal-header {
+    padding: 0.7rem;
+  }
+
+  .modal-header h3 {
+    font-size: 1rem;
+  }
+
+  .modal-body {
+    padding: 0.7rem;
+  }
+
+  .detail-row {
+    flex-direction: column;
+    margin-bottom: 0.3rem;
+  }
+
+  .detail-label {
+    min-width: auto;
+    font-size: 0.8rem;
+  }
+
+  .detail-value {
+    font-size: 0.88rem;
+  }
+
+  .chain-item {
+    font-size: 0.85rem;
+    padding: 0.4rem;
+  }
+
+  /* 导出选项 */
+  .export-options {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+
+  .format-option {
+    padding: 0.7rem;
+    display: flex;
+    align-items: center;
+    text-align: left;
+    gap: 0.8rem;
+  }
+
+  .format-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0;
+  }
+
+  /* 上传区 */
+  .upload-area {
+    padding: 1.2rem;
+  }
+
+  .upload-icon {
+    font-size: 2.2rem;
+    margin-bottom: 0.6rem;
+  }
+
+  /* 任务统计 */
+  .task-stats {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+  }
+
+  .task-stat {
+    padding: 0.5rem;
+  }
+
+  .task-stat-value {
+    font-size: 1.15rem;
+  }
+
+  .task-stat-label {
+    font-size: 0.76rem;
+  }
+
+  /* 上下文消息 */
+  .context-msg,
+  .context-message {
+    padding: 0.4rem;
+    font-size: 0.82rem;
+  }
+
+  /* 浮动动画在手机端降低幅度以减少抖动 */
+  @keyframes cardFloat {
+    0%, 100% { translate: 0 0; }
+    50%      { translate: 0 -3px; }
+  }
+}
+
+/* ============================================================
+   响应式自适应 —— 小手机 (≤480px)
+   ============================================================ */
+@media (max-width: 480px) {
+  .nav-brand {
+    font-size: 0.95rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .stat-value {
+    font-size: 1.2rem;
+  }
+
+  .stat-label {
+    font-size: 0.72rem;
+  }
+
+  .chart-box {
+    height: 180px;
+  }
+
+  .chart-title {
+    font-size: 0.85rem;
+  }
+
+  .card {
+    padding: 0.8rem 0.6rem;
+  }
+
+  .card-header {
+    font-size: 0.92rem;
+  }
+
+  .time-btn {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.76rem;
+  }
+
+  .btn {
+    padding: 0.45rem 0.8rem;
+    font-size: 0.8rem;
+  }
+
+  .pagination-btn {
+    padding: 0.35rem 0.55rem;
+    font-size: 0.76rem;
+  }
+
+  .modal-content {
+    width: 98%;
+    border-radius: 10px;
   }
 }

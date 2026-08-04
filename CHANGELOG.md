@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.7] - 2026-08-05
+
+### Added
+
+- **WebUI 全面响应式自适应**：新增三套断点（平板 769~1024px、手机 ≤768px、小手机 ≤480px），完美适配手机、平板、电脑三种设备
+  - 手机端：统计卡片 2 列布局、图表单列、筛选区垂直排列、按钮和字体缩小、模态框全宽
+  - 平板端：统计卡片 2 列、图表单列、保持舒适间距
+  - 小手机端：进一步缩减字号和间距，确保 320px 屏幕可用
+- 新增 HTML viewport meta 标签（`width=device-width, initial-scale=1.0`），修复手机端默认缩放问题
+- 新增 `theme-color` 和 `apple-mobile-web-app-capable` meta 标签，优化移动端浏览器体验
+- 数据表格手机端水平滚动（`overflow-x: auto` + `-webkit-overflow-scrolling: touch`），保持表格完整性
+- 手机端浮动动画幅度降低（6px -> 3px），减少移动设备抖动感
+
+### Fixed
+
+- **修复 `.card` 浮动动画不生效**：移除 `contain: layout paint`（与 `translate` 动画冲突导致大卡片浮动不可见），替换为 `will-change: translate`
+
+### Changed
+
+- 手机端 CSS 变量动态调整：圆角缩小（16px -> 12px）、模糊半径降低（14px -> 10px），减少移动设备渲染负担
+- 导出格式选项在手机端改为水平排列（图标+文字横排），节省垂直空间
+- 消息详情模态框在手机端 `detail-row` 改为垂直排列，标签和值分两行显示
+
 ## [0.0.6] - 2026-08-05
 
 ### Fixed
