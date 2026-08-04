@@ -611,7 +611,7 @@ function updateSenderChart(senders) {
     grid: { left: '3%', right: '10%', bottom: '3%', containLabel: true },
     xAxis: { type: 'value' },
     yAxis: { type: 'category', data: senders.map(s => truncate(s.sender_name || s.sender_id, 15)).reverse(), axisLabel: { width: 100, overflow: 'truncate' } },
-    series: [{ type: 'bar', data: senders.map(s => s.count).reverse(), itemStyle: { color: '#ba68c8', borderRadius: [0, 4, 4, 0] } }]
+    series: [{ type: 'bar', data: senders.map(s => s.count).reverse(), itemStyle: { color: '#4fc3f7', borderRadius: [0, 4, 4, 0] } }]
   });
 }
 
@@ -635,7 +635,7 @@ function updateContentTypeChart(types) {
   if (!contentTypeChart || !types?.length) return;
 
   const data = types.map(t => ({ name: t.label, value: t.count }));
-  const colors = ['#f06292', '#ba68c8', '#64b5f6', '#4fc3f7', '#4dd0e1', '#81c784', '#aed581', '#ffb74d', '#ff8a65', '#e57373', '#f06292', '#ba68c8', '#64b5f6', '#4dd0e1', '#81c784', '#ffb74d'];
+  const colors = ['#4fc3f7', '#29b6f6', '#03a9f4', '#64b5f6', '#81d4fa', '#b3e5fc', '#4dd0e1', '#0288d1', '#039be5', '#80deea', '#26c6da', '#4fc3f7', '#29b6f6', '#64b5f6', '#81d4fa', '#4dd0e1'];
 
   contentTypeChart.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
@@ -666,9 +666,9 @@ function updatePlatformDetailChart(platforms) {
     xAxis: { type: 'category', data: names, axisLabel: { rotate: 30, fontSize: 10 } },
     yAxis: { type: 'value' },
     series: [
-      { name: '群聊', type: 'bar', stack: 'total', data: platforms.map(p => p.group_count), itemStyle: { color: '#64b5f6' } },
-      { name: '私聊', type: 'bar', stack: 'total', data: platforms.map(p => p.private_count), itemStyle: { color: '#f06292' } },
-      { name: '频道', type: 'bar', stack: 'total', data: platforms.map(p => p.channel_count), itemStyle: { color: '#81c784' } },
+      { name: '群聊', type: 'bar', stack: 'total', data: platforms.map(p => p.group_count), itemStyle: { color: '#4fc3f7' } },
+      { name: '私聊', type: 'bar', stack: 'total', data: platforms.map(p => p.private_count), itemStyle: { color: '#29b6f6' } },
+      { name: '频道', type: 'bar', stack: 'total', data: platforms.map(p => p.channel_count), itemStyle: { color: '#81d4fa' } },
     ]
   });
 }
