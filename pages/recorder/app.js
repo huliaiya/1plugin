@@ -570,14 +570,15 @@ function updateTimelineChart(points) {
 
   timelineChart.setOption({
     tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-    legend: { data: ['总消息', '群聊', '私聊'] },
+    legend: { data: ['总消息', '群聊', '私聊', '频道'] },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
     xAxis: { type: 'category', data: points.map(p => p.date), axisLabel: { rotate: 45 } },
     yAxis: { type: 'value' },
     series: [
       { name: '总消息', type: 'line', data: points.map(p => p.count), smooth: true, areaStyle: { opacity: 0.3 } },
       { name: '群聊', type: 'line', data: points.map(p => p.group_count), smooth: true },
-      { name: '私聊', type: 'line', data: points.map(p => p.private_count), smooth: true }
+      { name: '私聊', type: 'line', data: points.map(p => p.private_count), smooth: true },
+      { name: '频道', type: 'line', data: points.map(p => p.channel_count), smooth: true }
     ]
   });
 }
