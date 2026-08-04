@@ -60,10 +60,10 @@ a:focus-visible,
   100% { background-position: -300% center; }
 }
 
-/* 统计卡片浮动效果 —— translate 属性独立于 hover 的 transform */
-@keyframes statFloat {
+/* 卡片浮动效果 —— translate 属性独立于 hover 的 transform */
+@keyframes cardFloat {
   0%, 100% { translate: 0 0; }
-  50%      { translate: 0 -8px; }
+  50%      { translate: 0 -6px; }
 }
 
 /* 蓝色渐变背景（用于按钮、激活状态、徽章等） */
@@ -256,9 +256,10 @@ body {
   box-shadow: var(--glass-shadow);
   padding: 1.5rem;
   margin-bottom: 1rem;
-  animation: cardAppear 0.4s ease both;
+  animation: cardAppear 0.4s ease both, cardFloat 7s ease-in-out infinite;
   overflow: hidden;
   contain: layout paint;
+  transform: translateZ(0);
 }
 
 /* 卡片静态渐变叠层 */
@@ -308,7 +309,7 @@ body {
   box-shadow: var(--glass-shadow);
   padding: 1.2rem;
   text-align: center;
-  animation: cardAppear 0.4s ease both, statFloat 6s ease-in-out infinite;
+  animation: cardAppear 0.4s ease both, cardFloat 6s ease-in-out infinite;
   overflow: hidden;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   contain: layout paint;
@@ -334,10 +335,10 @@ body {
 }
 
 /* 入场动画延迟 + 浮动相位错开（波浪效果） */
-.stat-card:nth-child(1) { animation: cardAppear 0.4s ease both, statFloat 6s ease-in-out 0s infinite; }
-.stat-card:nth-child(2) { animation: cardAppear 0.4s ease 60ms both, statFloat 6s ease-in-out -1.5s infinite; }
-.stat-card:nth-child(3) { animation: cardAppear 0.4s ease 120ms both, statFloat 6s ease-in-out -3s infinite; }
-.stat-card:nth-child(4) { animation: cardAppear 0.4s ease 180ms both, statFloat 6s ease-in-out -4.5s infinite; }
+.stat-card:nth-child(1) { animation: cardAppear 0.4s ease both, cardFloat 6s ease-in-out 0s infinite; }
+.stat-card:nth-child(2) { animation: cardAppear 0.4s ease 60ms both, cardFloat 6s ease-in-out -1.5s infinite; }
+.stat-card:nth-child(3) { animation: cardAppear 0.4s ease 120ms both, cardFloat 6s ease-in-out -3s infinite; }
+.stat-card:nth-child(4) { animation: cardAppear 0.4s ease 180ms both, cardFloat 6s ease-in-out -4.5s infinite; }
 
 .stat-value {
   font-size: 2rem;
@@ -1286,6 +1287,7 @@ body {
    尊重减少动画偏好
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {
+  .card,
   .stat-card,
   .stat-card:nth-child(1),
   .stat-card:nth-child(2),
