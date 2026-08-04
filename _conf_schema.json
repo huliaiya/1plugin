@@ -1,0 +1,81 @@
+{
+  "mysql_host": {
+    "type": "string",
+    "description": "MySQL 数据库主机地址",
+    "default": "127.0.0.1",
+    "hint": "MySQL 5.7 数据库服务器地址"
+  },
+  "mysql_port": {
+    "type": "int",
+    "description": "MySQL 数据库端口",
+    "default": 3306,
+    "hint": "MySQL 服务端口，默认 3306"
+  },
+  "mysql_user": {
+    "type": "string",
+    "description": "MySQL 数据库用户名",
+    "default": "root",
+    "hint": "具有读写权限的 MySQL 用户名"
+  },
+  "mysql_password": {
+    "type": "string",
+    "description": "MySQL 数据库密码",
+    "default": "",
+    "hint": "MySQL 用户密码"
+  },
+  "mysql_database": {
+    "type": "string",
+    "description": "MySQL 数据库名",
+    "default": "fox_toolbox",
+    "hint": "用于存储消息记录的数据库名（需提前在 MySQL 中创建该数据库，字符集建议 utf8mb4）"
+  },
+  "enable_commands": {
+    "type": "bool",
+    "description": "是否启用消息记录指令",
+    "default": true,
+    "hint": "启用后可通过 /msg_record 指令查询消息记录、查看统计等"
+  },
+  "max_records": {
+    "type": "int",
+    "description": "最大消息记录数，超过时自动清理最旧的记录",
+    "default": 0,
+    "hint": "设置为 0 表示不限制记录数量（可能占用大量磁盘空间）"
+  },
+  "retention_days": {
+    "type": "int",
+    "description": "消息保留天数",
+    "default": 0,
+    "hint": "超过此天数的消息将被自动清理，设置为 0 表示永久保留"
+  },
+  "save_message_chain": {
+    "type": "bool",
+    "description": "是否保存完整消息链（包含图片、表情等消息段）",
+    "default": true,
+    "hint": "关闭后只保存纯文本消息，可节省存储空间"
+  },
+  "save_raw_message": {
+    "type": "bool",
+    "description": "是否保存原始消息对象（平台原始数据）",
+    "default": false,
+    "hint": "开启后会保存平台的原始消息数据，便于调试但会占用更多空间"
+  },
+  "cleanup_interval_hours": {
+    "type": "int",
+    "description": "自动清理过期消息的间隔（小时）",
+    "default": 24,
+    "hint": "每隔指定小时数自动清理过期和超量记录"
+  },
+  "save_media_files": {
+    "type": "bool",
+    "description": "是否保存多媒体文件（图片、语音、视频、文件）到本地",
+    "default": false,
+    "hint": "开启后会下载消息中的多媒体文件，需要打开"保存完整消息链"选项。QQ 等平台的多媒体链接有有效期，建议开启以永久保存"
+  },
+  "image_save_mode": {
+    "type": "string",
+    "description": "图片保存模式",
+    "default": "original",
+    "hint": "original: 保存原图（体积大，画质高）；thumbnail: 保存缩略图（压缩后的小图，节省空间）",
+    "options": ["original", "thumbnail"]
+  }
+}

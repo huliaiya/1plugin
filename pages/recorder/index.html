@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>狐狸工具箱</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <span class="nav-brand">🦊 狐狸工具箱</span>
+      <button class="nav-toggle" id="navToggle">☰</button>
+      <div class="nav-links" id="navLinks">
+        <a href="#dashboard" class="nav-link active" data-view="dashboard">仪表盘</a>
+        <a href="#search" class="nav-link" data-view="search">搜索</a>
+        <a href="#export" class="nav-link" data-view="export">导出</a>
+        <a href="#import" class="nav-link" data-view="import">导入</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="main-content">
+    <div id="view-dashboard" class="view active">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="totalCount">-</div>
+          <div class="stat-label">总消息数</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="groupCount">-</div>
+          <div class="stat-label">群聊消息</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="privateCount">-</div>
+          <div class="stat-label">私聊消息</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="platformCount">-</div>
+          <div class="stat-label">平台数</div>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="chart-container">
+          <div class="chart-title">消息时间趋势</div>
+          <div class="chart-box" id="timelineChart"></div>
+        </div>
+        <div class="chart-container">
+          <div class="chart-title">平台分布</div>
+          <div class="chart-box" id="platformChart"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">时间范围（用于排行统计）</div>
+        <div class="time-selector">
+          <button class="time-btn" data-range="today">今日</button>
+          <button class="time-btn" data-range="yesterday">昨日</button>
+          <button class="time-btn" data-range="last7d">最近7天</button>
+          <button class="time-btn active" data-range="last30d">最近30天</button>
+          <button class="time-btn" data-range="week">最近7天</button>
+          <button class="time-btn" data-range="month">最近30天</button>
+        </div>
+        <p class="text-muted" id="timeRangeInfo">-</p>
+      </div>
+
+      <div class="charts-grid">
+        <div class="chart-container">
+          <div class="chart-title">热门发送者排行</div>
+          <div class="chart-box" id="senderChart"></div>
+        </div>
+        <div class="chart-container">
+          <div class="chart-title">活跃群组排行</div>
+          <div class="chart-box" id="groupChart"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-search" class="view">
+      <div class="filter-section">
+        <div class="filter-row">
+          <div class="filter-group search-group">
+            <label class="filter-label">关键词:</label>
+            <input type="text" class="filter-input search-input" id="keywordInput" placeholder="搜索消息内容...">
+          </div>
+        </div>
+        <div class="filter-row">
+          <div class="filter-group">
+            <label class="filter-label">平台:</label>
+            <select class="filter-select" id="platformFilter">
+              <option value="">全部平台</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">消息类型:</label>
+            <select class="filter-select" id="typeFilter">
+              <option value="">全部</option>
+              <option value="group">群聊</option>
+              <option value="private">私聊</option>
+              <option value="channel">频道</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">排序:</label>
+            <select class="filter-select" id="orderFilter">
+              <option value="desc">时间倒序</option>
+              <option value="asc">时间正序</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">每页:</label>
+            <select class="filter-select" id="limitFilter">
+              <option value="50">50条</option>
+              <option value="100">100条</option>
+              <option value="200">200条</option>
+            </select>
+          </div>
+        </div>
+        <div class="filter-row" id="advancedFilters" style="display: none;">
+          <div class="filter-group">
+            <label class="filter-label">群组:</label>
+            <select class="filter-select" id="groupFilter">
+              <option value="">全部群组</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">发送者:</label>
+            <select class="filter-select" id="senderFilter">
+              <option value="">全部发送者</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">开始时间:</label>
+            <input type="datetime-local" class="filter-input" id="startTimeInput">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">结束时间:</label>
+            <input type="datetime-local" class="filter-input" id="endTimeInput">
+          </div>
+        </div>
+        <div class="filter-row">
+          <button class="btn btn-outline" id="toggleAdvancedBtn">展开更多筛选</button>
+          <button class="btn" id="refreshBtn">刷新</button>
+          <button class="btn btn-success" id="exportResultsBtn">导出当前结果</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">消息列表</div>
+        <div class="message-list" id="messageList">
+          <p class="text-center text-muted">加载中...</p>
+        </div>
+      </div>
+      <div class="pagination" id="pagination"></div>
+    </div>
+
+    <div id="view-export" class="view">
+      <div class="card">
+        <div class="card-header">筛选条件</div>
+        <div id="currentFilters"></div>
+        <div class="filter-row">
+          <div class="filter-group">
+            <label class="filter-label">时间范围:</label>
+            <select class="filter-select" id="exportTime">
+              <option value="">全部</option>
+              <option value="today">今日</option>
+              <option value="yesterday">昨日</option>
+              <option value="last7d">最近7天</option>
+              <option value="last30d">最近30天</option>
+              <option value="week">本周</option>
+              <option value="month">本月</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">平台:</label>
+            <select class="filter-select" id="exportPlatform">
+              <option value="">全部平台</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">消息类型:</label>
+            <select class="filter-select" id="exportType">
+              <option value="">全部</option>
+              <option value="group">群聊</option>
+              <option value="private">私聊</option>
+              <option value="channel">频道</option>
+            </select>
+          </div>
+        </div>
+        <div class="filter-row">
+          <div class="filter-group">
+            <label class="filter-label">开始时间:</label>
+            <input type="datetime-local" class="filter-input" id="exportStartTime">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">结束时间:</label>
+            <input type="datetime-local" class="filter-input" id="exportEndTime">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">关键词:</label>
+            <input type="text" class="filter-input" id="exportKeyword" placeholder="筛选包含关键词的消息">
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">导出格式</div>
+        <div class="export-options">
+          <div class="format-option selected" data-format="json">
+            <div class="format-icon">📄</div>
+            <div class="format-name">JSON</div>
+            <p class="format-desc">结构化数据，适合程序处理</p>
+          </div>
+          <div class="format-option" data-format="csv">
+            <div class="format-icon">📊</div>
+            <div class="format-name">CSV</div>
+            <p class="format-desc">表格格式，适合 Excel 打开</p>
+          </div>
+          <div class="format-option" data-format="txt">
+            <div class="format-icon">📝</div>
+            <div class="format-name">TXT</div>
+            <p class="format-desc">纯文本，聊天记录风格</p>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">导出选项</div>
+        <div class="filter-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="includeChain" checked>
+            包含消息链（图片、表情等）
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="includeRaw">
+            包含原始消息数据
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="includeMedia">
+            包含多媒体文件（图片、语音、视频等）
+          </label>
+        </div>
+        <div id="mediaNote" class="info-note" style="display: none;">
+          💡 勾选后将以 <code>.zip</code> 格式导出（包含数据 + 媒体文件的压缩包），文件体积可能较大。仅 JSON 格式支持此选项。
+        </div>
+      </div>
+      <div class="card text-center">
+        <button class="btn btn-success btn-lg" id="startExport">开始导出</button>
+      </div>
+      <div id="exportProgress" style="display: none;"></div>
+    </div>
+
+    <div id="view-import" class="view">
+      <div class="card">
+        <div class="card-header">选择文件</div>
+        <div class="upload-area" id="uploadArea">
+          <div class="upload-icon">📁</div>
+          <p>拖拽文件到这里，或点击选择文件</p>
+          <p class="text-muted">支持 JSON、CSV、ZIP（含媒体文件包）格式，最大 4GB</p>
+          <p class="text-muted" style="font-size: 0.8rem;">大文件（超过 50MB）将自动使用分片上传</p>
+          <input type="file" id="importFile" accept=".json,.csv,.zip" style="display: none;">
+        </div>
+        <div id="fileInfo" style="display: none; margin-top: 1rem;"></div>
+      </div>
+      <div class="card">
+        <div class="card-header">导入模式</div>
+        <div class="filter-row">
+          <label class="checkbox-label">
+            <input type="radio" name="importMode" value="merge" checked>
+            <strong>合并</strong> - 添加新记录，保留现有数据
+          </label>
+        </div>
+        <div class="filter-row">
+          <label class="checkbox-label">
+            <input type="radio" name="importMode" value="skip_duplicates">
+            <strong>跳过重复</strong> - 检测并跳过已存在的记录
+          </label>
+        </div>
+      </div>
+      <div class="card text-center">
+        <button class="btn btn-warning btn-lg" id="startImport">开始导入</button>
+        <p class="text-muted mt-2">导入操作可能会修改数据库，请谨慎操作</p>
+      </div>
+      <div id="importProgress" style="display: none;"></div>
+    </div>
+  </main>
+
+  <div class="modal" id="messageModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>消息详情</h3>
+        <button class="modal-close" id="modalClose">×</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

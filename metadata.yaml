@@ -1,0 +1,37 @@
+name: astrbot_plugin_fox_toolbox
+desc: 自动记录所有平台的聊天消息到 MySQL 5.7，提供 Web 管理面板、全文搜索、数据导入导出和供其他插件调用的查询 API
+version: 0.0.4
+author: Leafiber
+repo: https://github.com/leafliber/astrbot_plugin_fox_toolbox
+display_name: 狐狸工具箱
+support_platforms:
+  - aiocqhttp
+  - telegram
+  - discord
+  - slack
+  - kook
+  - qq_official
+  - qq_official_webhook
+  - dingtalk
+  - lark
+  - wecom
+  - wecom_ai_bot
+  - weixin_oc
+  - weixin_official_account
+  - line
+  - misskey
+  - mattermost
+  - satori
+  - webchat
+astrbot_version: ">=4.16,<5"
+keywords:
+  - 消息记录
+  - 数据库
+  - MySQL
+  - 消息查询
+  - 全文搜索
+  - FULLTEXT
+  - Web面板
+  - 多媒体
+  - 数据导出
+  - 插件API
