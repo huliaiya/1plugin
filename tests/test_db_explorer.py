@@ -128,6 +128,101 @@ class TestEnsureLimit:
         sql = explorer._ensure_limit("SELECT * FROM messages LIMIT 5", 100)
         assert sql == "SELECT * FROM messages LIMIT 5"
 
+    def test_existing_limit_clamped(self, explorer):
+        sql = explorer._ensure_limit("SELECT * FROM messages LIMIT 999999", 100)
+        assert sql == "SELECT * FROM messages LIMIT 100"
+
+    def test_existing_limit_within_kept(self, explorer):
+        sql = explorer._ensure_limit("SELECT * FROM messages LIMIT 5", 100)
+        assert sql == "SELECT * FROM messages LIMIT 5"
+
+    def test_show_no_limit_appended(self, explorer):
+        sql = explorer._ensure_limit("SHOW TABLES", 100)
+        assert sql == "SHOW TABLES"
+
+    def test_describe_no_limit_appended(self, explorer):
+        sql = explorer._ensure_limit("DESCRIBE messages", 100)
+        assert sql == "DESCRIBE messages"
+        sql2 = explorer._ensure_limit("desc messages", 100)
+        assert sql2 == "desc messages"
+
+    def test_select_lowercase_appends_limit(self, explorer):
+        sql = explorer._ensure_limit("select * from messages", 100)
+        assert sql == "select * from messages LIMIT 100"
+
+
+class TestListTablesCompatibility:
+    """list_tables 对 tuple / dict 两种游标行的兼容性（不依赖真实 MySQL）"""
+
+    def _make_explorer(self, table_rows):
+        class FakeCursor:
+            def __init__(self):
+                self._sqls = []
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            async def execute(self, sql, *args):
+                self._sqls.append(sql)
+
+            async def fetchall(self):
+                if self._sqls and self._sqls[-1].strip().upper().startswith("SHOW"):
+                    return table_rows
+                return []
+
+            async def fetchone(self):
+                if self._sqls and self._sqls[-1].strip().upper().startswith("SELECT COUNT"):
+                    return (3,)
+                return None
+
+        class FakeConn:
+            def cursor(self, *a, **k):
+                return FakeCursor()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+        class FakePool:
+            def acquire(self):
+                return FakeConn()
+
+        class FakeDb:
+            _pool = FakePool()
+
+        return DbExplorer(FakeDb())
+
+    @pytest.mark.asyncio
+    async def test_tuple_rows(self):
+        explorer = self._make_explorer([("messages",), ("_schema_meta",)])
+        tables = await explorer.list_tables()
+        names = [t["name"] for t in tables]
+        assert "messages" in names
+        assert "_schema_meta" not in names
+        msg = [t for t in tables if t["name"] == "messages"][0]
+        assert msg["row_count"] == 3
+
+    @pytest.mark.asyncio
+    async def test_dict_rows(self):
+        explorer = self._make_explorer(
+            [{"Tables_in_main_db": "messages"}, {"Tables_in_main_db": "channels"}]
+        )
+        tables = await explorer.list_tables()
+        names = [t["name"] for t in tables]
+        assert "messages" in names
+        assert "channels" in names
+
+    @pytest.mark.asyncio
+    async def test_empty_rows(self):
+        explorer = self._make_explorer([])
+        tables = await explorer.list_tables()
+        assert tables == []
+
 
 class TestValidateTableName:
     def test_valid_names(self, explorer):

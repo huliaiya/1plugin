@@ -74,6 +74,12 @@ class DbExplorer:
             c.isalnum() or c == "_" for c in table_name
         )
 
+    def _strip_string_literals(self, sql: str) -> str:
+        """剥除 SQL 中的字符串字面量（含 '' 与 \\ 转义），返回用于检测的文本"""
+        stripped = re.sub(r"'(?:[^'\\]|\\.|'')*'", "''", sql)
+        stripped = re.sub(r'"(?:[^"\\]|\\.|"")*"', '""', stripped)
+        return stripped
+
     def check_dangerous(self, sql: str) -> Tuple[bool, str]:
         """检查 SQL 是否包含危险操作，返回 (是否危险, 原因)
 
@@ -82,9 +88,7 @@ class DbExplorer:
         """
         if not sql or not sql.strip():
             return True, "SQL 语句为空"
-        # 剥除单/双引号字符串字面量（含 '' 转义），仅对剩余部分做危险模式匹配
-        stripped_sql = re.sub(r"'([^']|'')*'", "''", sql)
-        stripped_sql = re.sub(r'"([^"]|"")*"', '""', stripped_sql)
+        stripped_sql = self._strip_string_literals(sql)
         for pattern in self._dangerous:
             match = pattern.search(stripped_sql)
             if match:
@@ -100,9 +104,15 @@ class DbExplorer:
         return False, "仅允许执行 SELECT / SHOW / DESCRIBE / DESC 只读查询"
 
     def _ensure_limit(self, sql: str, max_rows: int) -> str:
-        """为 SELECT 自动追加 LIMIT（参考插件 _add_limit 思路）"""
-        if re.search(r"\bLIMIT\s+\d+", sql, re.IGNORECASE):
+        """为 SELECT 自动追加/钳制 LIMIT；SHOW/DESCRIBE/DESC 不追加，避免语法错误"""
+        stripped = sql.strip().lstrip("(").strip().upper()
+        if not stripped.startswith("SELECT"):
             return sql
+        if re.search(r"\bLIMIT\s+\d+", sql, re.IGNORECASE):
+            def _clamp(m):
+                value = int(m.group(2))
+                return f"{m.group(1)}{min(value, max_rows)}"
+            return re.sub(r"(\bLIMIT\s+)(\d+)", _clamp, sql, flags=re.IGNORECASE)
         return f"{sql.rstrip(';')} LIMIT {max_rows}"
 
     async def list_tables(self) -> List[Dict[str, Any]]:
@@ -115,8 +125,9 @@ class DbExplorer:
                 rows = await cur.fetchall()
                 if not rows:
                     return []
-                field_name = list(rows[0].keys())[0] if rows[0] else None
-                if field_name:
+                first = rows[0]
+                if isinstance(first, dict):
+                    field_name = next(iter(first))
                     tables = [row[field_name] for row in rows]
                 else:
                     tables = [row[0] for row in rows]

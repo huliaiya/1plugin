@@ -1,5 +1,5 @@
 const bridge = window.AstrBotPluginPage;
-const BUILD_VERSION = '0.1.12';
+const BUILD_VERSION = '0.1.13';
 
 let bridgeReady = false;
 let pluginContext = null;
@@ -376,10 +376,10 @@ function initDashboard() {
 function updateDbStatusCard(dbStatus) {
   const valueEl = document.getElementById('dbStatusValue');
   const labelEl = document.getElementById('dbStatusLabel');
-  if (!valueEl || !labelEl || !dbStatus) return;
+  if (!valueEl || !labelEl) return;
 
-  const running = dbStatus.running !== undefined ? !!dbStatus.running : (dbStatus.database === 'ok');
-  const tableCount = Number.isFinite(Number(dbStatus.table_count)) ? Number(dbStatus.table_count) : 0;
+  const running = dbStatus ? (dbStatus.running !== undefined ? !!dbStatus.running : (dbStatus.database === 'ok')) : false;
+  const tableCount = dbStatus && Number.isFinite(Number(dbStatus.table_count)) ? Number(dbStatus.table_count) : 0;
 
   valueEl.textContent = running ? `${tableCount}` : '--';
   labelEl.textContent = '数据表数量';
@@ -476,7 +476,10 @@ async function loadDashboardData(force = false) {
         updateStatsCards(statsData);
         if (statsData.db_status) {
           dataCache.dbStatus = statsData.db_status;
-          updateDbStatusCard(statsData.db_status);
+        }
+        updateDbStatusCard(dataCache.dbStatus || statsData.db_status);
+        if (!dataCache.dbStatus) {
+          loadDbStatus().catch(() => {});
         }
         await loadEcharts().catch(() => {});
         clearChartSkeleton('platformChart');
@@ -659,8 +662,8 @@ function updateTimelineChart(points) {
       backgroundColor: 'rgba(255,255,255,0.92)',
       borderColor: 'rgba(79,195,247,0.4)',
     },
-    legend: { data: ['总消息', '群聊', '私聊', '频道'], textStyle: { fontSize: 14, fontWeight: 600 } },
-    grid: { left: '4%', right: '5%', bottom: '8%', containLabel: true },
+    legend: { data: ['总消息', '群聊', '私聊', '频道'], top: 4, itemGap: 10, textStyle: { fontSize: 12, fontWeight: 600 } },
+    grid: { left: '4%', right: '5%', top: 46, bottom: '2%', containLabel: true },
     xAxis: {
       type: 'category',
       data: points.map(p => p.date),

@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.13] - 2026-08-05
+
+### Fixed
+
+- **数据表数量卡片偶发空白**：`updateDbStatusCard` 不再因 `db_status` 缺失而提前返回，缺失时显示 `--` 并清除加载骨架；`stats` 响应缺少 `db_status` 时自动改用 `status` 接口兜底，避免卡片停留在骨架态
+- **数据库浏览表列表偶发崩溃**：`DbExplorer.list_tables()` 兼容 tuple 与 dict 两种游标行（此前默认游标返回 tuple，`rows[0].keys()` 抛 `AttributeError`）
+- **只读 SQL 查询语法错误**：`_ensure_limit` 不再对 `SHOW / DESCRIBE / DESC` 追加 `LIMIT`（避免 MySQL 语法错误），并对已存在且超限的 `LIMIT` 数值钳制到 `ABSOLUTE_MAX_ROWS` 以内
+
+### Changed
+
+- **消息时间趋势图布局优化**：压缩图表卡片高度（桌面 420→340px、平板 280→240px、手机 250→210px），ECharts 绘图区下移并收紧底部留白（`top: 46` / `bottom: 2%`），图例紧凑排布，消除图表下方大片空白
+- **前端资源版本号升级**：Plugin Page 的 `app.js` 与 `style.css` 查询参数升级至 `0.1.13`
+
+### Verified
+
+- `PYTHONPATH=/workspace python3 -m pytest -q`
+- `python3 -m compileall fox_toolbox astrbot_plugin_fox_toolbox pages/recorder`
+- `node --check pages/recorder/app.js`
+
 ## [0.1.12] - 2026-08-05
 
 ### Added
