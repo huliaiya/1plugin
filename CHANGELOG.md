@@ -5,13 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.2] - 2026-08-05
+## [0.1.7] - 2026-08-05
 
-## [0.1.3] - 2026-08-05
+### Changed
 
-## [0.1.4] - 2026-08-05
+- **移除 Dashboard 中不可用的三张状态卡片**：删除「插件状态 / 健康度 / 内存占用」卡片及其前端轮询与渲染逻辑，避免页面继续展示无效或误导性状态
+- **清理状态卡片相关前端逻辑**：移除状态骨架屏、状态兜底文案、资源轮换与首屏“检测中”提示，Dashboard 仅保留已验证可用的统计与图表模块
 
-## [0.1.5] - 2026-08-05
+### Docs
+
+- **补全版本说明文档**：整理 `CHANGELOG.md` 顶部重复空版本标题，保留每个版本的具体更新内容；同步更新 `README.md` 更新日志
+
+### Verified
+
+- `PYTHONPATH=/workspace python3 -m pytest -q`
+- `python3 -m compileall fox_toolbox astrbot_plugin_fox_toolbox pages/recorder`
 
 ## [0.1.6] - 2026-08-05
 

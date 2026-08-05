@@ -7,7 +7,7 @@ let pluginContext = null;
 const DEBUG = new URLSearchParams(window.location.search).has('debug');
 
 const viewDataLoaded = { dashboard: false, search: false, export: false };
-const dataCache = { platforms: null, stats: null, pluginStatus: null };
+const dataCache = { platforms: null, stats: null };
 
 let echartsLoaded = false;
 let echartsLoading = false;
@@ -359,7 +359,6 @@ let dashboardLoading = false;
 
 function initDashboard() {
   initDashboardSkeletons();
-  showStatusLoadingHint();
 
   document.querySelectorAll('.time-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -390,56 +389,6 @@ function clearStatSkeleton(id) {
   if (el) {
     el.classList.remove('loading');
   }
-}
-
-function clearStatusSkeletons() {
-  ['statusValue', 'healthValue', 'resourceValue'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el && el.classList.contains('loading')) {
-      el.classList.remove('loading');
-    }
-  });
-}
-
-function showStatusUnavailable(message = '加载失败') {
-  const statusEl = document.getElementById('statusValue');
-  const healthEl = document.getElementById('healthValue');
-  const resourceEl = document.getElementById('resourceValue');
-  const safeMessage = String(message || '加载失败');
-
-  if (statusEl) {
-    statusEl.textContent = safeMessage;
-    statusEl.classList.remove('loading');
-    statusEl.style.color = '#d32f2f';
-    statusEl.setAttribute('title', safeMessage);
-  }
-  if (healthEl) {
-    healthEl.textContent = '0 / 100';
-    healthEl.classList.remove('loading');
-    healthEl.style.color = '#d32f2f';
-    healthEl.setAttribute('title', safeMessage);
-  }
-  if (resourceEl) {
-    resourceEl.textContent = '0.0 MB';
-    resourceEl.classList.remove('loading');
-    resourceEl.setAttribute('title', safeMessage);
-  }
-}
-
-function showStatusLoadingHint() {
-  const statusEl = document.getElementById('statusValue');
-  const healthEl = document.getElementById('healthValue');
-  const resourceEl = document.getElementById('resourceValue');
-  if (statusEl && statusEl.textContent.trim() === '-') statusEl.textContent = '检测中';
-  if (healthEl && healthEl.textContent.trim() === '-') healthEl.textContent = '-- / 100';
-  if (resourceEl && resourceEl.textContent.trim() === '-') resourceEl.textContent = '-- MB';
-}
-
-function getPluginStatusFromStats(stats) {
-  if (stats && typeof stats === 'object' && stats.plugin_status && typeof stats.plugin_status === 'object') {
-    return stats.plugin_status;
-  }
-  return null;
 }
 
 function clearChartSkeleton(id) {
@@ -553,41 +502,13 @@ async function loadDashboardData(force = false) {
       showChartEmpty('platformDetailChart', '加载平台详情数据失败');
     }
 
-    const statusData = getPluginStatusFromStats(statsData);
-    console.log('[FoxToolbox] statusData from stats:', statusData);
-    if (statusData) {
-      try {
-        dataCache.pluginStatus = statusData;
-        updateStatusCard(statusData);
-        updateHealthCard(statusData);
-        updateResourceCard(statusData);
-        ensureResourceRotation();
-      } catch (e) {
-        console.error('[FoxToolbox] Failed to process plugin status:', e);
-        logError('Failed to process plugin status:', e);
-        ['statusValue', 'healthValue'].forEach(id => {
-          const el = document.getElementById(id);
-          if (el) { el.textContent = '加载失败'; el.classList.remove('loading'); }
-        });
-        const rv = document.getElementById('resourceValue');
-        if (rv) { rv.textContent = '加载失败'; rv.classList.remove('loading'); }
-        ensureResourceRotation();
-      }
-    } else {
-      console.warn('[FoxToolbox] plugin_status is missing from stats payload');
-      showStatusUnavailable('状态数据缺失');
-      ensureResourceRotation();
-    }
-
     updateTimeRangeDisplay(currentTimeRange);
     await loadRankingData();
     viewDataLoaded.dashboard = true;
   } catch (e) {
     console.error('[FoxToolbox] Failed to load dashboard data:', e);
     logError('Failed to load dashboard data:', e);
-    showStatusUnavailable(e.message || '状态加载失败');
   } finally {
-    clearStatusSkeletons();
     dashboardLoading = false;
   }
 }
@@ -634,77 +555,6 @@ function updateStatsCards(stats) {
   setVal('platformCount', stats.platform_count);
 }
 
-// ========== 插件状态与资源占用卡片 ==========
-
-let resourceMode = 'memory';
-let resourceRotationTimer = null;
-let resourceRefreshTimer = null;
-
-function updateStatusCard(data) {
-  const el = document.getElementById('statusValue');
-  if (!el) return;
-  const status = data?.status;
-  const healthy = status === 'healthy';
-  const label = healthy ? '健康' : (status === 'degraded' ? '警告' : '异常');
-  el.textContent = label;
-  el.classList.remove('loading');
-  el.style.color = healthy ? '#2e7d32' : (data.status === 'degraded' ? '#f9a825' : '#d32f2f');
-  el.setAttribute('title', data.detail || '');
-}
-
-function updateHealthCard(data) {
-  const el = document.getElementById('healthValue');
-  if (!el) return;
-  const rawScore = Number(data?.health_score);
-  const score = Number.isFinite(rawScore) ? Math.max(0, Math.min(100, rawScore)) : 0;
-  el.textContent = score + ' / 100';
-  el.classList.remove('loading');
-  el.style.color = score >= 90 ? '#2e7d32' : (score >= 60 ? '#f9a825' : '#d32f2f');
-}
-
-function updateResourceCard(data) {
-  const val = document.getElementById('resourceValue');
-  const label = document.getElementById('resourceLabel');
-  if (!val || !label) return;
-  const rawMem = Number(data?.memory_mb);
-  const rawCpu = Number(data?.cpu_percent);
-  const mem = Number.isFinite(rawMem) ? rawMem : 0;
-  const cpu = Number.isFinite(rawCpu) ? rawCpu : 0;
-  if (resourceMode === 'memory') {
-    val.textContent = mem.toFixed(1) + ' MB';
-    label.textContent = '内存占用';
-  } else {
-    val.textContent = cpu.toFixed(1) + '%';
-    label.textContent = 'CPU 占用';
-  }
-  val.classList.remove('loading');
-}
-
-function ensureResourceRotation() {
-  if (resourceRotationTimer) return;
-  resourceRotationTimer = setInterval(() => {
-    resourceMode = resourceMode === 'memory' ? 'cpu' : 'memory';
-    const cached = dataCache.pluginStatus;
-    if (cached) updateResourceCard(cached);
-  }, 3000);
-  resourceRefreshTimer = setInterval(async () => {
-    try {
-      const raw = await apiGet('stats');
-      const stats = extractData(raw);
-      const status = getPluginStatusFromStats(stats);
-      if (!status) {
-        throw new Error('stats 未返回 plugin_status');
-      }
-      dataCache.pluginStatus = status;
-      updateStatusCard(status);
-      updateHealthCard(status);
-      updateResourceCard(status);
-    } catch (e) {
-      logError('Failed to refresh plugin status:', e);
-    }
-  }, 30000);
-}
-
 function updateTimeRangeDisplay(timeRange) {
   const el = document.getElementById('timeRangeInfo');
   if (!el) return;
@@ -733,8 +583,6 @@ function handleChartResize() {
 
 function cleanupAllCharts() {
   if (_resizeTimer) { clearTimeout(_resizeTimer); _resizeTimer = null; }
-  if (resourceRotationTimer) { clearInterval(resourceRotationTimer); resourceRotationTimer = null; }
-  if (resourceRefreshTimer) { clearInterval(resourceRefreshTimer); resourceRefreshTimer = null; }
   if (timelineChart) { timelineChart.dispose(); timelineChart = null; }
   if (platformChart) { platformChart.dispose(); platformChart = null; }
   if (contentTypeChart) { contentTypeChart.dispose(); contentTypeChart = null; }
