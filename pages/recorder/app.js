@@ -533,6 +533,7 @@ function updateStatsCards(stats) {
   setVal('totalCount', formatNumber(stats.total_count));
   setVal('groupCount', formatNumber(stats.group_message_count));
   setVal('privateCount', formatNumber(stats.private_message_count));
+  setVal('channelCount', formatNumber(stats.channel_message_count));
   setVal('platformCount', stats.platform_count);
 }
 
@@ -723,6 +724,8 @@ let searchFilters = { limit: 50, offset: 0, order: 'desc' };
 let totalMessages = 0;
 let advancedVisible = false;
 let searchLoading = false;
+let messageRenderSeq = 0;
+const MESSAGE_BATCH_SIZE = 40;
 
 function initSearch() {
   const keywordInput = document.getElementById('keywordInput');
@@ -774,6 +777,8 @@ function initSearch() {
     exportFilters = { ...searchFilters };
     displayExportFilters();
   });
+
+  document.getElementById('messageList')?.addEventListener('click', handleMessageListClick);
 }
 
 async function loadSearchData(force = false) {
@@ -897,11 +902,16 @@ async function loadMessages() {
 function renderMessages(messages) {
   const container = document.getElementById('messageList');
   if (!container) return;
+  const seq = ++messageRenderSeq;
   if (!messages.length) {
     container.innerHTML = '<p class="text-center text-muted">暂无消息记录</p>';
     return;
   }
-  container.innerHTML = messages.map(msg => `
+  container.innerHTML = '';
+  const total = messages.length;
+  let index = 0;
+
+  const buildCard = (msg) => `
     <div class="message-card" data-id="${msg.id}">
       <div class="message-header">
         <span class="message-time">${formatShortTime(msg.timestamp)}</span>
@@ -915,17 +925,36 @@ function renderMessages(messages) {
         <a data-action="context" data-id="${msg.id}">查看上下文</a>
       </div>
     </div>
-  `).join('');
+  `;
 
-  container.querySelectorAll('[data-action="detail"]').forEach(a => {
-    a.addEventListener('click', (e) => { e.stopPropagation(); showMessageDetail(parseInt(a.dataset.id)); });
-  });
-  container.querySelectorAll('[data-action="context"]').forEach(a => {
-    a.addEventListener('click', (e) => { e.stopPropagation(); showMessageContext(parseInt(a.dataset.id)); });
-  });
-  container.querySelectorAll('.message-card').forEach(card => {
-    card.addEventListener('click', () => showMessageDetail(parseInt(card.dataset.id)));
-  });
+  const renderChunk = () => {
+    if (seq !== messageRenderSeq) return;
+    if (index >= total) return;
+    const end = Math.min(index + MESSAGE_BATCH_SIZE, total);
+    const wrap = document.createElement('div');
+    wrap.innerHTML = messages.slice(index, end).map(buildCard).join('');
+    const frag = document.createDocumentFragment();
+    while (wrap.firstChild) frag.appendChild(wrap.firstChild);
+    container.appendChild(frag);
+    index = end;
+    if (index < total) requestAnimationFrame(renderChunk);
+  };
+
+  requestAnimationFrame(renderChunk);
+}
+
+// 消息列表事件委托 —— 避免为每条卡片绑定多个监听器
+function handleMessageListClick(e) {
+  const actionEl = e.target.closest('[data-action]');
+  if (actionEl) {
+    e.stopPropagation();
+    const id = parseInt(actionEl.dataset.id);
+    if (actionEl.dataset.action === 'detail') showMessageDetail(id);
+    else if (actionEl.dataset.action === 'context') showMessageContext(id);
+    return;
+  }
+  const card = e.target.closest('.message-card');
+  if (card) showMessageDetail(parseInt(card.dataset.id));
 }
 
 function showMessageError(error) {

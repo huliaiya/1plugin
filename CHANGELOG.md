@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.10] - 2026-08-05
+
+### Added
+
+- **WebUI 统计卡片新增「频道消息」**：Dashboard 统计区在「总消息数 / 群聊消息 / 私聊消息 / 平台数」之外新增「频道消息」卡片，展示 `channel_message_count`（后端统计接口与数据库查询此前已支持该字段，本次仅补充前端展示）
+
+### Changed
+
+- 统计卡片网格从 4 列调整为 5 列；第 5 张卡片补齐浮动动画相位与 `prefers-reduced-motion` 适配
+
+## [0.0.9] - 2026-08-05
+
+### Performance
+
+- **WebUI 页面大幅减少卡顿**：
+  - 移除大面积卡片（`.card`、图表容器 `.chart-container`、筛选区 `.filter-section`）的持续浮动动画，仅保留一次性入场动画，显著降低 backdrop-filter 持续合成开销
+  - 统计卡片浮动动画周期放缓（6s -> 12s），保留"波浪"质感同时降低渲染负担
+  - 消息卡片移除 backdrop-filter，改用接近不透明白色背景，搜索页上百条卡片滚动时不再反复重采样背景
+  - body 背景移除 `background-attachment: fixed`，消除移动端固定背景的滚动性能问题
+  - 消息列表渲染改为分批渲染（每批 40 条 + `requestAnimationFrame`），避免一次插入上百条卡片长时间阻塞主线程
+  - 消息列表事件绑定改为容器级事件委托，搜索页不再为每条卡片创建多个监听器
+
 ## [0.0.8] - 2026-08-05
 
 ### Fixed

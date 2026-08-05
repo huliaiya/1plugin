@@ -90,7 +90,7 @@ body {
     radial-gradient(ellipse 900px 600px at 15% 5%, rgba(79, 195, 247, 0.12) 0%, transparent 60%),
     radial-gradient(ellipse 800px 500px at 85% 95%, rgba(41, 182, 246, 0.1) 0%, transparent 60%),
     linear-gradient(135deg, #f0f7ff 0%, #e1f5fe 30%, #e8f5e9 60%, #fff8e1 90%, #fce4ec 100%);
-  background-attachment: fixed;
+  background-attachment: scroll;
   color: var(--text-on-glass);
   line-height: 1.6;
   min-height: 100vh;
@@ -256,9 +256,8 @@ body {
   box-shadow: var(--glass-shadow);
   padding: 1.5rem;
   margin-bottom: 1rem;
-  animation: cardAppear 0.4s ease both, cardFloat 7s ease-in-out infinite;
+  animation: cardAppear 0.4s ease both;
   overflow: hidden;
-  will-change: translate;
 }
 
 /* 卡片静态渐变叠层 */
@@ -293,7 +292,7 @@ body {
    ============================================================ */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
@@ -308,7 +307,7 @@ body {
   box-shadow: var(--glass-shadow);
   padding: 1.2rem;
   text-align: center;
-  animation: cardAppear 0.4s ease both, cardFloat 6s ease-in-out infinite;
+  animation: cardAppear 0.4s ease both, cardFloat 12s ease-in-out infinite;
   overflow: hidden;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   contain: layout paint;
@@ -334,10 +333,11 @@ body {
 }
 
 /* 入场动画延迟 + 浮动相位错开（波浪效果） */
-.stat-card:nth-child(1) { animation: cardAppear 0.4s ease both, cardFloat 6s ease-in-out 0s infinite; }
-.stat-card:nth-child(2) { animation: cardAppear 0.4s ease 60ms both, cardFloat 6s ease-in-out -1.5s infinite; }
-.stat-card:nth-child(3) { animation: cardAppear 0.4s ease 120ms both, cardFloat 6s ease-in-out -3s infinite; }
-.stat-card:nth-child(4) { animation: cardAppear 0.4s ease 180ms both, cardFloat 6s ease-in-out -4.5s infinite; }
+.stat-card:nth-child(1) { animation: cardAppear 0.4s ease both, cardFloat 12s ease-in-out 0s infinite; }
+.stat-card:nth-child(2) { animation: cardAppear 0.4s ease 60ms both, cardFloat 12s ease-in-out -3s infinite; }
+.stat-card:nth-child(3) { animation: cardAppear 0.4s ease 120ms both, cardFloat 12s ease-in-out -6s infinite; }
+.stat-card:nth-child(4) { animation: cardAppear 0.4s ease 180ms both, cardFloat 12s ease-in-out -9s infinite; }
+.stat-card:nth-child(5) { animation: cardAppear 0.4s ease 240ms both, cardFloat 12s ease-in-out -1.5s infinite; }
 
 .stat-value {
   font-size: 2rem;
@@ -400,7 +400,7 @@ body {
   overflow: hidden;
   contain: layout paint;
   transform: translateZ(0);
-  animation: cardAppear 0.4s ease both, cardFloat 8s ease-in-out infinite;
+  animation: cardAppear 0.4s ease both;
 }
 
 .chart-container::before {
@@ -437,11 +437,11 @@ body {
   }
 }
 
-/* 图表容器浮动相位错开 */
-.charts-grid .chart-container:nth-child(1) { animation: cardAppear 0.4s ease both, cardFloat 8s ease-in-out 0s infinite; }
-.charts-grid .chart-container:nth-child(2) { animation: cardAppear 0.4s ease 80ms both, cardFloat 8s ease-in-out -2s infinite; }
-.charts-grid .chart-container:nth-child(3) { animation: cardAppear 0.4s ease 160ms both, cardFloat 8s ease-in-out -4s infinite; }
-.charts-grid .chart-container:nth-child(4) { animation: cardAppear 0.4s ease 240ms both, cardFloat 8s ease-in-out -6s infinite; }
+/* 图表容器入场延迟（仅一次性入场动画，避免持续浮动带来的合成开销） */
+.charts-grid .chart-container:nth-child(1) { animation: cardAppear 0.4s ease both; }
+.charts-grid .chart-container:nth-child(2) { animation: cardAppear 0.4s ease 80ms both; }
+.charts-grid .chart-container:nth-child(3) { animation: cardAppear 0.4s ease 160ms both; }
+.charts-grid .chart-container:nth-child(4) { animation: cardAppear 0.4s ease 240ms both; }
 
 /* ============================================================
    时间选择器
@@ -496,9 +496,7 @@ body {
 
 .message-card {
   position: relative;
-  background: var(--glass-bg-dark);
-  -webkit-backdrop-filter: var(--glass-blur-light);
-  backdrop-filter: var(--glass-blur-light);
+  background: rgba(255, 255, 255, 0.88);
   border: 1px solid var(--border-color-subtle);
   border-radius: var(--radius-sm);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.4);
@@ -524,7 +522,7 @@ body {
 }
 
 .message-card:hover {
-  background: var(--glass-bg-hover);
+  background: rgba(255, 255, 255, 0.97);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.5);
   transform: translateY(-2px);
 }
@@ -612,7 +610,7 @@ body {
   overflow: hidden;
   contain: layout paint;
   transform: translateZ(0);
-  animation: cardAppear 0.4s ease both, cardFloat 8s ease-in-out infinite;
+  animation: cardAppear 0.4s ease both;
 }
 
 .filter-section::before {
@@ -1302,6 +1300,7 @@ body {
   .stat-card:nth-child(2),
   .stat-card:nth-child(3),
   .stat-card:nth-child(4),
+  .stat-card:nth-child(5),
   .chart-container,
   .charts-grid .chart-container:nth-child(1),
   .charts-grid .chart-container:nth-child(2),
