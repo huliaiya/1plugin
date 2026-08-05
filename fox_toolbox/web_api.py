@@ -1012,7 +1012,8 @@ async def register_all_web_apis(context, db: Database):
     # ========== Register all APIs ==========
 
     context.register_web_api(f"{prefix}/stats", api_stats, ["GET"], "获取统计概览")
-    context.register_web_api(f"{prefix}/plugin/status", api_plugin_status, ["GET"], "获取插件状态与资源占用")
+    context.register_web_api(f"{prefix}/status", api_plugin_status, ["GET"], "获取插件状态与资源占用")
+    context.register_web_api(f"{prefix}/plugin/status", api_plugin_status, ["GET"], "获取插件状态与资源占用（兼容旧路径）")
     context.register_web_api(f"{prefix}/stats/timeline", api_stats_timeline, ["GET"], "获取时间趋势")
     context.register_web_api(f"{prefix}/stats/senders", api_stats_senders, ["GET"], "获取发送者排行")
     context.register_web_api(f"{prefix}/stats/groups", api_stats_groups, ["GET"], "获取群组排行")

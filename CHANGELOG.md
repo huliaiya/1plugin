@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.2] - 2026-08-05
 
+## [0.1.3] - 2026-08-05
+
+### Fixed
+
+- **按 AstrBot Plugin Pages 官方路由约定修复状态接口**：前端状态卡片请求从 `plugin/status` 调整为插件内相对路径 `status`，后端新增 `/{plugin_name}/status` 主路由，并保留 `/{plugin_name}/plugin/status` 兼容旧路径
+- **降低状态接口路由冲突风险**：状态卡片现与官方文档示例保持一致，继续通过 `bridge.apiGet()` 调用插件内相对路径
+
+### Verified
+
+- 对照 AstrBot 官方 `Plugin Pages` 文档核对 `register_web_api()` 与 `bridge.apiGet()` 的路由规则
+
+## [0.1.2] - 2026-08-05
+
 ### Fixed
 
 - **修复 Dashboard 状态卡片只显示 `-`**：前端不再把有效的 `0` 值当作空值处理，内存和 CPU 现在稳定显示 `0.0 MB` / `0.0%`，接口失败时明确显示错误状态而不是单个 `-`

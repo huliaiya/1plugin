@@ -4,6 +4,7 @@ let bridgeReady = false;
 let pluginContext = null;
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug');
+const STATUS_API_ENDPOINT = 'status';
 
 const viewDataLoaded = { dashboard: false, search: false, export: false };
 const dataCache = { platforms: null, stats: null, pluginStatus: null };
@@ -459,7 +460,7 @@ async function loadDashboardData(force = false) {
       apiGet('stats/timeline', { interval: 'day' }).catch(e => { logError('timeline failed:', e); return null; }),
       apiGet('stats/content-types').catch(e => { logError('content-types failed:', e); return null; }),
       apiGet('stats/platforms').catch(e => { logError('platforms detail failed:', e); return null; }),
-      apiGet('plugin/status').catch(e => { logError('plugin status failed:', e); return null; }),
+      apiGet(STATUS_API_ENDPOINT).catch(e => { logError('plugin status failed:', e); return null; }),
     ]);
 
     console.log('[FoxToolbox] API results:', { statsResult: !!statsResult, timelineResult: !!timelineResult, contentTypesResult: !!contentTypesResult, platformsDetailResult: !!platformsDetailResult, statusResult });
@@ -670,7 +671,7 @@ function ensureResourceRotation() {
   }, 3000);
   resourceRefreshTimer = setInterval(async () => {
     try {
-      const raw = await apiGet('plugin/status');
+      const raw = await apiGet(STATUS_API_ENDPOINT);
       const data = extractData(raw);
       dataCache.pluginStatus = data;
       updateStatusCard(data);
