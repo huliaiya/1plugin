@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-08-05
+
+### Fixed
+
+- **修复状态卡片显示 '-'**：添加 `console.log` 诊断日志定位 `plugin/status` API 失败原因，新增 `clearStatusSkeletons()` 安全函数兜底清除骨架屏
+- **增大图表高度**：消息时间趋势图从 280px 增至 340px，响应式断点同步调整
+
 ## [0.1.0] - 2026-08-05
 
 ### Fixed
