@@ -13,6 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.5] - 2026-08-05
 
+## [0.1.6] - 2026-08-05
+
+### Fixed
+
+- **修复 AstrBot Plugin Pages 前端资源缓存导致旧脚本持续生效**：`index.html` 为 `app.js` 与 `style.css` 增加 `?v=0.1.6` 查询参数，强制刷新页面时拉取最新前端资源
+- **优化状态卡片首次加载提示**：状态卡片首屏显示从 `-` 调整为“检测中 / -- / 100 / -- MB”，降低旧缓存与加载中的误判
+
+### Verified
+
+- `PYTHONPATH=/workspace python3 -m pytest -q`：`176 passed, 63 skipped`
+- `python3 -m compileall fox_toolbox astrbot_plugin_fox_toolbox`
+
+## [0.1.5] - 2026-08-05
+
 ### Fixed
 
 - **修复 Windows 等非 `/proc` 环境下资源卡片恒为 `0.0 MB`**：`sys_util` 新增跨平台回退逻辑，进程内存支持 Windows `GetProcessMemoryInfo`，CPU 与运行时长支持 `time.process_time()` / `time.monotonic()` 回退

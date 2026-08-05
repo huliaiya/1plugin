@@ -1,4 +1,5 @@
 const bridge = window.AstrBotPluginPage;
+const BUILD_VERSION = '0.1.6';
 
 let bridgeReady = false;
 let pluginContext = null;
@@ -272,6 +273,7 @@ async function init() {
   try {
     pluginContext = await bridge.ready();
     bridgeReady = true;
+    window.__FOX_TOOLBOX_BUILD__ = BUILD_VERSION;
     log('Bridge ready, context:', pluginContext);
   } catch (e) {
     logError('bridge.ready() failed:', e);
@@ -357,6 +359,7 @@ let dashboardLoading = false;
 
 function initDashboard() {
   initDashboardSkeletons();
+  showStatusLoadingHint();
 
   document.querySelectorAll('.time-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -421,6 +424,15 @@ function showStatusUnavailable(message = '加载失败') {
     resourceEl.classList.remove('loading');
     resourceEl.setAttribute('title', safeMessage);
   }
+}
+
+function showStatusLoadingHint() {
+  const statusEl = document.getElementById('statusValue');
+  const healthEl = document.getElementById('healthValue');
+  const resourceEl = document.getElementById('resourceValue');
+  if (statusEl && statusEl.textContent.trim() === '-') statusEl.textContent = '检测中';
+  if (healthEl && healthEl.textContent.trim() === '-') healthEl.textContent = '-- / 100';
+  if (resourceEl && resourceEl.textContent.trim() === '-') resourceEl.textContent = '-- MB';
 }
 
 function getPluginStatusFromStats(stats) {
