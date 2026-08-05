@@ -1,5 +1,5 @@
 const bridge = window.AstrBotPluginPage;
-const BUILD_VERSION = '0.1.10';
+const BUILD_VERSION = '0.1.11';
 
 let bridgeReady = false;
 let pluginContext = null;
@@ -379,14 +379,17 @@ function updateDbStatusCard(dbStatus) {
   const running = dbStatus.running !== undefined ? !!dbStatus.running : (dbStatus.database === 'ok');
   const tableCount = Number.isFinite(Number(dbStatus.table_count)) ? Number(dbStatus.table_count) : 0;
 
-  valueEl.textContent = running ? `${tableCount} 张` : '未连接';
-  labelEl.textContent = running ? '数据表数量' : '数据库状态';
+  valueEl.textContent = running ? `${tableCount}` : '--';
+  labelEl.textContent = '数据表数量';
   valueEl.classList.remove('loading');
   valueEl.style.color = running ? '#2e7d32' : '#d32f2f';
   valueEl.setAttribute('title', running ? `当前已创建 ${tableCount} 张数据表` : '数据库未连接');
 }
 
 async function loadDbStatus() {
+  const valueEl = document.getElementById('dbStatusValue');
+  const labelEl = document.getElementById('dbStatusLabel');
+  if (!valueEl || !labelEl) return;
   try {
     const result = await apiGet('status');
     const data = extractData(result);
@@ -395,6 +398,10 @@ async function loadDbStatus() {
     updateDbStatusCard(data);
   } catch (e) {
     logError('loadDbStatus failed:', e);
+    valueEl.textContent = '--';
+    labelEl.textContent = '数据库状态';
+    valueEl.classList.remove('loading');
+    valueEl.style.color = '#d32f2f';
   }
 }
 
@@ -448,8 +455,6 @@ async function loadDashboardData(force = false) {
 
   loadPlatforms(false).catch(() => {});
 
-  loadDbStatus().catch(() => {});
-
   try {
     const [statsResult, timelineResult, contentTypesResult, platformsDetailResult] = await Promise.all([
       apiGet('stats').catch(e => { logError('stats failed:', e); return null; }),
@@ -479,11 +484,13 @@ async function loadDashboardData(force = false) {
         document.querySelectorAll('.stat-value.loading').forEach(el => {
           el.innerHTML = '<span class="error-text-sm">加载失败</span>';
         });
+        loadDbStatus().catch(() => {});
       }
     } else {
       document.querySelectorAll('.stat-value.loading').forEach(el => {
         el.innerHTML = '<span class="error-text-sm">无数据</span>';
       });
+      loadDbStatus().catch(() => {});
     }
 
     if (timelineResult) {

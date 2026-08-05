@@ -51,25 +51,14 @@ def _safe_float_metric(metric_name: str, getter, default: float = 0.0) -> float:
         return default
 
 
-async def _safe_db_ping(db: Optional[Database]) -> Optional[bool]:
-    """Return database health when available, otherwise None."""
-    if not db:
-        return None
-    try:
-        return await db.ping()
-    except Exception as e:
-        logger.warning(f"[FoxToolbox Web] 数据库健康检查失败: {e}")
-        return False
-
-
 async def _build_db_status_payload(db: Optional[Database]) -> Dict[str, Any]:
-    db_ok = await _safe_db_ping(db)
-    table_count = 0
-    if db and db_ok:
-        table_count = await db.get_table_count()
+    """构造数据库状态数据。以表数量查询结果为准，不依赖额外 ping。"""
+    if not db:
+        return {"running": False, "table_count": 0}
+    table_count = await db.get_table_count()
     return {
-        "running": bool(db_ok),
-        "table_count": int(table_count),
+        "running": table_count >= 0,
+        "table_count": int(table_count) if table_count >= 0 else 0,
     }
 
 

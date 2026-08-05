@@ -104,9 +104,9 @@ class Database:
             return False
 
     async def get_table_count(self) -> int:
-        """返回当前数据库内已创建的数据表数量。"""
+        """返回当前数据库内已创建的数据表数量；查询失败返回 -1。"""
         if not self._pool:
-            return 0
+            return -1
         try:
             async with self._pool.acquire() as conn:
                 async with conn.cursor() as cur:
@@ -115,7 +115,7 @@ class Database:
             return len(rows or [])
         except Exception as e:
             logger.warning(f"[FoxToolbox] 获取数据表数量失败: {e}")
-            return 0
+            return -1
 
     async def _create_tables(self) -> None:
         """创建数据表和索引"""

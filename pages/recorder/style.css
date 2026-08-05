@@ -60,11 +60,7 @@ a:focus-visible,
   100% { background-position: -300% center; }
 }
 
-/* 卡片浮动效果 —— translate 属性独立于 hover 的 transform */
-@keyframes cardFloat {
-  0%, 100% { translate: 0 0; }
-  50%      { translate: 0 -6px; }
-}
+/* 卡片浮动效果 —— 已移除：无限浮动动画会让页面看起来一直刷新，保持静态 */
 
 /* 蓝色渐变背景（用于按钮、激活状态、徽章等） */
 .rainbow-bg {
@@ -304,7 +300,7 @@ body {
   box-shadow: var(--glass-shadow);
   padding: 1.2rem;
   text-align: center;
-  animation: cardAppear 0.4s ease both, cardFloat 12s ease-in-out infinite;
+  animation: cardAppear 0.4s ease both;
   overflow: hidden;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   contain: layout paint;
@@ -314,7 +310,6 @@ body {
 .stat-card:hover {
   transform: translateY(-5px) scale(1.03);
   box-shadow: var(--glass-shadow-hover);
-  animation-play-state: paused;
 }
 
 /* 内部静态彩色光斑（无动画，避免额外合成层） */
@@ -329,14 +324,14 @@ body {
     radial-gradient(140px 90px at 50% 80%, rgba(77, 208, 225, 0.08), transparent 60%);
 }
 
-/* 入场动画延迟 + 浮动相位错开（波浪效果） */
-.stat-card:nth-child(1) { animation: cardAppear 0.4s ease both, cardFloat 12s ease-in-out 0s infinite; }
-.stat-card:nth-child(2) { animation: cardAppear 0.4s ease 60ms both, cardFloat 12s ease-in-out -3s infinite; }
-.stat-card:nth-child(3) { animation: cardAppear 0.4s ease 120ms both, cardFloat 12s ease-in-out -6s infinite; }
-.stat-card:nth-child(4) { animation: cardAppear 0.4s ease 180ms both, cardFloat 12s ease-in-out -9s infinite; }
-.stat-card:nth-child(5) { animation: cardAppear 0.4s ease 240ms both, cardFloat 12s ease-in-out -1.5s infinite; }
-.stat-card:nth-child(6) { animation: cardAppear 0.4s ease 300ms both, cardFloat 12s ease-in-out -4.5s infinite; }
-.stat-card:nth-child(7) { animation: cardAppear 0.4s ease 360ms both, cardFloat 12s ease-in-out -7.5s infinite; }
+/* 入场动画延迟（错峰出现） */
+.stat-card:nth-child(1) { animation: cardAppear 0.4s ease both; }
+.stat-card:nth-child(2) { animation: cardAppear 0.4s ease 60ms both; }
+.stat-card:nth-child(3) { animation: cardAppear 0.4s ease 120ms both; }
+.stat-card:nth-child(4) { animation: cardAppear 0.4s ease 180ms both; }
+.stat-card:nth-child(5) { animation: cardAppear 0.4s ease 240ms both; }
+.stat-card:nth-child(6) { animation: cardAppear 0.4s ease 300ms both; }
+.stat-card:nth-child(7) { animation: cardAppear 0.4s ease 360ms both; }
 
 .stat-value {
   font-size: 2rem;
@@ -1659,12 +1654,6 @@ body {
   .context-message {
     padding: 0.4rem;
     font-size: 0.82rem;
-  }
-
-  /* 浮动动画在手机端降低幅度以减少抖动 */
-  @keyframes cardFloat {
-    0%, 100% { translate: 0 0; }
-    50%      { translate: 0 -3px; }
   }
 }
 

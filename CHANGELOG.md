@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.8] - 2026-08-05
 
+## [0.1.11] - 2026-08-05
+
+### Fixed
+
+- **彻底修复页面“一直刷新”的观感**：移除 Dashboard 统计卡片的 `cardFloat` 无限浮动动画（含移动端变体），卡片只在首次入场时淡入一次，之后完全静止
+- **修复数据库表数量获取不到的问题**：后端 `get_table_count()` 查询失败改为返回 `-1`，`_build_db_status_payload` 不再先执行 `ping()` 前置判断，直接以表数量查询结果为准，避免因 ping 失败而永远拿不到表数量
+- **消除数据库状态卡片双入口互相覆盖**：前端不再无条件并发请求 `status` 接口，默认复用 `stats` 响应里的 `db_status`；仅在 `stats` 请求失败时才用 `status` 接口兜底，减少一次冗余请求
+
+### Changed
+
+- **数据库状态卡片只展示表数量**：卡片数值固定显示已创建的数据表数量，标签固定为“数据表数量”，数据库未连接时显示 `--`
+- **刷新前端资源版本号**：Plugin Page 的 `app.js` 与 `style.css` 查询参数升级至 `0.1.11`，确保 AstrBot 刷新后加载最新页面资源
+- 删除不再使用的 `_safe_db_ping()` 辅助函数，简化后端状态数据链路
+
+### Verified
+
+- `PYTHONPATH=/workspace python3 -m pytest -q`
+- `python3 -m compileall fox_toolbox astrbot_plugin_fox_toolbox pages/recorder`
+- `node --check pages/recorder/app.js`
+
 ## [0.1.10] - 2026-08-05
 
 ### Fixed
