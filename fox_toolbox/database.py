@@ -103,6 +103,20 @@ class Database:
             logger.warning(f"[FoxToolbox] 数据库 ping 失败: {e}")
             return False
 
+    async def get_table_count(self) -> int:
+        """返回当前数据库内已创建的数据表数量。"""
+        if not self._pool:
+            return 0
+        try:
+            async with self._pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SHOW TABLES")
+                    rows = await cur.fetchall()
+            return len(rows or [])
+        except Exception as e:
+            logger.warning(f"[FoxToolbox] 获取数据表数量失败: {e}")
+            return 0
+
     async def _create_tables(self) -> None:
         """创建数据表和索引"""
         async with self._write_lock:

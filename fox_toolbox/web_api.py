@@ -122,7 +122,18 @@ async def _build_plugin_status_payload(db: Optional[Database]) -> Dict[str, Any]
     }
 
 
-def _serialize_stats_payload(stats, plugin_status: Dict[str, Any], stats_error: str = "") -> Dict[str, Any]:
+async def _build_db_status_payload(db: Optional[Database]) -> Dict[str, Any]:
+    db_ok = await _safe_db_ping(db)
+    table_count = 0
+    if db and db_ok:
+        table_count = await db.get_table_count()
+    return {
+        "running": bool(db_ok),
+        "table_count": int(table_count),
+    }
+
+
+def _serialize_stats_payload(stats, plugin_status: Dict[str, Any], db_status: Dict[str, Any], stats_error: str = "") -> Dict[str, Any]:
     time_range = {}
     if stats.oldest_timestamp:
         time_range["start"] = _format_timestamp(stats.oldest_timestamp)
@@ -138,6 +149,7 @@ def _serialize_stats_payload(stats, plugin_status: Dict[str, Any], stats_error: 
         "oldest_timestamp": stats.oldest_timestamp,
         "newest_timestamp": stats.newest_timestamp,
         "time_range": time_range,
+        "db_status": db_status,
         "plugin_status": plugin_status,
         "schema_version": SCHEMA_VERSION,
     }
@@ -388,22 +400,23 @@ async def register_all_web_apis(context, db: Database):
 
     async def api_stats():
         plugin_status = await _build_plugin_status_payload(db)
+        db_status = await _build_db_status_payload(db)
         if not db:
             return jsonify({
                 "success": True,
-                "data": _serialize_stats_payload(MessageStats(), plugin_status, "数据库未初始化"),
+                "data": _serialize_stats_payload(MessageStats(), plugin_status, db_status, "数据库未初始化"),
             })
         try:
             stats = await db.get_stats()
             return jsonify({
                 "success": True,
-                "data": _serialize_stats_payload(stats, plugin_status),
+                "data": _serialize_stats_payload(stats, plugin_status, db_status),
             })
         except Exception as e:
             logger.error(f"[FoxToolbox Web] 获取统计失败: {e}", exc_info=True)
             return jsonify({
                 "success": True,
-                "data": _serialize_stats_payload(MessageStats(), plugin_status, "获取统计数据失败"),
+                "data": _serialize_stats_payload(MessageStats(), plugin_status, db_status, "获取统计数据失败"),
             })
 
     async def api_plugin_status():

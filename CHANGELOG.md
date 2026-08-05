@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2026-08-05
+
+### Added
+
+- **新增数据库状态卡片**：Dashboard 统计卡片区新增“数据库状态”卡片，默认显示“运行中”，每 3 秒切换显示“已创建 X 张表”
+
+### Changed
+
+- **复用 stats 数据链路提供数据库状态信息**：后端 `stats` 响应新增 `db_status` 字段，前端直接从同一条统计响应里更新数据库状态卡片，避免额外独立请求
+- **刷新前端资源版本号**：Plugin Page 的 `app.js` 与 `style.css` 查询参数升级至 `0.1.8`，确保 AstrBot 刷新后加载最新页面资源
+
+### Verified
+
+- `PYTHONPATH=/workspace python3 -m pytest -q`
+- `python3 -m compileall fox_toolbox astrbot_plugin_fox_toolbox pages/recorder`
+
 ## [0.1.7] - 2026-08-05
 
 ### Changed

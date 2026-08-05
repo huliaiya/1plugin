@@ -1,5 +1,5 @@
 const bridge = window.AstrBotPluginPage;
-const BUILD_VERSION = '0.1.6';
+const BUILD_VERSION = '0.1.8';
 
 let bridgeReady = false;
 let pluginContext = null;
@@ -7,7 +7,7 @@ let pluginContext = null;
 const DEBUG = new URLSearchParams(window.location.search).has('debug');
 
 const viewDataLoaded = { dashboard: false, search: false, export: false };
-const dataCache = { platforms: null, stats: null };
+const dataCache = { platforms: null, stats: null, dbStatus: null };
 
 let echartsLoaded = false;
 let echartsLoading = false;
@@ -356,6 +356,8 @@ let senderChart = null;
 let groupChart = null;
 let currentTimeRange = 'last30d';
 let dashboardLoading = false;
+let dbStatusMode = 'running';
+let dbStatusTimer = null;
 
 function initDashboard() {
   initDashboardSkeletons();
@@ -369,6 +371,34 @@ function initDashboard() {
       await loadRankingData();
     });
   });
+}
+
+function updateDbStatusCard(dbStatus) {
+  const valueEl = document.getElementById('dbStatusValue');
+  const labelEl = document.getElementById('dbStatusLabel');
+  if (!valueEl || !labelEl || !dbStatus) return;
+
+  const running = !!dbStatus.running;
+  const tableCount = Number.isFinite(Number(dbStatus.table_count)) ? Number(dbStatus.table_count) : 0;
+
+  if (dbStatusMode === 'running') {
+    valueEl.textContent = running ? '运行中' : '未连接';
+  } else {
+    valueEl.textContent = `已创建 ${tableCount} 张表`;
+  }
+
+  labelEl.textContent = '数据库状态';
+  valueEl.classList.remove('loading');
+  valueEl.style.color = running ? '#2e7d32' : '#d32f2f';
+  valueEl.setAttribute('title', running ? `当前已创建 ${tableCount} 张表` : '数据库未连接');
+}
+
+function ensureDbStatusRotation() {
+  if (dbStatusTimer) return;
+  dbStatusTimer = setInterval(() => {
+    dbStatusMode = dbStatusMode === 'running' ? 'tables' : 'running';
+    if (dataCache.dbStatus) updateDbStatusCard(dataCache.dbStatus);
+  }, 3000);
 }
 
 function initDashboardSkeletons() {
@@ -438,6 +468,11 @@ async function loadDashboardData(force = false) {
         statsData = extractData(statsResult);
         dataCache.stats = statsData;
         updateStatsCards(statsData);
+        if (statsData.db_status) {
+          dataCache.dbStatus = statsData.db_status;
+          updateDbStatusCard(statsData.db_status);
+          ensureDbStatusRotation();
+        }
         await loadEcharts().catch(() => {});
         clearChartSkeleton('platformChart');
         updatePlatformChart(statsData.platform_stats);
@@ -583,6 +618,7 @@ function handleChartResize() {
 
 function cleanupAllCharts() {
   if (_resizeTimer) { clearTimeout(_resizeTimer); _resizeTimer = null; }
+  if (dbStatusTimer) { clearInterval(dbStatusTimer); dbStatusTimer = null; }
   if (timelineChart) { timelineChart.dispose(); timelineChart = null; }
   if (platformChart) { platformChart.dispose(); platformChart = null; }
   if (contentTypeChart) { contentTypeChart.dispose(); contentTypeChart = null; }
