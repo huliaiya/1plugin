@@ -502,6 +502,13 @@ async function loadDashboardData(force = false) {
         ensureResourceRotation();
       } catch (e) {
         logError('Failed to process plugin status:', e);
+        ['statusValue', 'healthValue'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) { el.textContent = '加载失败'; el.classList.remove('loading'); }
+        });
+        const rv = document.getElementById('resourceValue');
+        if (rv) { rv.textContent = '加载失败'; rv.classList.remove('loading'); }
+        ensureResourceRotation();
       }
     } else {
       const statusEl = document.getElementById('statusValue');
