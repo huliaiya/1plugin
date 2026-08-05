@@ -122,6 +122,30 @@ async def _build_plugin_status_payload(db: Optional[Database]) -> Dict[str, Any]
     }
 
 
+def _serialize_stats_payload(stats, plugin_status: Dict[str, Any], stats_error: str = "") -> Dict[str, Any]:
+    time_range = {}
+    if stats.oldest_timestamp:
+        time_range["start"] = _format_timestamp(stats.oldest_timestamp)
+    if stats.newest_timestamp:
+        time_range["end"] = _format_timestamp(stats.newest_timestamp)
+    payload = {
+        "total_count": stats.total_count,
+        "group_message_count": stats.group_message_count,
+        "private_message_count": stats.private_message_count,
+        "channel_message_count": stats.channel_message_count,
+        "platform_stats": stats.platform_stats,
+        "platform_count": len(stats.platform_stats),
+        "oldest_timestamp": stats.oldest_timestamp,
+        "newest_timestamp": stats.newest_timestamp,
+        "time_range": time_range,
+        "plugin_status": plugin_status,
+        "schema_version": SCHEMA_VERSION,
+    }
+    if stats_error:
+        payload["stats_error"] = stats_error
+    return payload
+
+
 def _get_plugin_data_dir() -> Path:
     return Path(get_astrbot_plugin_data_path()) / PLUGIN_DIR_NAME
 
@@ -363,35 +387,24 @@ async def register_all_web_apis(context, db: Database):
     # ========== Stats APIs ==========
 
     async def api_stats():
+        plugin_status = await _build_plugin_status_payload(db)
         if not db:
-            return jsonify({"success": False, "error": "数据库未初始化"})
-        try:
-            stats = await db.get_stats()
-            plugin_status = await _build_plugin_status_payload(db)
-            time_range = {}
-            if stats.oldest_timestamp:
-                time_range["start"] = _format_timestamp(stats.oldest_timestamp)
-            if stats.newest_timestamp:
-                time_range["end"] = _format_timestamp(stats.newest_timestamp)
             return jsonify({
                 "success": True,
-                "data": {
-                    "total_count": stats.total_count,
-                    "group_message_count": stats.group_message_count,
-                    "private_message_count": stats.private_message_count,
-                    "channel_message_count": stats.channel_message_count,
-                    "platform_stats": stats.platform_stats,
-                    "platform_count": len(stats.platform_stats),
-                    "oldest_timestamp": stats.oldest_timestamp,
-                    "newest_timestamp": stats.newest_timestamp,
-                    "time_range": time_range,
-                    "plugin_status": plugin_status,
-                    "schema_version": SCHEMA_VERSION,
-                },
+                "data": _serialize_stats_payload(MessageStats(), plugin_status, "数据库未初始化"),
+            })
+        try:
+            stats = await db.get_stats()
+            return jsonify({
+                "success": True,
+                "data": _serialize_stats_payload(stats, plugin_status),
             })
         except Exception as e:
-            logger.error(f"[FoxToolbox Web] 获取统计失败: {e}")
-            return jsonify({"success": False, "error": "获取统计数据失败"})
+            logger.error(f"[FoxToolbox Web] 获取统计失败: {e}", exc_info=True)
+            return jsonify({
+                "success": True,
+                "data": _serialize_stats_payload(MessageStats(), plugin_status, "获取统计数据失败"),
+            })
 
     async def api_plugin_status():
         """插件运行状态与资源占用（健康检查 + 内存/CPU）"""

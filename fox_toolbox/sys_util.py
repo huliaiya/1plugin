@@ -8,12 +8,29 @@ macOS/BSD 通过 resource 模块回退读取峰值内存；
 import os
 import sys
 import time
+import ctypes
 
 _PROC_STAT = "/proc/self/stat"
 _PROC_UPTIME = "/proc/uptime"
 _PROC_STATUS = "/proc/self/status"
 
-_last_cpu_sample = {"ts": None, "cpu_ticks": 0.0}
+_PROCESS_START_MONO = time.monotonic()
+_last_cpu_sample = {"ts": None, "cpu_ticks": 0.0, "process_seconds": None}
+
+
+class _ProcessMemoryCounters(ctypes.Structure):
+    _fields_ = [
+        ("cb", ctypes.c_uint32),
+        ("PageFaultCount", ctypes.c_uint32),
+        ("PeakWorkingSetSize", ctypes.c_size_t),
+        ("WorkingSetSize", ctypes.c_size_t),
+        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+        ("PagefileUsage", ctypes.c_size_t),
+        ("PeakPagefileUsage", ctypes.c_size_t),
+    ]
 
 
 def _clock_ticks() -> float:
@@ -56,6 +73,13 @@ def get_process_uptime() -> float:
             uptime = float(f.read().split()[0])
         return max(0.0, uptime - start_ticks / _clock_ticks())
     except (OSError, ValueError, IndexError):
+        return max(0.0, time.monotonic() - _PROCESS_START_MONO)
+
+
+def _get_process_cpu_seconds_fallback() -> float:
+    try:
+        return float(time.process_time())
+    except Exception:
         return 0.0
 
 
@@ -67,25 +91,58 @@ def get_cpu_percent() -> float:
     """
     global _last_cpu_sample
     sample = _read_proc_stat()
-    if sample is None:
-        return 0.0
-    cpu_ticks = sample[0] + sample[1]
     now = time.monotonic()
-    ticks = _clock_ticks()
     prev_ts = _last_cpu_sample["ts"]
     prev_cpu = _last_cpu_sample["cpu_ticks"]
-    _last_cpu_sample = {"ts": now, "cpu_ticks": cpu_ticks}
-    if prev_ts is None:
-        uptime = get_process_uptime()
-        if uptime <= 0:
-            return 0.0
-        pct = cpu_ticks / ticks / uptime * 100.0
+    prev_process_seconds = _last_cpu_sample["process_seconds"]
+
+    if sample is None:
+        process_seconds = _get_process_cpu_seconds_fallback()
+        _last_cpu_sample = {"ts": now, "cpu_ticks": 0.0, "process_seconds": process_seconds}
+        if prev_ts is None or prev_process_seconds is None:
+            uptime = get_process_uptime()
+            if uptime <= 0:
+                return 0.0
+            pct = process_seconds / uptime * 100.0
+        else:
+            dt = now - prev_ts
+            if dt <= 0:
+                return 0.0
+            pct = (process_seconds - prev_process_seconds) / dt * 100.0
     else:
-        dt = now - prev_ts
-        if dt <= 0:
-            return 0.0
-        pct = (cpu_ticks - prev_cpu) / ticks / dt * 100.0
+        cpu_ticks = sample[0] + sample[1]
+        ticks = _clock_ticks()
+        _last_cpu_sample = {"ts": now, "cpu_ticks": cpu_ticks, "process_seconds": None}
+        if prev_ts is None:
+            uptime = get_process_uptime()
+            if uptime <= 0:
+                return 0.0
+            pct = cpu_ticks / ticks / uptime * 100.0
+        else:
+            dt = now - prev_ts
+            if dt <= 0:
+                return 0.0
+            pct = (cpu_ticks - prev_cpu) / ticks / dt * 100.0
     return min(100.0, max(0.0, pct))
+
+
+def _get_windows_memory_mb() -> float:
+    try:
+        psapi = ctypes.WinDLL("psapi")
+        kernel32 = ctypes.WinDLL("kernel32")
+        counters = _ProcessMemoryCounters()
+        counters.cb = ctypes.sizeof(_ProcessMemoryCounters)
+        process = kernel32.GetCurrentProcess()
+        ok = psapi.GetProcessMemoryInfo(
+            process,
+            ctypes.byref(counters),
+            counters.cb,
+        )
+        if ok:
+            return float(counters.WorkingSetSize) / 1024.0 / 1024.0
+    except Exception:
+        pass
+    return 0.0
 
 
 def get_memory_mb() -> float:
@@ -106,4 +163,7 @@ def get_memory_mb() -> float:
             return rss / 1024.0 / 1024.0
         return rss / 1024.0
     except (ImportError, OSError, ValueError):
-        return 0.0
+        pass
+    if sys.platform.startswith("win"):
+        return _get_windows_memory_mb()
+    return 0.0

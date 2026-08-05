@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.4] - 2026-08-05
 
+## [0.1.5] - 2026-08-05
+
+### Fixed
+
+- **修复 Windows 等非 `/proc` 环境下资源卡片恒为 `0.0 MB`**：`sys_util` 新增跨平台回退逻辑，进程内存支持 Windows `GetProcessMemoryInfo`，CPU 与运行时长支持 `time.process_time()` / `time.monotonic()` 回退
+- **修复统计接口异常时三张状态卡片一起失效**：`stats` 接口改为即使数据库统计失败也返回 `plugin_status` 与空统计数据，插件状态、健康度、内存占用可以独立显示
+
+### Verified
+
+- `PYTHONPATH=/workspace python3 -m pytest -q`：`176 passed, 63 skipped`
+- `python3 -m compileall fox_toolbox astrbot_plugin_fox_toolbox`
+
+## [0.1.4] - 2026-08-05
+
 ### Fixed
 
 - **彻底绕开 Dashboard 状态卡片的独立路由兼容问题**：后端 `stats` 接口新增 `plugin_status` 字段，前端状态卡片改为直接读取 `stats.plugin_status`，首屏渲染与 30 秒刷新都复用同一条已验证可用的数据链路
