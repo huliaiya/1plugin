@@ -207,6 +207,11 @@ class MessageRecorder(Star):
                 "password": self.config.get("mysql_password", ""),
                 "database": self.config.get("mysql_database", "fox_toolbox"),
             }
+            logger.info(
+                f"[FoxToolbox] 尝试连接 MySQL: "
+                f"{mysql_config['host']}:{mysql_config['port']}/"
+                f"{mysql_config['database']} (user={mysql_config['user']})"
+            )
             self._db = Database("astrbot_plugin_fox_toolbox", mysql_config)
             await self._db.init()
 
