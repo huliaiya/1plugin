@@ -439,6 +439,18 @@ body {
   z-index: 1;
 }
 
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-on-glass-light);
+  font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-color-subtle);
+}
+
 @media (max-width: 768px) {
   .charts-grid {
     grid-template-columns: 1fr;

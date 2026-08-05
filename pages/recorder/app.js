@@ -452,9 +452,11 @@ async function loadDashboardData(force = false) {
       } catch (e) {
         logError('Failed to process timeline:', e);
         clearChartSkeleton('timelineChart');
+        showChartEmpty('timelineChart', '加载失败: ' + (e.message || '未知错误'));
       }
     } else {
       clearChartSkeleton('timelineChart');
+      showChartEmpty('timelineChart', '加载时间趋势数据失败');
     }
 
     if (contentTypesResult) {
@@ -466,9 +468,11 @@ async function loadDashboardData(force = false) {
       } catch (e) {
         logError('Failed to process content types:', e);
         clearChartSkeleton('contentTypeChart');
+        showChartEmpty('contentTypeChart', '加载失败: ' + (e.message || '未知错误'));
       }
     } else {
       clearChartSkeleton('contentTypeChart');
+      showChartEmpty('contentTypeChart', '加载内容类型数据失败');
     }
 
     if (platformsDetailResult) {
@@ -481,9 +485,11 @@ async function loadDashboardData(force = false) {
       } catch (e) {
         logError('Failed to process platform detail:', e);
         clearChartSkeleton('platformDetailChart');
+        showChartEmpty('platformDetailChart', '加载失败: ' + (e.message || '未知错误'));
       }
     } else {
       clearChartSkeleton('platformDetailChart');
+      showChartEmpty('platformDetailChart', '加载平台详情数据失败');
     }
 
     if (statusResult) {
@@ -671,10 +677,17 @@ function cleanupAllCharts() {
   _echartsWaiters = [];
 }
 
+function showChartEmpty(chartId, message = '暂无数据') {
+  const el = document.getElementById(chartId);
+  if (!el) return;
+  el.innerHTML = `<div class="chart-empty">${escapeHtml(message)}</div>`;
+}
+
 function updateTimelineChart(points) {
-  if (!echartsLoaded) return;
+  if (!echartsLoaded) { showChartEmpty('timelineChart', '图表库加载中...'); return; }
   if (!timelineChart) timelineChart = ensureChart('timelineChart');
-  if (!timelineChart || !points?.length) return;
+  if (!timelineChart) { showChartEmpty('timelineChart'); return; }
+  if (!points?.length) { showChartEmpty('timelineChart'); return; }
 
   timelineChart.setOption({
     tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
@@ -744,9 +757,10 @@ function updateGroupChart(groups) {
 }
 
 function updateContentTypeChart(types) {
-  if (!echartsLoaded) return;
+  if (!echartsLoaded) { showChartEmpty('contentTypeChart', '图表库加载中...'); return; }
   if (!contentTypeChart) contentTypeChart = ensureChart('contentTypeChart');
-  if (!contentTypeChart || !types?.length) return;
+  if (!contentTypeChart) { showChartEmpty('contentTypeChart'); return; }
+  if (!types?.length) { showChartEmpty('contentTypeChart'); return; }
 
   const data = types.map(t => ({ name: t.label, value: t.count }));
   const colors = ['#4fc3f7', '#29b6f6', '#03a9f4', '#64b5f6', '#81d4fa', '#b3e5fc', '#4dd0e1', '#0288d1', '#039be5', '#80deea', '#26c6da', '#4fc3f7', '#29b6f6', '#64b5f6', '#81d4fa', '#4dd0e1'];
@@ -768,9 +782,10 @@ function updateContentTypeChart(types) {
 }
 
 function updatePlatformDetailChart(platforms) {
-  if (!echartsLoaded) return;
+  if (!echartsLoaded) { showChartEmpty('platformDetailChart', '图表库加载中...'); return; }
   if (!platformDetailChart) platformDetailChart = ensureChart('platformDetailChart');
-  if (!platformDetailChart || !platforms?.length) return;
+  if (!platformDetailChart) { showChartEmpty('platformDetailChart'); return; }
+  if (!platforms?.length) { showChartEmpty('platformDetailChart'); return; }
 
   const names = platforms.map(p => truncate(p.platform_name || p.platform, 12));
   platformDetailChart.setOption({

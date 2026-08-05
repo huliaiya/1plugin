@@ -156,6 +156,8 @@ def _classify_file_component(comp_data: dict) -> str:
 
 def _generate_message_summary(chain_data: list) -> str:
     """从消息链生成摘要文本（用于 message_str 为空时的回退）"""
+    if not chain_data:
+        return ""
     parts = []
     for comp in chain_data:
         if not isinstance(comp, dict):

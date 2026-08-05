@@ -212,7 +212,7 @@ def _build_query_filter_from_dict(data: Dict[str, Any]) -> QueryFilter:
         reply_to_id=data.get("reply_to_id"),
         limit=effective_limit,
         offset=data.get("offset", 0),
-        order=data.get("order", "desc"),
+        order=data.get("order", "desc") if data.get("order", "desc") in ("asc", "desc") else "desc",
     )
 
 
@@ -369,7 +369,7 @@ async def register_all_web_apis(context, db: Database):
 
     async def api_stats_timeline():
         if not db:
-            return jsonify({"success": True, "data": {"interval": "day", "points": [], "total_points": 0}})
+            return jsonify({"success": False, "error": "数据库未初始化"})
         try:
             interval = request.args.get("interval", "day")
             if interval not in ("day", "week", "month"):
@@ -390,7 +390,7 @@ async def register_all_web_apis(context, db: Database):
             })
         except Exception as e:
             logger.error(f"[FoxToolbox Web] 获取时间趋势失败: {e}", exc_info=True)
-            return jsonify({"success": True, "data": {"interval": "day", "points": [], "total_points": 0}})
+            return jsonify({"success": False, "error": "获取时间趋势失败"})
 
     async def api_stats_senders():
         if not db:
@@ -432,23 +432,23 @@ async def register_all_web_apis(context, db: Database):
 
     async def api_stats_content_types():
         if not db:
-            return jsonify({"success": True, "data": {"types": [], "total": 0}})
+            return jsonify({"success": False, "error": "数据库未初始化"})
         try:
             types = await db.get_content_type_stats()
             return jsonify({"success": True, "data": {"types": types, "total": len(types)}})
         except Exception as e:
-            logger.error(f"[FoxToolbox Web] 获取内容类型统计失败: {e}")
-            return jsonify({"success": True, "data": {"types": [], "total": 0}})
+            logger.error(f"[FoxToolbox Web] 获取内容类型统计失败: {e}", exc_info=True)
+            return jsonify({"success": False, "error": "获取内容类型统计失败"})
 
     async def api_stats_platforms_detail():
         if not db:
-            return jsonify({"success": True, "data": {"platforms": []}})
+            return jsonify({"success": False, "error": "数据库未初始化"})
         try:
             platforms = await db.get_platform_detail_stats()
             return jsonify({"success": True, "data": {"platforms": platforms, "total": len(platforms)}})
         except Exception as e:
-            logger.error(f"[FoxToolbox Web] 获取平台详情统计失败: {e}")
-            return jsonify({"success": True, "data": {"platforms": []}})
+            logger.error(f"[FoxToolbox Web] 获取平台详情统计失败: {e}", exc_info=True)
+            return jsonify({"success": False, "error": "获取平台详情统计失败"})
 
     # ========== Messages APIs ==========
 
@@ -762,10 +762,13 @@ async def register_all_web_apis(context, db: Database):
             file_ext = Path(filename).suffix.lower() if filename else ".json"
             if file_ext not in ALLOWED_IMPORT_EXTENSIONS:
                 return jsonify({"success": False, "error": f"不支持的文件格式: {file_ext}"})
+            if file_size <= 0:
+                return jsonify({"success": False, "error": "文件大小无效"})
             if file_size > MAX_IMPORT_FILE_SIZE:
                 max_gb = MAX_IMPORT_FILE_SIZE // (1024 * 1024 * 1024)
                 return jsonify({"success": False, "error": f"文件大小超过限制（最大 {max_gb}GB）"})
-            total_chunks = (file_size + chunk_size - 1) // chunk_size if chunk_size > 0 else 1
+            chunk_size = max(1024 * 1024, min(chunk_size, CHUNK_SIZE))
+            total_chunks = (file_size + chunk_size - 1) // chunk_size
             session_id = uuid.uuid4().hex
             chunks_dir = _get_plugin_data_dir() / "temp" / f"chunks_{session_id}"
             chunks_dir.mkdir(parents=True, exist_ok=True)
@@ -1495,7 +1498,8 @@ async def _execute_import_task(task_id: str, db: Database, file_path: str, mode:
                     )
                     imported += s
                     skipped += sk
-                except Exception:
+                except Exception as e:
+                    logger.warning(f"[FoxToolbox Web] 批量保存失败 ({len(msg_records)} 条): {e}")
                     errors += len(msg_records)
 
         task["status"] = "completed"
@@ -1555,6 +1559,7 @@ def _import_zip_package(file_path: str) -> tuple:
 
 
 async def cleanup_expired_tasks():
+    STALE_TASK_MAX_AGE = 7200  # 2小时未完成的任务视为崩溃
     while True:
         try:
             await asyncio.sleep(600)
@@ -1563,11 +1568,18 @@ async def cleanup_expired_tasks():
             expired_tasks = []
             for task_id, task in list(_export_tasks.items()):
                 completed_at = task.get("completed_at") or 0
+                created_at = task.get("created_at", 0)
                 if completed_at and current_time - completed_at > MAX_EXPORT_FILE_AGE:
                     expired_tasks.append(task_id)
                     file_path = task.get("file_path")
                     if file_path and os.path.exists(file_path):
                         await _safe_remove_file(file_path)
+                elif not completed_at and current_time - created_at > STALE_TASK_MAX_AGE:
+                    expired_tasks.append(task_id)
+                    file_path = task.get("file_path")
+                    if file_path and os.path.exists(file_path):
+                        await _safe_remove_file(file_path)
+                    logger.warning(f"[FoxToolbox Web] 清理崩溃的导出任务: {task_id}")
             for task_id in expired_tasks:
                 _export_tasks.pop(task_id, None)
             if expired_tasks:
@@ -1590,8 +1602,12 @@ async def cleanup_expired_tasks():
             expired_imports = []
             for task_id, task in list(_import_tasks.items()):
                 completed_at = task.get("completed_at") or 0
+                created_at = task.get("created_at", 0)
                 if completed_at and current_time - completed_at > MAX_EXPORT_FILE_AGE:
                     expired_imports.append(task_id)
+                elif not completed_at and current_time - created_at > STALE_TASK_MAX_AGE:
+                    expired_imports.append(task_id)
+                    logger.warning(f"[FoxToolbox Web] 清理崩溃的导入任务: {task_id}")
             for task_id in expired_imports:
                 _import_tasks.pop(task_id, None)
         except asyncio.CancelledError:
