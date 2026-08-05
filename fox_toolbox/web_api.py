@@ -20,6 +20,7 @@ from astrbot.api import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 
 from .database import Database
+from .db_explorer import DbExplorer
 from .models import QueryFilter, MessageRecord, MessageStats, PLUGIN_DIR_NAME, SCHEMA_VERSION
 from .time_utils import parse_time_range, normalize_timestamp
 from . import sys_util
@@ -974,6 +975,67 @@ async def register_all_web_apis(context, db: Database):
             },
         })
 
+    # ========== Database Explorer APIs（只读，借鉴 astrbot_plugin_mysql 的表浏览设计） ==========
+
+    explorer = DbExplorer(db)
+
+    async def api_db_tables():
+        if not explorer.available:
+            return jsonify({"success": False, "error": "数据库未初始化"})
+        try:
+            tables = await explorer.list_tables()
+            return jsonify({"success": True, "data": {"tables": tables, "total": len(tables)}})
+        except Exception as e:
+            logger.error(f"[FoxToolbox Web] 获取数据表列表失败: {e}")
+            return jsonify({"success": False, "error": "获取数据表列表失败"})
+
+    async def api_db_schema():
+        table_name = request.args.get("table", "")
+        if not table_name:
+            return jsonify({"success": False, "error": "缺少表名参数"})
+        try:
+            schema = await explorer.get_table_schema(table_name)
+            return jsonify({"success": True, "data": {"table": table_name, "schema": schema}})
+        except ValueError as e:
+            return jsonify({"success": False, "error": str(e)})
+        except Exception as e:
+            logger.error(f"[FoxToolbox Web] 获取表结构失败: {e}")
+            return jsonify({"success": False, "error": "获取表结构失败"})
+
+    async def api_db_data():
+        table_name = request.args.get("table", "")
+        if not table_name:
+            return jsonify({"success": False, "error": "缺少表名参数"})
+        limit = _safe_int(request.args.get("limit"), 50)
+        offset = _safe_int(request.args.get("offset"), 0)
+        try:
+            data = await explorer.get_table_data(table_name, limit=limit, offset=offset)
+            return jsonify({"success": True, "data": data})
+        except ValueError as e:
+            return jsonify({"success": False, "error": str(e)})
+        except Exception as e:
+            logger.error(f"[FoxToolbox Web] 获取表数据失败: {e}")
+            return jsonify({"success": False, "error": "获取表数据失败"})
+
+    async def api_db_query():
+        if not explorer.available:
+            return jsonify({"success": False, "error": "数据库未初始化"})
+        try:
+            data = await request.get_json()
+            sql = data.get("sql", "")
+            max_rows = _safe_int(data.get("max_rows"), 100)
+            if not sql.strip():
+                return jsonify({"success": False, "error": "SQL 语句为空"})
+            result = await explorer.execute_readonly_query(sql, max_rows=max_rows)
+            return jsonify({"success": True, "data": result})
+        except PermissionError as e:
+            return jsonify({"success": False, "error": f"查询被拒绝: {e}"})
+        except TimeoutError as e:
+            return jsonify({"success": False, "error": str(e)})
+        except Exception as e:
+            logger.error(f"[FoxToolbox Web] 执行只读查询失败: {e}")
+            return jsonify({"success": False, "error": f"查询失败: {e}"})
+
     # ========== Register all APIs ==========
 
     context.register_web_api(f"{prefix}/stats", api_stats, ["GET"], "获取统计概览")
@@ -1002,8 +1064,12 @@ async def register_all_web_apis(context, db: Database):
     context.register_web_api(f"{prefix}/groups", api_groups, ["GET"], "获取群组列表")
     context.register_web_api(f"{prefix}/media", api_media, ["GET"], "获取媒体文件")
     context.register_web_api(f"{prefix}/schema_version", api_schema_version, ["GET"], "获取数据库Schema版本")
+    context.register_web_api(f"{prefix}/db/tables", api_db_tables, ["GET"], "列出数据库所有业务表")
+    context.register_web_api(f"{prefix}/db/schema", api_db_schema, ["GET"], "获取指定表结构")
+    context.register_web_api(f"{prefix}/db/data", api_db_data, ["GET"], "预览指定表数据")
+    context.register_web_api(f"{prefix}/db/query", api_db_query, ["POST"], "执行只读 SQL 查询")
 
-    logger.info(f"[FoxToolbox] 已注册 {22} 个 Web API")
+    logger.info(f"[FoxToolbox] 已注册 {26} 个 Web API")
 
 
 # ========== Export Task Execution ==========

@@ -16,6 +16,7 @@ from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star
 
 from fox_toolbox.database import Database
+from fox_toolbox.db_explorer import DbExplorer
 from fox_toolbox.api import MessageRecorderAPI
 from fox_toolbox.models import MessageRecord
 from fox_toolbox.time_utils import parse_time_range, format_time_range, normalize_timestamp
@@ -764,6 +765,9 @@ class MessageRecorder(Star):
 /msg_record query [sender_id] [limit] - 按发送者查询消息
 /msg_record search <keyword> [limit] - 全文搜索消息
 
+🗂️ 数据库浏览（只读）:
+/msg_record tables - 查看数据库中的业务表列表
+
 选项: limit 默认 10，最大 50""")
 
     @msg_record.command("today")
@@ -815,3 +819,27 @@ class MessageRecorder(Star):
             yield event.plain_result(f"在 {time_desc} 期间暂无消息记录")
             return
         yield event.plain_result(self._fmt_msgs(msgs, f"📅 {time_desc} 共 {len(msgs)} 条消息:"))
+
+    @msg_record.command("tables")
+    async def cmd_tables(self, event: AstrMessageEvent):
+        """查看数据库中已创建的数据表（只读浏览）
+
+        参考 astrbot_plugin_mysql（作者 Chris95743）的表浏览设计。
+        """
+        if not self._db:
+            yield event.plain_result("数据库未初始化")
+            return
+        explorer = DbExplorer(self._db)
+        try:
+            tables = await explorer.list_tables()
+        except Exception as e:
+            yield event.plain_result(f"获取数据表失败: {e}")
+            return
+        if not tables:
+            yield event.plain_result("数据库中暂无业务表")
+            return
+        lines = [f"🗂️ 数据库共 {len(tables)} 张业务表:"]
+        for t in tables:
+            row_text = f"{t['row_count']} 行" if t["row_count"] >= 0 else "?"
+            lines.append(f"  - {t['name']}（{row_text}）")
+        yield event.plain_result("\n".join(lines))

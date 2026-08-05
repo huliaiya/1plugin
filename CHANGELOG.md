@@ -5,7 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.8] - 2026-08-05
+## [0.1.12] - 2026-08-05
+
+### Added
+
+- **数据库浏览（只读）**：整合参考插件 astrbot_plugin_mysql（作者 Chris95743）的「表浏览 / SQL 查询」能力，在 Plugin Page 新增「数据库」视图，支持数据表列表（含行数）、表结构查看、表数据预览，以及只读 SQL 查询面板
+- **只读查询安全策略**：新增 `fox_toolbox/db_explorer.py`，仅允许 `SELECT / SHOW / DESCRIBE / DESC` 前缀语句；拦截 `DROP`、`TRUNCATE`、`FLUSH`、`GRANT`、`REVOKE`、`ALTER/CREATE USER`、`RENAME TABLE`、`LOCK` 与注释注入（`--`、`/* */`）；自动追加 `LIMIT` 防止大表全量拉取；查询超时上限 15 秒
+- **数据库浏览命令**：新增 `/msg_record tables` 命令，可在聊天中查看数据库业务表列表（自动跳过 `_schema_meta` 系统表）
+- **新增 Web API**：`GET db/tables`、`GET db/schema?table=`、`GET db/data?table=&limit=&offset=`、`POST db/query`（接收 `sql` 与 `max_rows`），共注册 26 个 API
+
+### Changed
+
+- **消息时间趋势图表优化**：趋势线条加粗至 4px、数据点放大，坐标轴文字与图例字号加大，图表容器高度从 340px 提升至 420px，便于阅读
+- **卡片浮动更明显**：重新引入统计卡片浮动动画，幅度增至 ±10px、周期 6s，hover 时暂停；图表容器同步加入浮动
+- **背景动态流光**：新增 `auroraFlow` 动画，页面背景呈现缓慢流动的极光渐变；遵循 `prefers-reduced-motion` 时自动关闭动画
+- **前端资源版本号升级**：Plugin Page 的 `app.js` 与 `style.css` 查询参数升级至 `0.1.12`
+
+### Security
+
+- **危险关键词误报修复**：SQL 安全校验先剥除字符串字面量再匹配危险模式，避免将数据内容中的关键词（如 `LIKE '%grant%'`）误判为危险操作，同时保留对真实 DDL/DML 命令与注释注入的拦截
+
+### Verified
+
+- `PYTHONPATH=/workspace python3 -m pytest -q`
+- `python3 -m compileall fox_toolbox astrbot_plugin_fox_toolbox pages/recorder`
+- `node --check pages/recorder/app.js`
 
 ## [0.1.11] - 2026-08-05
 

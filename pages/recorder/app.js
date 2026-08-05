@@ -1,12 +1,12 @@
 const bridge = window.AstrBotPluginPage;
-const BUILD_VERSION = '0.1.11';
+const BUILD_VERSION = '0.1.12';
 
 let bridgeReady = false;
 let pluginContext = null;
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug');
 
-const viewDataLoaded = { dashboard: false, search: false, export: false };
+const viewDataLoaded = { dashboard: false, search: false, export: false, database: false };
 const dataCache = { platforms: null, stats: null, dbStatus: null };
 
 let echartsLoaded = false;
@@ -287,6 +287,7 @@ async function init() {
     initSearch();
     initExport();
     initImport();
+    initDatabase();
     initModal();
     initNavToggle();
     window.addEventListener('beforeunload', cleanupAllCharts);
@@ -338,6 +339,7 @@ function switchView(viewName) {
   if (viewName === 'dashboard') loadDashboardData();
   else if (viewName === 'search') loadSearchData();
   else if (viewName === 'export') loadExportData();
+  else if (viewName === 'database') loadDatabaseData();
 }
 
 function initNavToggle() {
@@ -645,17 +647,37 @@ function updateTimelineChart(points) {
   if (!timelineChart) { showChartEmpty('timelineChart'); return; }
   if (!points?.length) { showChartEmpty('timelineChart'); return; }
 
+  const axisLabelStyle = { color: '#1e293b', fontWeight: 500, fontSize: 13 };
+  const lineWidth = 4;
+  const symbolSize = 7;
+
   timelineChart.setOption({
-    tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-    legend: { data: ['总消息', '群聊', '私聊', '频道'] },
-    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-    xAxis: { type: 'category', data: points.map(p => p.date), axisLabel: { rotate: 45 } },
-    yAxis: { type: 'value' },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross', lineStyle: { width: 2 } },
+      textStyle: { fontSize: 14 },
+      backgroundColor: 'rgba(255,255,255,0.92)',
+      borderColor: 'rgba(79,195,247,0.4)',
+    },
+    legend: { data: ['总消息', '群聊', '私聊', '频道'], textStyle: { fontSize: 14, fontWeight: 600 } },
+    grid: { left: '4%', right: '5%', bottom: '8%', containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: points.map(p => p.date),
+      axisLabel: { rotate: 45, ...axisLabelStyle },
+      axisLine: { lineStyle: { width: 2 } },
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: axisLabelStyle,
+      splitLine: { lineStyle: { color: 'rgba(30,41,59,0.12)', width: 1 } },
+      axisLine: { lineStyle: { width: 2 } },
+    },
     series: [
-      { name: '总消息', type: 'line', data: points.map(p => p.count || 0), smooth: true, areaStyle: { opacity: 0.3 }, itemStyle: { color: '#4fc3f7' }, lineStyle: { width: 2 } },
-      { name: '群聊', type: 'line', data: points.map(p => p.group_count || 0), smooth: true, itemStyle: { color: '#66bb6a' }, lineStyle: { width: 2 } },
-      { name: '私聊', type: 'line', data: points.map(p => p.private_count || 0), smooth: true, itemStyle: { color: '#ffa726' }, lineStyle: { width: 2 } },
-      { name: '频道', type: 'line', data: points.map(p => p.channel_count || 0), smooth: true, itemStyle: { color: '#ef5350' }, lineStyle: { width: 2 } }
+      { name: '总消息', type: 'line', data: points.map(p => p.count || 0), smooth: true, symbolSize, lineStyle: { width: lineWidth, color: '#4fc3f7' }, itemStyle: { color: '#4fc3f7' }, areaStyle: { opacity: 0.35 } },
+      { name: '群聊', type: 'line', data: points.map(p => p.group_count || 0), smooth: true, symbolSize, lineStyle: { width: lineWidth, color: '#66bb6a' }, itemStyle: { color: '#66bb6a' } },
+      { name: '私聊', type: 'line', data: points.map(p => p.private_count || 0), smooth: true, symbolSize, lineStyle: { width: lineWidth, color: '#ffa726' }, itemStyle: { color: '#ffa726' } },
+      { name: '频道', type: 'line', data: points.map(p => p.channel_count || 0), smooth: true, symbolSize, lineStyle: { width: lineWidth, color: '#ef5350' }, itemStyle: { color: '#ef5350' } }
     ]
   }, true);
 }
@@ -690,11 +712,11 @@ function updateSenderChart(senders) {
   if (!senderChart || !senders?.length) return;
 
   senderChart.setOption({
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { left: '3%', right: '10%', bottom: '3%', containLabel: true },
-    xAxis: { type: 'value' },
-    yAxis: { type: 'category', data: senders.map(s => truncate(s.sender_name || s.sender_id, 15)).reverse(), axisLabel: { width: 100, overflow: 'truncate' } },
-    series: [{ type: 'bar', data: senders.map(s => s.count).reverse(), itemStyle: { color: '#4fc3f7', borderRadius: [0, 4, 4, 0] } }]
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, textStyle: { fontSize: 13 } },
+    grid: { left: '3%', right: '12%', bottom: '4%', containLabel: true },
+    xAxis: { type: 'value', axisLabel: { fontSize: 13, fontWeight: 500 } },
+    yAxis: { type: 'category', data: senders.map(s => truncate(s.sender_name || s.sender_id, 15)).reverse(), axisLabel: { width: 100, overflow: 'truncate', fontSize: 13, fontWeight: 500 } },
+    series: [{ type: 'bar', barMaxWidth: 42, data: senders.map(s => s.count).reverse(), itemStyle: { color: '#4fc3f7', borderRadius: [0, 4, 4, 0] } }]
   });
 }
 
@@ -704,11 +726,11 @@ function updateGroupChart(groups) {
   if (!groupChart || !groups?.length) return;
 
   groupChart.setOption({
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { left: '3%', right: '10%', bottom: '3%', containLabel: true },
-    xAxis: { type: 'value' },
-    yAxis: { type: 'category', data: groups.map(g => truncate(g.group_id, 20)).reverse(), axisLabel: { width: 100, overflow: 'truncate' } },
-    series: [{ type: 'bar', data: groups.map(g => g.count).reverse(), itemStyle: { color: '#4dd0e1', borderRadius: [0, 4, 4, 0] } }]
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, textStyle: { fontSize: 13 } },
+    grid: { left: '3%', right: '12%', bottom: '4%', containLabel: true },
+    xAxis: { type: 'value', axisLabel: { fontSize: 13, fontWeight: 500 } },
+    yAxis: { type: 'category', data: groups.map(g => truncate(g.group_id, 20)).reverse(), axisLabel: { width: 100, overflow: 'truncate', fontSize: 13, fontWeight: 500 } },
+    series: [{ type: 'bar', barMaxWidth: 42, data: groups.map(g => g.count).reverse(), itemStyle: { color: '#4dd0e1', borderRadius: [0, 4, 4, 0] } }]
   });
 }
 
@@ -1440,6 +1462,178 @@ async function pollImportStatus(taskId, progressEl) {
   };
 
   await poll();
+}
+
+// ========== 数据库浏览（只读，借鉴 astrbot_plugin_mysql 的表浏览设计） ==========
+
+let dbTablesCache = null;
+let dbSelectedTable = null;
+
+function initDatabase() {
+  document.getElementById('dbQueryBtn')?.addEventListener('click', runDbQuery);
+  document.getElementById('dbQueryInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) runDbQuery();
+  });
+}
+
+async function loadDatabaseData(force = false) {
+  if (viewDataLoaded.database && !force) return;
+  viewDataLoaded.database = true;
+  await loadDbTables();
+}
+
+async function loadDbTables() {
+  const listEl = document.getElementById('dbTableList');
+  if (!listEl) return;
+  listEl.innerHTML = '<p class="text-center text-muted"><span class="inline-spinner"></span>加载数据表...</p>';
+  try {
+    const result = await apiGet('db/tables');
+    const data = extractData(result);
+    dbTablesCache = data?.tables || [];
+    renderDbTableList(dbTablesCache);
+  } catch (e) {
+    logError('loadDbTables failed:', e);
+    listEl.innerHTML = `<div class="section-error"><span class="error-icon">⚠️</span><span class="error-text">${escapeHtml(e.message || e)}</span></div>`;
+  }
+}
+
+function renderDbTableList(tables) {
+  const listEl = document.getElementById('dbTableList');
+  if (!listEl) return;
+  if (!tables.length) {
+    listEl.innerHTML = '<p class="text-center text-muted">数据库中暂无业务表</p>';
+    return;
+  }
+  const html = tables.map(t => `
+    <div class="db-table-item ${dbSelectedTable === t.name ? 'active' : ''}" data-table="${escapeHtml(t.name)}">
+      <span class="db-table-name">${escapeHtml(t.name)}</span>
+      <span class="db-table-count" title="行数">${t.row_count >= 0 ? formatNumber(t.row_count) : '?'}</span>
+    </div>
+  `).join('');
+  listEl.innerHTML = html;
+  listEl.querySelectorAll('.db-table-item').forEach(item => {
+    item.addEventListener('click', () => selectDbTable(item.dataset.table));
+  });
+}
+
+async function selectDbTable(tableName) {
+  dbSelectedTable = tableName;
+  renderDbTableList(dbTablesCache || []);
+  const schemaHeader = document.getElementById('dbSchemaHeader');
+  const dataHeader = document.getElementById('dbDataHeader');
+  if (schemaHeader) schemaHeader.textContent = `表结构 · ${tableName}`;
+  if (dataHeader) dataHeader.textContent = `表数据预览 · ${tableName}`;
+  const schemaPanel = document.getElementById('dbSchemaPanel');
+  const dataPanel = document.getElementById('dbDataPanel');
+  if (schemaPanel) schemaPanel.innerHTML = '<p class="text-center text-muted"><span class="inline-spinner"></span>加载结构...</p>';
+  if (dataPanel) dataPanel.innerHTML = '<p class="text-center text-muted"><span class="inline-spinner"></span>加载数据...</p>';
+
+  const [schemaResult, dataResult] = await Promise.allSettled([
+    apiGet('db/schema', { table: tableName }),
+    apiGet('db/data', { table: tableName, limit: 50 }),
+  ]);
+
+  if (schemaResult.status === 'fulfilled') {
+    try {
+      const data = extractData(schemaResult.value);
+      renderDbSchema(data?.schema || []);
+    } catch (e) {
+      if (schemaPanel) schemaPanel.innerHTML = `<div class="section-error"><span class="error-icon">⚠️</span><span class="error-text">${escapeHtml(e.message || e)}</span></div>`;
+    }
+  } else {
+    if (schemaPanel) schemaPanel.innerHTML = `<div class="section-error"><span class="error-icon">⚠️</span><span class="error-text">${escapeHtml(schemaResult.reason?.message || schemaResult.reason)}</span></div>`;
+  }
+
+  if (dataResult.status === 'fulfilled') {
+    try {
+      const data = extractData(dataResult.value);
+      renderDbDataTable(data);
+    } catch (e) {
+      if (dataPanel) dataPanel.innerHTML = `<div class="section-error"><span class="error-icon">⚠️</span><span class="error-text">${escapeHtml(e.message || e)}</span></div>`;
+    }
+  } else {
+    if (dataPanel) dataPanel.innerHTML = `<div class="section-error"><span class="error-icon">⚠️</span><span class="error-text">${escapeHtml(dataResult.reason?.message || dataResult.reason)}</span></div>`;
+  }
+}
+
+function renderDbSchema(schema) {
+  const panel = document.getElementById('dbSchemaPanel');
+  if (!panel) return;
+  if (!schema.length) {
+    panel.innerHTML = '<p class="text-center text-muted">该表无字段信息</p>';
+    return;
+  }
+  const head = Object.keys(schema[0]);
+  const rows = schema.map(row => {
+    const tds = head.map(h => `<td>${escapeHtml(row[h] != null ? String(row[h]) : '')}</td>`).join('');
+    return `<tr>${tds}</tr>`;
+  }).join('');
+  panel.innerHTML = `
+    <table class="data-table db-mini-table">
+      <thead><tr>${head.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderDbDataTable(data) {
+  const panel = document.getElementById('dbDataPanel');
+  if (!panel) return;
+  const columns = data?.columns || [];
+  const rows = data?.rows || [];
+  if (!rows.length) {
+    panel.innerHTML = '<p class="text-center text-muted">该表暂无数据</p>';
+    return;
+  }
+  const head = columns.map(c => `<th>${escapeHtml(c)}</th>`).join('');
+  const body = rows.map(row => {
+    const tds = columns.map(c => `<td>${escapeHtml(row[c] != null ? truncate(String(row[c]), 80) : '')}</td>`).join('');
+    return `<tr>${tds}</tr>`;
+  }).join('');
+  panel.innerHTML = `
+    <table class="data-table db-mini-table">
+      <thead><tr>${head}</tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    <p class="text-muted db-query-hint">共显示 ${rows.length} 行（预览上限 50 行）</p>`;
+}
+
+async function runDbQuery() {
+  const input = document.getElementById('dbQueryInput');
+  const resultEl = document.getElementById('dbQueryResult');
+  if (!input || !resultEl) return;
+  const sql = input.value.trim();
+  if (!sql) return;
+  const btn = document.getElementById('dbQueryBtn');
+  if (btn) { btn.disabled = true; }
+  resultEl.innerHTML = '<p class="text-muted"><span class="inline-spinner"></span>执行中...</p>';
+  try {
+    const raw = await apiPost('db/query', { sql, max_rows: 100 });
+    const data = extractData(raw);
+    const columns = data?.columns || [];
+    const rows = data?.rows || [];
+    if (!rows.length) {
+      resultEl.innerHTML = `<div class="db-result-note">查询成功，返回 0 行</div>`;
+      return;
+    }
+    const head = columns.map(c => `<th>${escapeHtml(c)}</th>`).join('');
+    const body = rows.map(row => {
+      const tds = columns.map(c => `<td>${escapeHtml(row[c] != null ? truncate(String(row[c]), 100) : '')}</td>`).join('');
+      return `<tr>${tds}</tr>`;
+    }).join('');
+    resultEl.innerHTML = `
+      <div class="db-result-note">查询成功，返回 ${rows.length} 行${data.truncated ? '（已截断）' : ''}</div>
+      <div class="table-wrapper" style="overflow-x:auto;">
+        <table class="data-table db-mini-table">
+          <thead><tr>${head}</tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>`;
+  } catch (e) {
+    logError('runDbQuery failed:', e);
+    resultEl.innerHTML = `<div class="section-error"><span class="error-icon">⚠️</span><span class="error-text">${escapeHtml(e.message || e)}</span></div>`;
+  } finally {
+    if (btn) { btn.disabled = false; }
+  }
 }
 
 init();

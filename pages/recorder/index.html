@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>狐狸插件</title>
-  <link rel="stylesheet" href="./style.css?v=0.1.11" />
+  <link rel="stylesheet" href="./style.css?v=0.1.12" />
 </head>
 <body>
   <nav class="navbar">
@@ -19,6 +19,7 @@
         <a href="#search" class="nav-link" data-view="search">搜索</a>
         <a href="#export" class="nav-link" data-view="export">导出</a>
         <a href="#import" class="nav-link" data-view="import">导入</a>
+        <a href="#database" class="nav-link" data-view="database">数据库</a>
       </div>
     </div>
   </nav>
@@ -331,6 +332,44 @@
       </div>
       <div id="importProgress" style="display: none;"></div>
     </div>
+
+    <div id="view-database" class="view">
+      <div class="db-browser-grid">
+        <div class="card">
+          <div class="card-header">数据表列表</div>
+          <div class="db-table-list" id="dbTableList">
+            <p class="text-center text-muted">加载中...</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header" id="dbSchemaHeader">表结构</div>
+          <div class="db-schema-panel" id="dbSchemaPanel">
+            <p class="text-center text-muted">点击左侧表名查看结构</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header" id="dbDataHeader">表数据预览</div>
+        <div class="table-wrapper" style="overflow-x:auto;">
+          <div id="dbDataPanel">
+            <p class="text-center text-muted">选择表后预览数据</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">只读 SQL 查询</div>
+        <div class="filter-row">
+          <textarea id="dbQueryInput" class="db-query-input" rows="4" placeholder="输入 SELECT / SHOW / DESCRIBE 语句，例如：SELECT * FROM messages LIMIT 20"></textarea>
+        </div>
+        <div class="filter-row">
+          <button class="btn" id="dbQueryBtn">执行查询</button>
+          <span class="text-muted db-query-hint">仅允许只读语句，自动附加 LIMIT 限制</span>
+        </div>
+        <div id="dbQueryResult"></div>
+      </div>
+    </div>
   </main>
 
   <div class="modal" id="messageModal">
@@ -343,6 +382,6 @@
     </div>
   </div>
 
-  <script type="module" src="./app.js?v=0.1.11"></script>
+  <script type="module" src="./app.js?v=0.1.12"></script>
 </body>
 </html>

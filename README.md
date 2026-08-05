@@ -32,6 +32,7 @@
 - 🖼️ **多媒体归档** — 可选保存图片、语音、视频、文件到本地，支持原图/缩略图模式，内容哈希自动去重（相同文件只存一份）
 - 🌐 **Web 管理面板** — 内嵌于 AstrBot Dashboard，采用 Liquid Glass 液态玻璃设计风格，提供统计图表、消息搜索、数据导入导出，无需额外部署
 - 🔍 **全文搜索** — 基于 MySQL FULLTEXT 索引（ngram 分词器），支持中文关键词搜索和多维度组合筛选
+- 🗂️ **数据库浏览** — 内嵌只读数据库浏览器，支持查看数据表列表、表结构、表数据预览与只读 SQL 查询，自动拦截危险操作
 - 📤 **数据导入导出** — 支持 JSON / CSV / ZIP（含媒体文件打包）格式，可跨实例迁移
 - 🔌 **插件 API** — 提供 `query()` / `count()` / `search()` 等完整查询接口，其他插件一行代码即可调用
 - 🧹 **自动清理** — 可配置保留天数和最大记录数，自动清理过期数据和孤立媒体文件
@@ -551,6 +552,16 @@ ruff format .
 
 ## 📝 更新日志
 
+### v0.1.12（2026-08-05）
+
+- 新增「数据库浏览」视图：数据表列表（含行数）、表结构查看、表数据预览、只读 SQL 查询面板，能力整合自参考插件 astrbot_plugin_mysql（作者 Chris95743）
+- 只读查询安全策略：仅允许 `SELECT / SHOW / DESCRIBE / DESC`，拦截 DROP/TRUNCATE/GRANT/注释注入等危险操作，自动附加 LIMIT 防止大表全量拉取，查询超时上限 15 秒
+- 新增 `/msg_record tables` 聊天命令，查看数据库业务表列表（自动跳过 `_schema_meta` 系统表）
+- 消息时间趋势图优化：线条加粗、数据点与坐标文字放大，图表高度提升至 420px
+- 统计卡片浮动动画更明显（±10px），页面背景新增动态极光流光
+- 修复 SQL 安全校验误报：字符串字面量中的关键词（如 `LIKE '%grant%'`）不再被误判为危险操作
+- Plugin Page 前端资源版本号升级到 `0.1.12`
+
 ### v0.1.11（2026-08-05）
 
 - 移除 Dashboard 统计卡片的无限浮动动画，页面不再“一直刷新”，卡片仅在首次入场时淡入
@@ -691,6 +702,7 @@ ruff format .
 
 - [AstrBot](https://github.com/Soulter/astrbot) - 强大的多平台聊天机器人框架，本插件基于其插件体系开发
 - [astrbot_plugin_message_recorder](https://github.com/leafliber/astrbot_plugin_message_recorder) - 原项目 **消息记录器**，由 [Leafiber](https://github.com/leafliber) 开发，狐狸插件在此基础上进行存储引擎迁移和二次开发
+- [astrbot_plugin_mysql](https://github.com/Chris95743/astrbot_plugin_mysql) - 数据库表浏览 / 只读 SQL 查询的设计参考，由 [Chris95743](https://github.com/Chris95743) 开发，狐狸插件借鉴其安全校验与表浏览思路
 - [aiomysql](https://github.com/aio-libs/aiomysql) - 异步 MySQL 驱动库
 - [aiohttp](https://github.com/aio-libs/aiohttp) - 异步 HTTP 客户端，用于多媒体文件下载
 

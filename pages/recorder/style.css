@@ -77,7 +77,15 @@ a:focus-visible,
   background-clip: text;
 }
 
-/* 静态渐变背景 —— 清爽天空蓝风格，无动画（动画会触发所有 backdrop-filter 元素重新合成） */
+/* 动态流光背景 —— 缓慢流动的渐变光带，营造呼吸感。
+   流光动画放在 body::before 独立层，避免直接动画 body 触发所有
+   backdrop-filter 元素反复重合成；动画时长较长、位移平缓以降低开销。 */
+@keyframes auroraFlow {
+  0% { background-position: 0% 50%, 100% 50%, 50% 0%; }
+  50% { background-position: 100% 50%, 0% 50%, 50% 100%; }
+  100% { background-position: 0% 50%, 100% 50%, 50% 0%; }
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background:
@@ -92,6 +100,26 @@ body {
   flex-direction: column;
   -webkit-tap-highlight-color: transparent;
   position: relative;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(120deg, rgba(79, 195, 247, 0.16), rgba(129, 212, 250, 0.05), rgba(77, 208, 225, 0.14)),
+    linear-gradient(240deg, rgba(255, 183, 77, 0.1), rgba(129, 199, 132, 0.06), rgba(240, 98, 146, 0.08)),
+    linear-gradient(0deg, rgba(79, 195, 247, 0.08), rgba(255, 255, 255, 0.12), rgba(179, 229, 252, 0.1));
+  background-size: 200% 200%, 200% 200%, 200% 200%;
+  animation: auroraFlow 28s ease-in-out infinite;
+  filter: blur(40px);
+}
+
+/* 移动端降低流光强度，避免低端设备卡顿 */
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
 }
 
 /* ============================================================
@@ -290,6 +318,18 @@ body {
   margin-bottom: 1.5rem;
 }
 
+/* 卡片持续浮动动画 —— 明显但平缓的悬浮感，6s 周期 */
+@keyframes cardFloat {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-10px) scale(1.01); }
+}
+
+/* 卡片顶部流光扫过动画 */
+@keyframes cardSheen {
+  0% { transform: translateX(-120%) rotate(15deg); }
+  100% { transform: translateX(220%) rotate(15deg); }
+}
+
 .stat-card {
   position: relative;
   background: var(--glass-bg);
@@ -300,16 +340,37 @@ body {
   box-shadow: var(--glass-shadow);
   padding: 1.2rem;
   text-align: center;
-  animation: cardAppear 0.4s ease both;
+  animation: cardAppear 0.4s ease both, cardFloat 6s ease-in-out 0.5s infinite;
   overflow: hidden;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   contain: layout paint;
   transform: translateZ(0);
+  will-change: transform;
 }
 
 .stat-card:hover {
-  transform: translateY(-5px) scale(1.03);
+  transform: translateY(-6px) scale(1.04);
   box-shadow: var(--glass-shadow-hover);
+  animation-play-state: paused;
+}
+
+/* 卡片流光扫过光带 */
+.stat-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  left: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  opacity: 0;
+  animation: cardSheen 5s ease-in-out 1.2s infinite;
+}
+
+.stat-card:hover::before {
+  animation-play-state: paused;
 }
 
 /* 内部静态彩色光斑（无动画，避免额外合成层） */
@@ -324,14 +385,14 @@ body {
     radial-gradient(140px 90px at 50% 80%, rgba(77, 208, 225, 0.08), transparent 60%);
 }
 
-/* 入场动画延迟（错峰出现） */
-.stat-card:nth-child(1) { animation: cardAppear 0.4s ease both; }
-.stat-card:nth-child(2) { animation: cardAppear 0.4s ease 60ms both; }
-.stat-card:nth-child(3) { animation: cardAppear 0.4s ease 120ms both; }
-.stat-card:nth-child(4) { animation: cardAppear 0.4s ease 180ms both; }
-.stat-card:nth-child(5) { animation: cardAppear 0.4s ease 240ms both; }
-.stat-card:nth-child(6) { animation: cardAppear 0.4s ease 300ms both; }
-.stat-card:nth-child(7) { animation: cardAppear 0.4s ease 360ms both; }
+/* 入场动画延迟（错峰出现），浮动动画同步错峰 */
+.stat-card:nth-child(1) { animation: cardAppear 0.4s ease both, cardFloat 6s ease-in-out 0.5s infinite; }
+.stat-card:nth-child(2) { animation: cardAppear 0.4s ease 60ms both, cardFloat 6s ease-in-out 0.8s infinite; }
+.stat-card:nth-child(3) { animation: cardAppear 0.4s ease 120ms both, cardFloat 6s ease-in-out 1.1s infinite; }
+.stat-card:nth-child(4) { animation: cardAppear 0.4s ease 180ms both, cardFloat 6s ease-in-out 1.4s infinite; }
+.stat-card:nth-child(5) { animation: cardAppear 0.4s ease 240ms both, cardFloat 6s ease-in-out 1.7s infinite; }
+.stat-card:nth-child(6) { animation: cardAppear 0.4s ease 300ms both, cardFloat 6s ease-in-out 2.0s infinite; }
+.stat-card:nth-child(7) { animation: cardAppear 0.4s ease 360ms both, cardFloat 6s ease-in-out 2.3s infinite; }
 
 .stat-value {
   font-size: 2rem;
@@ -403,7 +464,14 @@ body {
   overflow: hidden;
   contain: layout paint;
   transform: translateZ(0);
-  animation: cardAppear 0.4s ease both;
+  animation: cardAppear 0.4s ease both, cardFloat 7s ease-in-out 0.8s infinite;
+  will-change: transform;
+}
+
+.chart-container:hover {
+  transform: translateY(-6px) scale(1.01);
+  box-shadow: var(--glass-shadow-hover);
+  animation-play-state: paused;
 }
 
 .chart-container::before {
@@ -429,7 +497,7 @@ body {
 
 .chart-box {
   width: 100%;
-  height: 340px;
+  height: 420px;
   position: relative;
   z-index: 1;
 }
@@ -452,11 +520,11 @@ body {
   }
 }
 
-/* 图表容器入场延迟（仅一次性入场动画，避免持续浮动带来的合成开销） */
-.charts-grid .chart-container:nth-child(1) { animation: cardAppear 0.4s ease both; }
-.charts-grid .chart-container:nth-child(2) { animation: cardAppear 0.4s ease 80ms both; }
-.charts-grid .chart-container:nth-child(3) { animation: cardAppear 0.4s ease 160ms both; }
-.charts-grid .chart-container:nth-child(4) { animation: cardAppear 0.4s ease 240ms both; }
+/* 图表容器入场延迟 + 持续浮动（仅一次性入场 + 平缓浮动） */
+.charts-grid .chart-container:nth-child(1) { animation: cardAppear 0.4s ease both, cardFloat 7s ease-in-out 0.8s infinite; }
+.charts-grid .chart-container:nth-child(2) { animation: cardAppear 0.4s ease 80ms both, cardFloat 7s ease-in-out 1.2s infinite; }
+.charts-grid .chart-container:nth-child(3) { animation: cardAppear 0.4s ease 160ms both, cardFloat 7s ease-in-out 1.6s infinite; }
+.charts-grid .chart-container:nth-child(4) { animation: cardAppear 0.4s ease 240ms both, cardFloat 7s ease-in-out 2.0s infinite; }
 
 /* ============================================================
    时间选择器
@@ -1713,4 +1781,120 @@ body {
     width: 98%;
     border-radius: 10px;
   }
+}
+
+/* ============================================================
+   数据库浏览视图（只读，借鉴 astrbot_plugin_mysql 的表浏览设计）
+   ============================================================ */
+.db-browser-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .db-browser-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.db-table-list {
+  max-height: 480px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.db-table-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color-subtle);
+  background: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.db-table-item:hover {
+  background: rgba(255, 255, 255, 0.65);
+  transform: translateX(3px);
+}
+
+.db-table-item.active {
+  background: linear-gradient(270deg, rgba(79, 195, 247, 0.25), rgba(129, 212, 250, 0.18));
+  border-color: rgba(79, 195, 247, 0.6);
+}
+
+.db-table-name {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text-on-glass);
+  word-break: break-all;
+}
+
+.db-table-count {
+  font-size: 0.8rem;
+  color: var(--text-on-glass-light);
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  white-space: nowrap;
+}
+
+.db-schema-panel {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.db-mini-table {
+  font-size: 0.85rem;
+}
+
+.db-mini-table th {
+  padding: 0.5rem 0.6rem;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.db-mini-table td {
+  padding: 0.45rem 0.6rem;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.db-query-input {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color-subtle);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--text-on-glass);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  resize: vertical;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.db-query-input:focus {
+  outline: none;
+  border-color: rgba(79, 195, 247, 0.7);
+  box-shadow: 0 0 0 3px rgba(79, 195, 247, 0.2);
+}
+
+.db-query-hint {
+  font-size: 0.78rem;
+  align-self: center;
+}
+
+.db-result-note {
+  padding: 0.5rem 0;
+  color: var(--success-color);
+  font-weight: 600;
+  font-size: 0.85rem;
 }
