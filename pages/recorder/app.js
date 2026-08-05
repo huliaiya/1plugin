@@ -26,9 +26,14 @@ async function apiGet(endpoint, params) {
     throw new Error('Bridge SDK 未就绪');
   }
   log('apiGet:', endpoint, params);
-  const result = await bridge.apiGet(endpoint, params);
-  log('apiGet response:', endpoint, result);
-  return result;
+  try {
+    const result = await bridge.apiGet(endpoint, params);
+    log('apiGet response:', endpoint, result);
+    return result;
+  } catch (e) {
+    console.error('[FoxToolbox] apiGet failed:', endpoint, e);
+    throw e;
+  }
 }
 
 async function apiPost(endpoint, body) {
@@ -433,6 +438,8 @@ async function loadDashboardData(force = false) {
       apiGet('plugin/status').catch(e => { logError('plugin status failed:', e); return null; }),
     ]);
 
+    console.log('[FoxToolbox] API results:', { statsResult: !!statsResult, timelineResult: !!timelineResult, contentTypesResult: !!contentTypesResult, platformsDetailResult: !!platformsDetailResult, statusResult });
+
     if (statsResult) {
       try {
         const stats = extractData(statsResult);
@@ -502,15 +509,18 @@ async function loadDashboardData(force = false) {
       showChartEmpty('platformDetailChart', '加载平台详情数据失败');
     }
 
+    console.log('[FoxToolbox] statusResult:', statusResult);
     if (statusResult) {
       try {
         const statusData = extractData(statusResult);
+        console.log('[FoxToolbox] statusData:', statusData);
         dataCache.pluginStatus = statusData;
         updateStatusCard(statusData);
         updateHealthCard(statusData);
         updateResourceCard(statusData);
         ensureResourceRotation();
       } catch (e) {
+        console.error('[FoxToolbox] Failed to process plugin status:', e);
         logError('Failed to process plugin status:', e);
         ['statusValue', 'healthValue'].forEach(id => {
           const el = document.getElementById(id);
@@ -521,6 +531,7 @@ async function loadDashboardData(force = false) {
         ensureResourceRotation();
       }
     } else {
+      console.warn('[FoxToolbox] statusResult is null — plugin/status API failed');
       clearStatusSkeletons();
       ensureResourceRotation();
     }
@@ -529,6 +540,7 @@ async function loadDashboardData(force = false) {
     await loadRankingData();
     viewDataLoaded.dashboard = true;
   } catch (e) {
+    console.error('[FoxToolbox] Failed to load dashboard data:', e);
     logError('Failed to load dashboard data:', e);
     clearStatusSkeletons();
   } finally {

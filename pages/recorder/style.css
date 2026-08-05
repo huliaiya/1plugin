@@ -404,7 +404,7 @@ body {
   border-radius: var(--radius);
   box-shadow: var(--glass-shadow);
   padding: 1rem;
-  min-height: 300px;
+  min-height: 360px;
   overflow: hidden;
   contain: layout paint;
   transform: translateZ(0);
@@ -434,7 +434,7 @@ body {
 
 .chart-box {
   width: 100%;
-  height: 280px;
+  height: 340px;
   position: relative;
   z-index: 1;
 }
@@ -1004,7 +1004,7 @@ body {
 }
 
 .skeleton-chart {
-  height: 280px;
+  height: 340px;
   border-radius: var(--radius);
 }
 
@@ -1352,7 +1352,7 @@ body {
   }
 
   .chart-box {
-    height: 240px;
+    height: 280px;
   }
 
   .card {
@@ -1435,12 +1435,12 @@ body {
   }
 
   .chart-container {
-    min-height: 260px;
+    min-height: 300px;
     padding: 0.8rem;
   }
 
   .chart-box {
-    height: 220px;
+    height: 250px;
   }
 
   .chart-title {
@@ -1690,7 +1690,7 @@ body {
   }
 
   .chart-box {
-    height: 180px;
+    height: 200px;
   }
 
   .chart-title {
