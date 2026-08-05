@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.3] - 2026-08-05
 
+## [0.1.4] - 2026-08-05
+
+### Fixed
+
+- **彻底绕开 Dashboard 状态卡片的独立路由兼容问题**：后端 `stats` 接口新增 `plugin_status` 字段，前端状态卡片改为直接读取 `stats.plugin_status`，首屏渲染与 30 秒刷新都复用同一条已验证可用的数据链路
+- **统一状态数据来源**：`status` 接口与 `stats.plugin_status` 现在共用同一份状态构造逻辑，避免两条链路行为不一致
+
+### Verified
+
+- `PYTHONPATH=/workspace python3 -m pytest -q`：`176 passed, 63 skipped`
+- `python3 -m compileall fox_toolbox astrbot_plugin_fox_toolbox`
+
+## [0.1.3] - 2026-08-05
+
 ### Fixed
 
 - **按 AstrBot Plugin Pages 官方路由约定修复状态接口**：前端状态卡片请求从 `plugin/status` 调整为插件内相对路径 `status`，后端新增 `/{plugin_name}/status` 主路由，并保留 `/{plugin_name}/plugin/status` 兼容旧路径

@@ -4,7 +4,6 @@ let bridgeReady = false;
 let pluginContext = null;
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug');
-const STATUS_API_ENDPOINT = 'status';
 
 const viewDataLoaded = { dashboard: false, search: false, export: false };
 const dataCache = { platforms: null, stats: null, pluginStatus: null };
@@ -424,6 +423,13 @@ function showStatusUnavailable(message = '加载失败') {
   }
 }
 
+function getPluginStatusFromStats(stats) {
+  if (stats && typeof stats === 'object' && stats.plugin_status && typeof stats.plugin_status === 'object') {
+    return stats.plugin_status;
+  }
+  return null;
+}
+
 function clearChartSkeleton(id) {
   const el = document.getElementById(id);
   const chartMap = { timelineChart, platformChart, contentTypeChart, platformDetailChart, senderChart, groupChart };
@@ -455,24 +461,25 @@ async function loadDashboardData(force = false) {
   loadPlatforms(false).catch(() => {});
 
   try {
-    const [statsResult, timelineResult, contentTypesResult, platformsDetailResult, statusResult] = await Promise.all([
+    const [statsResult, timelineResult, contentTypesResult, platformsDetailResult] = await Promise.all([
       apiGet('stats').catch(e => { logError('stats failed:', e); return null; }),
       apiGet('stats/timeline', { interval: 'day' }).catch(e => { logError('timeline failed:', e); return null; }),
       apiGet('stats/content-types').catch(e => { logError('content-types failed:', e); return null; }),
       apiGet('stats/platforms').catch(e => { logError('platforms detail failed:', e); return null; }),
-      apiGet(STATUS_API_ENDPOINT).catch(e => { logError('plugin status failed:', e); return null; }),
     ]);
 
-    console.log('[FoxToolbox] API results:', { statsResult: !!statsResult, timelineResult: !!timelineResult, contentTypesResult: !!contentTypesResult, platformsDetailResult: !!platformsDetailResult, statusResult });
+    console.log('[FoxToolbox] API results:', { statsResult: !!statsResult, timelineResult: !!timelineResult, contentTypesResult: !!contentTypesResult, platformsDetailResult: !!platformsDetailResult });
+
+    let statsData = null;
 
     if (statsResult) {
       try {
-        const stats = extractData(statsResult);
-        dataCache.stats = stats;
-        updateStatsCards(stats);
+        statsData = extractData(statsResult);
+        dataCache.stats = statsData;
+        updateStatsCards(statsData);
         await loadEcharts().catch(() => {});
         clearChartSkeleton('platformChart');
-        updatePlatformChart(stats.platform_stats);
+        updatePlatformChart(statsData.platform_stats);
       } catch (e) {
         logError('Failed to process stats:', e);
         document.querySelectorAll('.stat-value.loading').forEach(el => {
@@ -534,11 +541,10 @@ async function loadDashboardData(force = false) {
       showChartEmpty('platformDetailChart', '加载平台详情数据失败');
     }
 
-    console.log('[FoxToolbox] statusResult:', statusResult);
-    if (statusResult) {
+    const statusData = getPluginStatusFromStats(statsData);
+    console.log('[FoxToolbox] statusData from stats:', statusData);
+    if (statusData) {
       try {
-        const statusData = extractData(statusResult);
-        console.log('[FoxToolbox] statusData:', statusData);
         dataCache.pluginStatus = statusData;
         updateStatusCard(statusData);
         updateHealthCard(statusData);
@@ -556,8 +562,8 @@ async function loadDashboardData(force = false) {
         ensureResourceRotation();
       }
     } else {
-      console.warn('[FoxToolbox] statusResult is null — plugin/status API failed');
-      showStatusUnavailable('状态接口失败');
+      console.warn('[FoxToolbox] plugin_status is missing from stats payload');
+      showStatusUnavailable('状态数据缺失');
       ensureResourceRotation();
     }
 
@@ -671,12 +677,16 @@ function ensureResourceRotation() {
   }, 3000);
   resourceRefreshTimer = setInterval(async () => {
     try {
-      const raw = await apiGet(STATUS_API_ENDPOINT);
-      const data = extractData(raw);
-      dataCache.pluginStatus = data;
-      updateStatusCard(data);
-      updateHealthCard(data);
-      updateResourceCard(data);
+      const raw = await apiGet('stats');
+      const stats = extractData(raw);
+      const status = getPluginStatusFromStats(stats);
+      if (!status) {
+        throw new Error('stats 未返回 plugin_status');
+      }
+      dataCache.pluginStatus = status;
+      updateStatusCard(status);
+      updateHealthCard(status);
+      updateResourceCard(status);
     } catch (e) {
       logError('Failed to refresh plugin status:', e);
     }
