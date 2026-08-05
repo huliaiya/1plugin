@@ -415,11 +415,12 @@ async function loadDashboardData(force = false) {
   loadPlatforms(false).catch(() => {});
 
   try {
-    const [statsResult, timelineResult, contentTypesResult, platformsDetailResult] = await Promise.all([
+    const [statsResult, timelineResult, contentTypesResult, platformsDetailResult, statusResult] = await Promise.all([
       apiGet('stats').catch(e => { logError('stats failed:', e); return null; }),
       apiGet('stats/timeline', { interval: 'day' }).catch(e => { logError('timeline failed:', e); return null; }),
       apiGet('stats/content-types').catch(e => { logError('content-types failed:', e); return null; }),
       apiGet('stats/platforms').catch(e => { logError('platforms detail failed:', e); return null; }),
+      apiGet('plugin/status').catch(e => { logError('plugin status failed:', e); return null; }),
     ]);
 
     if (statsResult) {
@@ -485,6 +486,29 @@ async function loadDashboardData(force = false) {
       clearChartSkeleton('platformDetailChart');
     }
 
+    if (statusResult) {
+      try {
+        const statusData = extractData(statusResult);
+        dataCache.pluginStatus = statusData;
+        updateStatusCard(statusData);
+        updateResourceCard(statusData);
+        ensureResourceRotation();
+      } catch (e) {
+        logError('Failed to process plugin status:', e);
+      }
+    } else {
+      const statusEl = document.getElementById('statusValue');
+      if (statusEl) {
+        statusEl.textContent = '-';
+        statusEl.classList.remove('loading');
+      }
+      const resourceVal = document.getElementById('resourceValue');
+      if (resourceVal) {
+        resourceVal.textContent = '-';
+        resourceVal.classList.remove('loading');
+      }
+    }
+
     updateTimeRangeDisplay(currentTimeRange);
     await loadRankingData();
     viewDataLoaded.dashboard = true;
@@ -537,6 +561,59 @@ function updateStatsCards(stats) {
   setVal('platformCount', stats.platform_count);
 }
 
+// ========== 插件状态与资源占用卡片 ==========
+
+let resourceMode = 'memory';
+let resourceRotationTimer = null;
+let resourceRefreshTimer = null;
+
+function updateStatusCard(data) {
+  const el = document.getElementById('statusValue');
+  if (!el) return;
+  const healthy = data.status === 'healthy';
+  const label = healthy ? '健康' : (data.status === 'degraded' ? '警告' : '异常');
+  el.textContent = label;
+  el.classList.remove('loading');
+  el.style.color = healthy ? '#2e7d32' : (data.status === 'degraded' ? '#f9a825' : '#d32f2f');
+  el.setAttribute('title', data.detail || '');
+}
+
+function updateResourceCard(data) {
+  const val = document.getElementById('resourceValue');
+  const label = document.getElementById('resourceLabel');
+  if (!val || !label) return;
+  const mem = data.memory_mb || 0;
+  const cpu = data.cpu_percent || 0;
+  if (resourceMode === 'memory') {
+    val.textContent = mem > 0 ? mem.toFixed(1) + ' MB' : '-';
+    label.textContent = '内存占用';
+  } else {
+    val.textContent = cpu > 0 ? cpu.toFixed(1) + '%' : '-';
+    label.textContent = 'CPU 占用';
+  }
+  val.classList.remove('loading');
+}
+
+function ensureResourceRotation() {
+  if (resourceRotationTimer) return;
+  resourceRotationTimer = setInterval(() => {
+    resourceMode = resourceMode === 'memory' ? 'cpu' : 'memory';
+    const cached = dataCache.pluginStatus;
+    if (cached) updateResourceCard(cached);
+  }, 3000);
+  resourceRefreshTimer = setInterval(async () => {
+    try {
+      const raw = await apiGet('plugin/status');
+      const data = extractData(raw);
+      dataCache.pluginStatus = data;
+      updateStatusCard(data);
+      updateResourceCard(data);
+    } catch (e) {
+      logError('Failed to refresh plugin status:', e);
+    }
+  }, 30000);
+}
+
 function updateTimeRangeDisplay(timeRange) {
   const el = document.getElementById('timeRangeInfo');
   if (!el) return;
@@ -565,6 +642,8 @@ function handleChartResize() {
 
 function cleanupAllCharts() {
   if (_resizeTimer) { clearTimeout(_resizeTimer); _resizeTimer = null; }
+  if (resourceRotationTimer) { clearInterval(resourceRotationTimer); resourceRotationTimer = null; }
+  if (resourceRefreshTimer) { clearInterval(resourceRefreshTimer); resourceRefreshTimer = null; }
   if (timelineChart) { timelineChart.dispose(); timelineChart = null; }
   if (platformChart) { platformChart.dispose(); platformChart = null; }
   if (contentTypeChart) { contentTypeChart.dispose(); contentTypeChart = null; }

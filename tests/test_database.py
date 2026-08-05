@@ -57,6 +57,81 @@ class TestDatabaseInit:
                 assert await cur.fetchone() is not None
 
 
+class _FakePool:
+    def acquire(self):
+        class _Conn:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            def cursor(self):
+                class _Cur:
+                    async def __aenter__(self):
+                        return self
+
+                    async def __aexit__(self, *a):
+                        return False
+
+                    async def execute(self, *a, **k):
+                        return None
+
+                    async def fetchone(self):
+                        return (1,)
+
+                return _Cur()
+
+        return _Conn()
+
+
+class _FailingPool:
+    def acquire(self):
+        class _Conn:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            def cursor(self):
+                class _Cur:
+                    async def __aenter__(self):
+                        return self
+
+                    async def __aexit__(self, *a):
+                        return False
+
+                    async def execute(self, *a, **k):
+                        raise RuntimeError("connection lost")
+
+                    async def fetchone(self):
+                        raise RuntimeError("connection lost")
+
+                return _Cur()
+
+        return _Conn()
+
+
+class TestPing:
+    @pytest.mark.asyncio
+    async def test_ping_no_pool_returns_false(self):
+        db = Database("test", {})
+        assert await db.ping() is False
+
+    @pytest.mark.asyncio
+    async def test_ping_success_returns_true(self):
+        db = Database("test", {})
+        db._pool = _FakePool()
+        assert await db.ping() is True
+
+    @pytest.mark.asyncio
+    async def test_ping_failure_returns_false(self):
+        db = Database("test", {})
+        db._pool = _FailingPool()
+        assert await db.ping() is False
+
+
 class TestSaveMessage:
     @pytest.mark.asyncio
     async def test_save_and_retrieve(self, mysql_db):

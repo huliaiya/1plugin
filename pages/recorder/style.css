@@ -292,7 +292,7 @@ body {
    ============================================================ */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
@@ -338,6 +338,8 @@ body {
 .stat-card:nth-child(3) { animation: cardAppear 0.4s ease 120ms both, cardFloat 12s ease-in-out -6s infinite; }
 .stat-card:nth-child(4) { animation: cardAppear 0.4s ease 180ms both, cardFloat 12s ease-in-out -9s infinite; }
 .stat-card:nth-child(5) { animation: cardAppear 0.4s ease 240ms both, cardFloat 12s ease-in-out -1.5s infinite; }
+.stat-card:nth-child(6) { animation: cardAppear 0.4s ease 300ms both, cardFloat 12s ease-in-out -4.5s infinite; }
+.stat-card:nth-child(7) { animation: cardAppear 0.4s ease 360ms both, cardFloat 12s ease-in-out -7.5s infinite; }
 
 .stat-value {
   font-size: 2rem;
@@ -356,6 +358,16 @@ body {
   transition: color 0.2s;
   position: relative;
   z-index: 1;
+}
+
+/* 普通文本状态卡片（状态/资源占用）：禁用渐变透明字，使 color 与当前文字可见 */
+.stat-plain {
+  background-image: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  -webkit-text-fill-color: currentColor;
+  animation: none;
+  font-size: 1.5rem;
 }
 
 .stat-label {
@@ -1301,6 +1313,8 @@ body {
   .stat-card:nth-child(3),
   .stat-card:nth-child(4),
   .stat-card:nth-child(5),
+  .stat-card:nth-child(6),
+  .stat-card:nth-child(7),
   .chart-container,
   .charts-grid .chart-container:nth-child(1),
   .charts-grid .chart-container:nth-child(2),

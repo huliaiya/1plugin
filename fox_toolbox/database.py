@@ -89,6 +89,20 @@ class Database:
             self._pool = None
             logger.info("[FoxToolbox] MySQL 连接池已关闭")
 
+    async def ping(self) -> bool:
+        """轻量数据库连通性检测（供 WebUI 状态卡片使用）"""
+        if not self._pool:
+            return False
+        try:
+            async with self._pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT 1")
+                    await cur.fetchone()
+            return True
+        except Exception as e:
+            logger.warning(f"[FoxToolbox] 数据库 ping 失败: {e}")
+            return False
+
     async def _create_tables(self) -> None:
         """创建数据表和索引"""
         async with self._write_lock:

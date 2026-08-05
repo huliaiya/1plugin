@@ -22,6 +22,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 from .database import Database
 from .models import QueryFilter, MessageRecord, MessageStats, PLUGIN_DIR_NAME, SCHEMA_VERSION
 from .time_utils import parse_time_range, normalize_timestamp
+from . import sys_util
 
 MAX_IMPORT_FILE_SIZE = 4 * 1024 * 1024 * 1024
 MAX_EXPORT_FILE_AGE = 3600
@@ -308,6 +309,30 @@ async def register_all_web_apis(context, db: Database):
         except Exception as e:
             logger.error(f"[FoxToolbox Web] 获取统计失败: {e}")
             return jsonify({"success": False, "error": "获取统计数据失败"})
+
+    async def api_plugin_status():
+        """插件运行状态与资源占用（健康检查 + 内存/CPU）"""
+        db_ok = False
+        if db:
+            db_ok = await db.ping()
+        if db_ok:
+            status = "healthy"
+            detail = "数据库连接正常"
+        else:
+            status = "error"
+            detail = "数据库连接异常"
+        return jsonify({
+            "success": True,
+            "data": {
+                "status": status,
+                "detail": detail,
+                "database": "ok" if db_ok else "error",
+                "cpu_percent": round(sys_util.get_cpu_percent(), 1),
+                "memory_mb": round(sys_util.get_memory_mb(), 1),
+                "uptime_seconds": int(sys_util.get_process_uptime()),
+                "schema_version": SCHEMA_VERSION,
+            },
+        })
 
     async def api_stats_timeline():
         if not db:
@@ -909,6 +934,7 @@ async def register_all_web_apis(context, db: Database):
     # ========== Register all APIs ==========
 
     context.register_web_api(f"{prefix}/stats", api_stats, ["GET"], "获取统计概览")
+    context.register_web_api(f"{prefix}/plugin/status", api_plugin_status, ["GET"], "获取插件状态与资源占用")
     context.register_web_api(f"{prefix}/stats/timeline", api_stats_timeline, ["GET"], "获取时间趋势")
     context.register_web_api(f"{prefix}/stats/senders", api_stats_senders, ["GET"], "获取发送者排行")
     context.register_web_api(f"{prefix}/stats/groups", api_stats_groups, ["GET"], "获取群组排行")
@@ -933,7 +959,7 @@ async def register_all_web_apis(context, db: Database):
     context.register_web_api(f"{prefix}/media", api_media, ["GET"], "获取媒体文件")
     context.register_web_api(f"{prefix}/schema_version", api_schema_version, ["GET"], "获取数据库Schema版本")
 
-    logger.info(f"[FoxToolbox] 已注册 {21} 个 Web API")
+    logger.info(f"[FoxToolbox] 已注册 {22} 个 Web API")
 
 
 # ========== Export Task Execution ==========

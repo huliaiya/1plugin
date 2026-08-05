@@ -551,6 +551,13 @@ ruff format .
 
 ## 📝 更新日志
 
+### v0.0.11（2026-08-05）
+
+- Dashboard 新增「插件状态」卡片：后端 `Database.ping()` 探测数据库连通性，正常显示绿色「健康」，异常显示红色「异常」
+- Dashboard 新增「资源占用」卡片：内存（MB）/ CPU（%）每 3 秒轮换显示，每 30 秒静默刷新数据
+- 新增 `GET /fox_toolbox/plugin/status` 接口与 `fox_toolbox/sys_util.py`（标准库采集进程资源，无新增依赖）
+- 统计卡片网格改为自适应布局，可容纳 7 张卡片
+
 ### v0.0.10（2026-08-05）
 
 - Dashboard 统计卡片新增「频道消息」卡片（后端 `channel_message_count` 字段此前已支持，本次补齐前端展示）

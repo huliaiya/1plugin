@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.11] - 2026-08-05
+
+### Added
+
+- **WebUI 新增「插件状态」卡片**：Dashboard 统计区新增插件健康状态展示，后端通过 `Database.ping()` 轻量探测数据库连通性，正常显示绿色「健康」，异常显示红色「异常」并附悬停提示
+- **WebUI 新增「资源占用」卡片**：展示插件进程内存占用（MB）与 CPU 使用率（%），每 3 秒自动轮换切换显示，数据每 30 秒静默刷新
+- 新增后端接口 `GET /fox_toolbox/plugin/status`，返回健康状态、数据库连接、CPU/内存/运行时长与 schema 版本
+- 新增 `fox_toolbox/sys_util.py`：基于标准库读取进程资源（Linux 读取 `/proc`，macOS/BSD 回退 `resource` 模块），不引入第三方依赖
+
+### Changed
+
+- 统计卡片网格改为自适应布局（`auto-fit` + `minmax`），从 5 列调整至可容纳 7 张卡片
+- 新增 `.stat-plain` 样式类：状态/资源卡片禁用渐变透明文字，确保状态颜色与数值可读
+
 ## [0.0.10] - 2026-08-05
 
 ### Added
