@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.8] - 2026-08-05
 
+## [0.1.10] - 2026-08-05
+
+### Fixed
+
+- **修复数据库状态卡片不显示的问题**：前端为数据库状态卡片新增独立加载入口，通过 `status` 接口兜底拉取表数量，不再完全依赖 `stats` 接口成功与否；若 `stats` 失败卡片依然能展示数据库连接状态
+
+### Changed
+
+- **数据库状态卡片只展示表数量**：卡片默认直接显示已创建的数据库表数量（如 `12 张`），连接失败时才显示“未连接”，移除了此前“运行中/表数量”的 3 秒轮换逻辑，避免反复刷新观感
+- **兼容两种数据形状**：前端卡片渲染同时兼容 `stats` 接口的 `running/table_count` 与 `status` 接口的 `database/table_count` 两种返回结构
+- **刷新前端资源版本号**：Plugin Page 的 `app.js` 与 `style.css` 查询参数升级至 `0.1.10`，确保 AstrBot 刷新后加载最新页面资源
+
+### Verified
+
+- `PYTHONPATH=/workspace python3 -m pytest -q`
+- `python3 -m compileall fox_toolbox astrbot_plugin_fox_toolbox pages/recorder`
+
 ## [0.1.9] - 2026-08-05
 
 ### Changed
