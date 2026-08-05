@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-08-05
+
+### Fixed
+
+- **修复 Dashboard 状态卡片只显示 `-`**：前端不再把有效的 `0` 值当作空值处理，内存和 CPU 现在稳定显示 `0.0 MB` / `0.0%`，接口失败时明确显示错误状态而不是单个 `-`
+- **增强 `plugin/status` 容错**：后端按指标分别采集数据库、内存、CPU、运行时长，单项失败时仍返回可显示结果；接口内部异常时返回兜底状态数据，避免整个卡片区失效
+- **修复本地测试导入路径**：新增 `astrbot_plugin_fox_toolbox` 兼容包路径，恢复测试套件按项目包名导入
+
+### Verified
+
+- `PYTHONPATH=/workspace python3 -m pytest -q`：`176 passed, 63 skipped`
+- `python3 -m compileall fox_toolbox astrbot_plugin_fox_toolbox`
+- `PYTHONPATH=/workspace python3 -c "import conftest, main; print('main import ok')"`
+
 ## [0.1.1] - 2026-08-05
 
 ### Fixed

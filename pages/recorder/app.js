@@ -6,7 +6,7 @@ let pluginContext = null;
 const DEBUG = new URLSearchParams(window.location.search).has('debug');
 
 const viewDataLoaded = { dashboard: false, search: false, export: false };
-const dataCache = { platforms: null, stats: null };
+const dataCache = { platforms: null, stats: null, pluginStatus: null };
 
 let echartsLoaded = false;
 let echartsLoading = false;
@@ -394,9 +394,33 @@ function clearStatusSkeletons() {
     const el = document.getElementById(id);
     if (el && el.classList.contains('loading')) {
       el.classList.remove('loading');
-      el.textContent = '-';
     }
   });
+}
+
+function showStatusUnavailable(message = '加载失败') {
+  const statusEl = document.getElementById('statusValue');
+  const healthEl = document.getElementById('healthValue');
+  const resourceEl = document.getElementById('resourceValue');
+  const safeMessage = String(message || '加载失败');
+
+  if (statusEl) {
+    statusEl.textContent = safeMessage;
+    statusEl.classList.remove('loading');
+    statusEl.style.color = '#d32f2f';
+    statusEl.setAttribute('title', safeMessage);
+  }
+  if (healthEl) {
+    healthEl.textContent = '0 / 100';
+    healthEl.classList.remove('loading');
+    healthEl.style.color = '#d32f2f';
+    healthEl.setAttribute('title', safeMessage);
+  }
+  if (resourceEl) {
+    resourceEl.textContent = '0.0 MB';
+    resourceEl.classList.remove('loading');
+    resourceEl.setAttribute('title', safeMessage);
+  }
 }
 
 function clearChartSkeleton(id) {
@@ -532,7 +556,7 @@ async function loadDashboardData(force = false) {
       }
     } else {
       console.warn('[FoxToolbox] statusResult is null — plugin/status API failed');
-      clearStatusSkeletons();
+      showStatusUnavailable('状态接口失败');
       ensureResourceRotation();
     }
 
@@ -542,7 +566,7 @@ async function loadDashboardData(force = false) {
   } catch (e) {
     console.error('[FoxToolbox] Failed to load dashboard data:', e);
     logError('Failed to load dashboard data:', e);
-    clearStatusSkeletons();
+    showStatusUnavailable(e.message || '状态加载失败');
   } finally {
     clearStatusSkeletons();
     dashboardLoading = false;
@@ -600,8 +624,9 @@ let resourceRefreshTimer = null;
 function updateStatusCard(data) {
   const el = document.getElementById('statusValue');
   if (!el) return;
-  const healthy = data.status === 'healthy';
-  const label = healthy ? '健康' : (data.status === 'degraded' ? '警告' : '异常');
+  const status = data?.status;
+  const healthy = status === 'healthy';
+  const label = healthy ? '健康' : (status === 'degraded' ? '警告' : '异常');
   el.textContent = label;
   el.classList.remove('loading');
   el.style.color = healthy ? '#2e7d32' : (data.status === 'degraded' ? '#f9a825' : '#d32f2f');
@@ -611,7 +636,8 @@ function updateStatusCard(data) {
 function updateHealthCard(data) {
   const el = document.getElementById('healthValue');
   if (!el) return;
-  const score = Math.max(0, Math.min(100, data.health_score || 0));
+  const rawScore = Number(data?.health_score);
+  const score = Number.isFinite(rawScore) ? Math.max(0, Math.min(100, rawScore)) : 0;
   el.textContent = score + ' / 100';
   el.classList.remove('loading');
   el.style.color = score >= 90 ? '#2e7d32' : (score >= 60 ? '#f9a825' : '#d32f2f');
@@ -621,13 +647,15 @@ function updateResourceCard(data) {
   const val = document.getElementById('resourceValue');
   const label = document.getElementById('resourceLabel');
   if (!val || !label) return;
-  const mem = data.memory_mb || 0;
-  const cpu = data.cpu_percent || 0;
+  const rawMem = Number(data?.memory_mb);
+  const rawCpu = Number(data?.cpu_percent);
+  const mem = Number.isFinite(rawMem) ? rawMem : 0;
+  const cpu = Number.isFinite(rawCpu) ? rawCpu : 0;
   if (resourceMode === 'memory') {
-    val.textContent = mem > 0 ? mem.toFixed(1) + ' MB' : '-';
+    val.textContent = mem.toFixed(1) + ' MB';
     label.textContent = '内存占用';
   } else {
-    val.textContent = cpu > 0 ? cpu.toFixed(1) + '%' : '-';
+    val.textContent = cpu.toFixed(1) + '%';
     label.textContent = 'CPU 占用';
   }
   val.classList.remove('loading');

@@ -41,6 +41,27 @@ _import_tasks: Dict[str, Dict[str, Any]] = {}
 _background_tasks: set = set()
 
 
+def _safe_float_metric(metric_name: str, getter, default: float = 0.0) -> float:
+    """Safely collect a float metric so status API can degrade gracefully."""
+    try:
+        value = getter()
+        return float(value)
+    except Exception as e:
+        logger.warning(f"[FoxToolbox Web] 采集 {metric_name} 失败: {e}")
+        return default
+
+
+async def _safe_db_ping(db: Optional[Database]) -> Optional[bool]:
+    """Return database health when available, otherwise None."""
+    if not db:
+        return None
+    try:
+        return await db.ping()
+    except Exception as e:
+        logger.warning(f"[FoxToolbox Web] 数据库健康检查失败: {e}")
+        return False
+
+
 def _get_plugin_data_dir() -> Path:
     return Path(get_astrbot_plugin_data_path()) / PLUGIN_DIR_NAME
 
@@ -313,14 +334,18 @@ async def register_all_web_apis(context, db: Database):
     async def api_plugin_status():
         """插件运行状态与资源占用（健康检查 + 内存/CPU）"""
         try:
-            db_ok = False
-            if db:
-                db_ok = await db.ping()
-            mem_mb = sys_util.get_memory_mb()
-            cpu_pct = sys_util.get_cpu_percent()
-            uptime = sys_util.get_process_uptime()
+            db_ok = await _safe_db_ping(db)
+            mem_mb = _safe_float_metric("内存", sys_util.get_memory_mb)
+            cpu_pct = _safe_float_metric("CPU", sys_util.get_cpu_percent)
+            uptime = _safe_float_metric("运行时长", sys_util.get_process_uptime)
 
-            if not db_ok:
+            metric_degraded = mem_mb <= 0 and cpu_pct <= 0 and uptime <= 0
+
+            if db_ok is None:
+                status = "error"
+                detail = "数据库未初始化"
+                health_score = 0
+            elif not db_ok:
                 status = "error"
                 detail = "数据库连接异常"
                 health_score = 0
@@ -350,13 +375,18 @@ async def register_all_web_apis(context, db: Database):
                     status = "healthy"
                     detail = "数据库连接正常"
 
+                if metric_degraded:
+                    status = "degraded"
+                    detail = "数据库连接正常，资源指标暂不可用"
+                    health_score = min(health_score, 80)
+
             return jsonify({
                 "success": True,
                 "data": {
                     "status": status,
                     "detail": detail,
                     "health_score": health_score,
-                    "database": "ok" if db_ok else "error",
+                    "database": "ok" if db_ok else ("uninitialized" if db_ok is None else "error"),
                     "cpu_percent": round(cpu_pct, 1),
                     "memory_mb": round(mem_mb, 1),
                     "uptime_seconds": int(uptime),
@@ -365,7 +395,19 @@ async def register_all_web_apis(context, db: Database):
             })
         except Exception as e:
             logger.error(f"[FoxToolbox Web] 获取插件状态失败: {e}", exc_info=True)
-            return jsonify({"success": False, "error": "获取插件状态失败"})
+            return jsonify({
+                "success": True,
+                "data": {
+                    "status": "error",
+                    "detail": "状态接口异常",
+                    "health_score": 0,
+                    "database": "error",
+                    "cpu_percent": 0.0,
+                    "memory_mb": 0.0,
+                    "uptime_seconds": 0,
+                    "schema_version": SCHEMA_VERSION,
+                },
+            })
 
     async def api_stats_timeline():
         if not db:
