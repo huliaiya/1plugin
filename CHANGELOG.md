@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2026-08-05
+
+### Fixed
+
+- **修复 Dashboard 三张图表不显示**：时间趋势图、内容类型图、平台详情图在后端异常时返回 `success: true` + 空数据，前端拿不到错误信息导致图表区域空白。现改为异常时返回 `success: false`，前端 catch 块显示"暂无数据"占位符和错误原因
+- **修复状态卡片 skeleton 永远不消失**：插件状态/健康度/内存占用三张卡片在 `plugin/status` API 失败时，catch 块只记日志不清 skeleton，导致卡片永远卡在加载动画。现 catch 块正确清除 skeleton 并显示"加载失败"
+- 后端错误响应不再泄露内部异常详情（统一返回通用错误消息，详细信息仅写入日志）
+
+### Changed
+
+- **版本号语义化**：从 `0.0.11` 升级至 `0.1.0`，遵循语义化版本规范——`0.0.10` 之后进入 `0.1.x` 系列
+
+### Security
+
+- `_build_query_filter_from_dict` 新增 `order` 白名单校验（仅允许 `asc`/`desc`）
+- `api_import_init` 新增 `file_size > 0` 校验，`chunk_size` 钳位到 `[1MB, 5MB]`
+- 导入 merge 模式异常记录日志而非静默吞没
+- `cleanup_expired_tasks` 新增崩溃任务清理（2 小时未完成视为崩溃）
+
 ## [0.0.11] - 2026-08-05
 
 ### Added
