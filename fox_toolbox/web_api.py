@@ -62,66 +62,6 @@ async def _safe_db_ping(db: Optional[Database]) -> Optional[bool]:
         return False
 
 
-async def _build_plugin_status_payload(db: Optional[Database]) -> Dict[str, Any]:
-    """Build plugin status data for dashboard cards."""
-    db_ok = await _safe_db_ping(db)
-    mem_mb = _safe_float_metric("内存", sys_util.get_memory_mb)
-    cpu_pct = _safe_float_metric("CPU", sys_util.get_cpu_percent)
-    uptime = _safe_float_metric("运行时长", sys_util.get_process_uptime)
-
-    metric_degraded = mem_mb <= 0 and cpu_pct <= 0 and uptime <= 0
-
-    if db_ok is None:
-        status = "error"
-        detail = "数据库未初始化"
-        health_score = 0
-    elif not db_ok:
-        status = "error"
-        detail = "数据库连接异常"
-        health_score = 0
-    else:
-        score = 60
-        if mem_mb < 200:
-            score += 20
-        elif mem_mb < 600:
-            score += 15
-        elif mem_mb < 1200:
-            score += 10
-        else:
-            score += 5
-        if cpu_pct < 30:
-            score += 20
-        elif cpu_pct < 60:
-            score += 15
-        elif cpu_pct < 90:
-            score += 10
-        else:
-            score += 5
-        health_score = min(100, score)
-        if mem_mb >= 1200 or cpu_pct >= 90:
-            status = "degraded"
-            detail = "资源占用过高，建议关注"
-        else:
-            status = "healthy"
-            detail = "数据库连接正常"
-
-        if metric_degraded:
-            status = "degraded"
-            detail = "数据库连接正常，资源指标暂不可用"
-            health_score = min(health_score, 80)
-
-    return {
-        "status": status,
-        "detail": detail,
-        "health_score": health_score,
-        "database": "ok" if db_ok else ("uninitialized" if db_ok is None else "error"),
-        "cpu_percent": round(cpu_pct, 1),
-        "memory_mb": round(mem_mb, 1),
-        "uptime_seconds": int(uptime),
-        "schema_version": SCHEMA_VERSION,
-    }
-
-
 async def _build_db_status_payload(db: Optional[Database]) -> Dict[str, Any]:
     db_ok = await _safe_db_ping(db)
     table_count = 0
@@ -133,7 +73,7 @@ async def _build_db_status_payload(db: Optional[Database]) -> Dict[str, Any]:
     }
 
 
-def _serialize_stats_payload(stats, plugin_status: Dict[str, Any], db_status: Dict[str, Any], stats_error: str = "") -> Dict[str, Any]:
+def _serialize_stats_payload(stats, db_status: Dict[str, Any], stats_error: str = "") -> Dict[str, Any]:
     time_range = {}
     if stats.oldest_timestamp:
         time_range["start"] = _format_timestamp(stats.oldest_timestamp)
@@ -150,7 +90,6 @@ def _serialize_stats_payload(stats, plugin_status: Dict[str, Any], db_status: Di
         "newest_timestamp": stats.newest_timestamp,
         "time_range": time_range,
         "db_status": db_status,
-        "plugin_status": plugin_status,
         "schema_version": SCHEMA_VERSION,
     }
     if stats_error:
@@ -399,34 +338,39 @@ async def register_all_web_apis(context, db: Database):
     # ========== Stats APIs ==========
 
     async def api_stats():
-        plugin_status = await _build_plugin_status_payload(db)
         db_status = await _build_db_status_payload(db)
         if not db:
             return jsonify({
                 "success": True,
-                "data": _serialize_stats_payload(MessageStats(), plugin_status, db_status, "数据库未初始化"),
+                "data": _serialize_stats_payload(MessageStats(), db_status, "数据库未初始化"),
             })
         try:
             stats = await db.get_stats()
             return jsonify({
                 "success": True,
-                "data": _serialize_stats_payload(stats, plugin_status, db_status),
+                "data": _serialize_stats_payload(stats, db_status),
             })
         except Exception as e:
             logger.error(f"[FoxToolbox Web] 获取统计失败: {e}", exc_info=True)
             return jsonify({
                 "success": True,
-                "data": _serialize_stats_payload(MessageStats(), plugin_status, db_status, "获取统计数据失败"),
+                "data": _serialize_stats_payload(MessageStats(), db_status, "获取统计数据失败"),
             })
 
     async def api_plugin_status():
-        """插件运行状态与资源占用（健康检查 + 内存/CPU）"""
+        """兼容旧状态接口，返回轻量数据库状态。"""
         try:
-            status_payload = await _build_plugin_status_payload(db)
+            db_status = await _build_db_status_payload(db)
 
             return jsonify({
                 "success": True,
-                "data": status_payload,
+                "data": {
+                    "status": "healthy" if db_status["running"] else "error",
+                    "detail": "数据库连接正常" if db_status["running"] else "数据库未连接",
+                    "database": "ok" if db_status["running"] else "error",
+                    "table_count": db_status["table_count"],
+                    "schema_version": SCHEMA_VERSION,
+                },
             })
         except Exception as e:
             logger.error(f"[FoxToolbox Web] 获取插件状态失败: {e}", exc_info=True)
@@ -435,11 +379,8 @@ async def register_all_web_apis(context, db: Database):
                 "data": {
                     "status": "error",
                     "detail": "状态接口异常",
-                    "health_score": 0,
                     "database": "error",
-                    "cpu_percent": 0.0,
-                    "memory_mb": 0.0,
-                    "uptime_seconds": 0,
+                    "table_count": 0,
                     "schema_version": SCHEMA_VERSION,
                 },
             })

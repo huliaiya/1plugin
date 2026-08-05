@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.8] - 2026-08-05
 
+## [0.1.9] - 2026-08-05
+
+### Changed
+
+- **优化数据库状态卡片的切换体验**：卡片轮换文案从“已创建 X 张表”收紧为“X 张表”，降低卡片宽度抖动与频繁重排的视觉刷新感
+- **仅在 Dashboard 可见时切换卡片文案**：页面切到其他视图或浏览器标签页隐藏时暂停 3 秒轮换，减少无意义 UI 更新
+
+### Performance
+
+- **减轻 Dashboard 首屏负担**：`stats` 接口移除未使用的 `plugin_status` 计算，只保留轻量 `db_status` 数据，减少不必要的数据库探测和资源采集
+
+### Verified
+
+- `PYTHONPATH=/workspace python3 -m pytest -q`
+- `python3 -m compileall fox_toolbox astrbot_plugin_fox_toolbox pages/recorder`
+
+## [0.1.8] - 2026-08-05
+
 ### Added
 
 - **新增数据库状态卡片**：Dashboard 统计卡片区新增“数据库状态”卡片，默认显示“运行中”，每 3 秒切换显示“已创建 X 张表”

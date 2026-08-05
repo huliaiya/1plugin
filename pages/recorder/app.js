@@ -1,5 +1,5 @@
 const bridge = window.AstrBotPluginPage;
-const BUILD_VERSION = '0.1.8';
+const BUILD_VERSION = '0.1.9';
 
 let bridgeReady = false;
 let pluginContext = null;
@@ -384,7 +384,7 @@ function updateDbStatusCard(dbStatus) {
   if (dbStatusMode === 'running') {
     valueEl.textContent = running ? '运行中' : '未连接';
   } else {
-    valueEl.textContent = `已创建 ${tableCount} 张表`;
+    valueEl.textContent = `${tableCount} 张表`;
   }
 
   labelEl.textContent = '数据库状态';
@@ -396,6 +396,7 @@ function updateDbStatusCard(dbStatus) {
 function ensureDbStatusRotation() {
   if (dbStatusTimer) return;
   dbStatusTimer = setInterval(() => {
+    if (currentViewName !== 'dashboard' || document.hidden) return;
     dbStatusMode = dbStatusMode === 'running' ? 'tables' : 'running';
     if (dataCache.dbStatus) updateDbStatusCard(dataCache.dbStatus);
   }, 3000);
