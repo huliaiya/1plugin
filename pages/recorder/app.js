@@ -384,6 +384,16 @@ function clearStatSkeleton(id) {
   }
 }
 
+function clearStatusSkeletons() {
+  ['statusValue', 'healthValue', 'resourceValue'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.classList.contains('loading')) {
+      el.classList.remove('loading');
+      el.textContent = '-';
+    }
+  });
+}
+
 function clearChartSkeleton(id) {
   const el = document.getElementById(id);
   const chartMap = { timelineChart, platformChart, contentTypeChart, platformDetailChart, senderChart, groupChart };
@@ -511,21 +521,7 @@ async function loadDashboardData(force = false) {
         ensureResourceRotation();
       }
     } else {
-      const statusEl = document.getElementById('statusValue');
-      if (statusEl) {
-        statusEl.textContent = '-';
-        statusEl.classList.remove('loading');
-      }
-      const healthEl = document.getElementById('healthValue');
-      if (healthEl) {
-        healthEl.textContent = '-';
-        healthEl.classList.remove('loading');
-      }
-      const resourceVal = document.getElementById('resourceValue');
-      if (resourceVal) {
-        resourceVal.textContent = '-';
-        resourceVal.classList.remove('loading');
-      }
+      clearStatusSkeletons();
       ensureResourceRotation();
     }
 
@@ -534,7 +530,9 @@ async function loadDashboardData(force = false) {
     viewDataLoaded.dashboard = true;
   } catch (e) {
     logError('Failed to load dashboard data:', e);
+    clearStatusSkeletons();
   } finally {
+    clearStatusSkeletons();
     dashboardLoading = false;
   }
 }

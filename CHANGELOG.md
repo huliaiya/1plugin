@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **修复 Dashboard 三张图表不显示**：时间趋势图、内容类型图、平台详情图在后端异常时返回 `success: true` + 空数据，前端拿不到错误信息导致图表区域空白。现改为异常时返回 `success: false`，前端 catch 块显示"暂无数据"占位符和错误原因
 - **修复状态卡片 skeleton 永远不消失**：插件状态/健康度/内存占用三张卡片在 `plugin/status` API 失败时，catch 块只记日志不清 skeleton，导致卡片永远卡在加载动画。现 catch 块正确清除 skeleton 并显示"加载失败"
+- **修复状态卡片 skeleton 安全清除**：新增 `clearStatusSkeletons()` 安全函数，在 `loadDashboardData` 的 `catch`/`finally` 块中兜底清除骨架屏，确保无论 API 成功或失败，状态卡片都不会永远卡在加载动画
 - 后端错误响应不再泄露内部异常详情（统一返回通用错误消息，详细信息仅写入日志）
 
 ### Changed
