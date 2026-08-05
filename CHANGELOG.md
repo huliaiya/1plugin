@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-08-05
+
+### Fixed
+
+- **MySQL 不可用时 WebUI 白屏**：此前 `initialize()` 中 `Database.init()` 连接失败会直接导致整个插件初始化失败，`_register_web_apis()` 不被调用，页面与所有 API 均未注册，前端整页空白。现在初始化失败后仍注册全部 Web API（`db` 传 `None`），页面可正常打开并展示降级状态
+- **数据库连接错误信息透出**：`status`/`stats` 接口的 `db_status` 新增 `error` 字段携带具体连接错误（如 `Can't connect to MySQL server`），前端状态卡片与 dashboard 顶部错误横幅直接展示原因，便于排查配置
+
+### Changed
+
+- **前端资源版本号升级**：Plugin Page 的 `app.js` 与 `style.css` 查询参数升级至 `0.2.1`
+
+### Verified
+
+- `PYTHONPATH=/workspace python3 -m pytest -q`
+- `python3 -m compileall fox_toolbox main.py`
+- `node --check pages/recorder/app.js`
+- `register_all_web_apis(ctx, None)` 注册 30 个 API 成功，`status`/`stats` 返回降级数据并携带 MySQL 错误详情
+
 ## [0.2.0] - 2026-08-05
 
 ### Fixed

@@ -235,6 +235,8 @@ class MessageRecorder(Star):
             self._api = None
             self._media_downloader = None
             logger.error(f"[FoxToolbox] 初始化失败: {e}")
+            # 数据库不可用时仍需注册页面/状态 API，保证 WebUI 可打开并显示错误原因
+            await self._register_web_apis()
 
     def _check_initialized(self) -> bool:
         if not self._initialized:
@@ -337,7 +339,7 @@ class MessageRecorder(Star):
 
     async def _register_web_apis(self):
         try:
-            await register_all_web_apis(self.context, self._db)
+            await register_all_web_apis(self.context, self._db, self._init_error)
             logger.info("[FoxToolbox] Web API 已注册到 AstrBot Dashboard")
         except Exception as e:
             logger.error(f"[FoxToolbox] 注册 Web API 失败: {e}")

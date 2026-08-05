@@ -1,5 +1,5 @@
 const bridge = window.AstrBotPluginPage;
-const BUILD_VERSION = '0.2.0';
+const BUILD_VERSION = '0.2.1';
 
 let bridgeReady = false;
 let pluginContext = null;
@@ -380,12 +380,38 @@ function updateDbStatusCard(dbStatus) {
 
   const running = dbStatus ? (dbStatus.running !== undefined ? !!dbStatus.running : (dbStatus.database === 'ok')) : false;
   const tableCount = dbStatus && Number.isFinite(Number(dbStatus.table_count)) ? Number(dbStatus.table_count) : 0;
+  const dbError = dbStatus && dbStatus.error ? String(dbStatus.error) : '';
 
   valueEl.textContent = running ? `${tableCount}` : '--';
-  labelEl.textContent = '数据表数量';
+  labelEl.textContent = running ? '数据表数量' : '数据库未连接';
   valueEl.classList.remove('loading');
   valueEl.style.color = running ? '#2e7d32' : '#d32f2f';
-  valueEl.setAttribute('title', running ? `当前已创建 ${tableCount} 张数据表` : '数据库未连接');
+  valueEl.setAttribute('title', running ? `当前已创建 ${tableCount} 张数据表` : (dbError || '数据库未连接'));
+
+  showDbErrorBanner(running, dbError);
+}
+
+function showDbErrorBanner(running, dbError) {
+  const dashboard = document.getElementById('view-dashboard');
+  let banner = document.getElementById('dbErrorBanner');
+  if (running) {
+    if (banner) banner.remove();
+    return;
+  }
+  const msg = dbError || '数据库未连接';
+  if (!dashboard) return;
+  if (banner) {
+    banner.textContent = `数据库连接失败：${msg}`;
+    return;
+  }
+  banner = document.createElement('div');
+  banner.id = 'dbErrorBanner';
+  banner.style.cssText = 'margin-bottom:1rem;padding:0.75rem 1rem;border-radius:8px;background:#fdecea;color:#c0392b;border:1px solid #f5c6cb;font-size:0.9rem;word-break:break-all;';
+  banner.textContent = `数据库连接失败：${msg}`;
+  const statsGrid = dashboard.querySelector('.stats-grid');
+  if (statsGrid) {
+    dashboard.insertBefore(banner, statsGrid);
+  }
 }
 
 async function loadDbStatus() {

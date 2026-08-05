@@ -52,14 +52,15 @@ def _safe_float_metric(metric_name: str, getter, default: float = 0.0) -> float:
         return default
 
 
-async def _build_db_status_payload(db: Optional[Database]) -> Dict[str, Any]:
+async def _build_db_status_payload(db: Optional[Database], error: str = "") -> Dict[str, Any]:
     """构造数据库状态数据。以表数量查询结果为准，不依赖额外 ping。"""
     if not db:
-        return {"running": False, "table_count": 0}
+        return {"running": False, "table_count": 0, "error": error or "数据库未初始化"}
     table_count = await db.get_table_count()
     return {
         "running": table_count >= 0,
         "table_count": int(table_count) if table_count >= 0 else 0,
+        "error": error,
     }
 
 
@@ -320,7 +321,7 @@ async def _cleanup_temp_dir() -> None:
     await asyncio.to_thread(_do_cleanup)
 
 
-async def register_all_web_apis(context, db: Database):
+async def register_all_web_apis(context, db: Database, db_error: str = ""):
     await _cleanup_temp_dir()
 
     prefix = f"/{PLUGIN_DIR_NAME}"
@@ -328,7 +329,7 @@ async def register_all_web_apis(context, db: Database):
     # ========== Stats APIs ==========
 
     async def api_stats():
-        db_status = await _build_db_status_payload(db)
+        db_status = await _build_db_status_payload(db, db_error)
         if not db:
             return jsonify({
                 "success": True,
@@ -350,15 +351,16 @@ async def register_all_web_apis(context, db: Database):
     async def api_plugin_status():
         """兼容旧状态接口，返回轻量数据库状态。"""
         try:
-            db_status = await _build_db_status_payload(db)
+            db_status = await _build_db_status_payload(db, db_error)
 
             return jsonify({
                 "success": True,
                 "data": {
                     "status": "healthy" if db_status["running"] else "error",
-                    "detail": "数据库连接正常" if db_status["running"] else "数据库未连接",
+                    "detail": "数据库连接正常" if db_status["running"] else (db_error or "数据库未连接"),
                     "database": "ok" if db_status["running"] else "error",
                     "table_count": db_status["table_count"],
+                    "error": db_status["error"],
                     "schema_version": SCHEMA_VERSION,
                 },
             })
