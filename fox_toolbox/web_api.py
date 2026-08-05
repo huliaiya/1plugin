@@ -312,27 +312,60 @@ async def register_all_web_apis(context, db: Database):
 
     async def api_plugin_status():
         """插件运行状态与资源占用（健康检查 + 内存/CPU）"""
-        db_ok = False
-        if db:
-            db_ok = await db.ping()
-        if db_ok:
-            status = "healthy"
-            detail = "数据库连接正常"
-        else:
-            status = "error"
-            detail = "数据库连接异常"
-        return jsonify({
-            "success": True,
-            "data": {
-                "status": status,
-                "detail": detail,
-                "database": "ok" if db_ok else "error",
-                "cpu_percent": round(sys_util.get_cpu_percent(), 1),
-                "memory_mb": round(sys_util.get_memory_mb(), 1),
-                "uptime_seconds": int(sys_util.get_process_uptime()),
-                "schema_version": SCHEMA_VERSION,
-            },
-        })
+        try:
+            db_ok = False
+            if db:
+                db_ok = await db.ping()
+            mem_mb = sys_util.get_memory_mb()
+            cpu_pct = sys_util.get_cpu_percent()
+            uptime = sys_util.get_process_uptime()
+
+            if not db_ok:
+                status = "error"
+                detail = "数据库连接异常"
+                health_score = 0
+            else:
+                score = 60
+                if mem_mb < 200:
+                    score += 20
+                elif mem_mb < 600:
+                    score += 15
+                elif mem_mb < 1200:
+                    score += 10
+                else:
+                    score += 5
+                if cpu_pct < 30:
+                    score += 20
+                elif cpu_pct < 60:
+                    score += 15
+                elif cpu_pct < 90:
+                    score += 10
+                else:
+                    score += 5
+                health_score = min(100, score)
+                if mem_mb >= 1200 or cpu_pct >= 90:
+                    status = "degraded"
+                    detail = "资源占用过高，建议关注"
+                else:
+                    status = "healthy"
+                    detail = "数据库连接正常"
+
+            return jsonify({
+                "success": True,
+                "data": {
+                    "status": status,
+                    "detail": detail,
+                    "health_score": health_score,
+                    "database": "ok" if db_ok else "error",
+                    "cpu_percent": round(cpu_pct, 1),
+                    "memory_mb": round(mem_mb, 1),
+                    "uptime_seconds": int(uptime),
+                    "schema_version": SCHEMA_VERSION,
+                },
+            })
+        except Exception as e:
+            logger.error(f"[FoxToolbox Web] 获取插件状态失败: {e}", exc_info=True)
+            return jsonify({"success": False, "error": "获取插件状态失败"})
 
     async def api_stats_timeline():
         if not db:

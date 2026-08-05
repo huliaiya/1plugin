@@ -491,6 +491,7 @@ async function loadDashboardData(force = false) {
         const statusData = extractData(statusResult);
         dataCache.pluginStatus = statusData;
         updateStatusCard(statusData);
+        updateHealthCard(statusData);
         updateResourceCard(statusData);
         ensureResourceRotation();
       } catch (e) {
@@ -502,11 +503,17 @@ async function loadDashboardData(force = false) {
         statusEl.textContent = '-';
         statusEl.classList.remove('loading');
       }
+      const healthEl = document.getElementById('healthValue');
+      if (healthEl) {
+        healthEl.textContent = '-';
+        healthEl.classList.remove('loading');
+      }
       const resourceVal = document.getElementById('resourceValue');
       if (resourceVal) {
         resourceVal.textContent = '-';
         resourceVal.classList.remove('loading');
       }
+      ensureResourceRotation();
     }
 
     updateTimeRangeDisplay(currentTimeRange);
@@ -578,6 +585,15 @@ function updateStatusCard(data) {
   el.setAttribute('title', data.detail || '');
 }
 
+function updateHealthCard(data) {
+  const el = document.getElementById('healthValue');
+  if (!el) return;
+  const score = Math.max(0, Math.min(100, data.health_score || 0));
+  el.textContent = score + ' / 100';
+  el.classList.remove('loading');
+  el.style.color = score >= 90 ? '#2e7d32' : (score >= 60 ? '#f9a825' : '#d32f2f');
+}
+
 function updateResourceCard(data) {
   const val = document.getElementById('resourceValue');
   const label = document.getElementById('resourceLabel');
@@ -607,6 +623,7 @@ function ensureResourceRotation() {
       const data = extractData(raw);
       dataCache.pluginStatus = data;
       updateStatusCard(data);
+      updateHealthCard(data);
       updateResourceCard(data);
     } catch (e) {
       logError('Failed to refresh plugin status:', e);

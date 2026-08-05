@@ -664,231 +664,152 @@ class MessageRecorder(Star):
     def msg_record():
         pass
 
+    def _cmd_check(self, event):
+        if not self._check_commands_enabled(event) or not self._api:
+            return False
+        return True
+
+    def _fmt_msgs(self, messages, header, limit=50):
+        lines = [header]
+        for msg in messages[:limit]:
+            ts = time.strftime("%m-%d %H:%M", time.localtime(msg.timestamp / 1000))
+            c = (msg.message_str or "[非文本消息]")[:50]
+            lines.append(f"[{ts}] {msg.sender_name or msg.sender_id}: {c}")
+        return "\n".join(lines)
+
     @msg_record.command("stats")
     async def cmd_stats(self, event: AstrMessageEvent):
-        if not self._check_commands_enabled(event):
+        if not self._cmd_check(event):
+            if not self._api: yield event.plain_result("数据库未初始化")
             return
-        if not self._api:
-            yield event.plain_result("数据库未初始化")
+        try:
+            stats = await self._api.get_stats()
+        except Exception as e:
+            yield event.plain_result(f"获取统计失败: {e}")
             return
-
-        stats = await self._api.get_stats()
-
-        lines = [
-            "📊 消息记录统计",
-            f"总记录数: {stats.total_count}",
-            f"群聊消息: {stats.group_message_count}",
-            f"私聊消息: {stats.private_message_count}",
-        ]
-
+        lines = [f"📊 消息记录统计\n总记录数: {stats.total_count}\n群聊消息: {stats.group_message_count}\n私聊消息: {stats.private_message_count}"]
         if stats.channel_message_count:
             lines.append(f"频道消息: {stats.channel_message_count}")
-
         if stats.platform_stats:
-            lines.append("平台分布:")
-            for platform, count in stats.platform_stats.items():
-                lines.append(f"  - {platform}: {count}")
-
+            lines.append("平台分布:\n" + "\n".join(f"  - {p}: {c}" for p, c in stats.platform_stats.items()))
         if stats.oldest_timestamp:
-            oldest_time = time.strftime(
-                "%Y-%m-%d %H:%M:%S",
-                time.localtime(stats.oldest_timestamp / 1000)
-            )
-            lines.append(f"最早消息: {oldest_time}")
-
+            lines.append("最早消息: " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stats.oldest_timestamp / 1000)))
         if stats.newest_timestamp:
-            newest_time = time.strftime(
-                "%Y-%m-%d %H:%M:%S",
-                time.localtime(stats.newest_timestamp / 1000)
-            )
-            lines.append(f"最新消息: {newest_time}")
-
+            lines.append("最新消息: " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stats.newest_timestamp / 1000)))
         yield event.plain_result("\n".join(lines))
 
     @msg_record.command("cleanup")
     async def cmd_cleanup(self, event: AstrMessageEvent):
-        if not self._check_commands_enabled(event):
+        if not self._cmd_check(event):
+            if not self._api: yield event.plain_result("数据库未初始化")
             return
-        if not self._api:
-            yield event.plain_result("数据库未初始化")
+        try:
+            result = await self._do_cleanup()
+        except Exception as e:
+            yield event.plain_result(f"清理失败: {e}")
             return
-
-        result = await self._do_cleanup()
-        total = result["by_age"] + result["by_limit"]
-
-        yield event.plain_result(f"✅ 已清理 {total} 条消息记录")
+        yield event.plain_result(f"✅ 已清理 {result['by_age'] + result['by_limit']} 条消息记录")
 
     @msg_record.command("query")
-    async def cmd_query(self, event: AstrMessageEvent, sender: str = "", limit: int = 10):
-        if not self._check_commands_enabled(event):
+    async def cmd_query(self, event: AstrMessageEvent, sender_id: str = "", limit: int = 10):
+        if not self._cmd_check(event):
+            if not self._api: yield event.plain_result("数据库未初始化")
             return
-        if not self._api:
-            yield event.plain_result("数据库未初始化")
+        limit = max(1, min(limit, 50))
+        try:
+            msgs = await self._api.query(sender_id=sender_id, limit=limit)
+        except Exception as e:
+            yield event.plain_result(f"查询失败: {e}")
             return
-
-        if limit > 50:
-            limit = 50
-
-        messages = await self._api.query(sender_id=sender, limit=limit)
-
-        if not messages:
+        if not msgs:
             yield event.plain_result("未找到消息记录")
             return
-
-        lines = [f"📝 查询到 {len(messages)} 条消息:"]
-        for msg in messages:
-            time_str = time.strftime(
-                "%m-%d %H:%M",
-                time.localtime(msg.timestamp / 1000)
-            )
-            content = msg.message_str or "[非文本消息]"
-            if len(content) > 50:
-                content = content[:50] + "..."
-            lines.append(f"[{time_str}] {msg.sender_name or msg.sender_id}: {content}")
-
-        yield event.plain_result("\n".join(lines))
+        yield event.plain_result(self._fmt_msgs(msgs, f"📝 查询到 {len(msgs)} 条消息:"))
 
     @msg_record.command("search")
     async def cmd_search(self, event: AstrMessageEvent, keyword: str, limit: int = 10):
-        if not self._check_commands_enabled(event):
+        if not self._cmd_check(event):
+            if not self._api: yield event.plain_result("数据库未初始化")
             return
-        if not self._api:
-            yield event.plain_result("数据库未初始化")
+        limit = max(1, min(limit, 50))
+        try:
+            msgs = await self._api.search(keyword, limit=limit)
+        except Exception as e:
+            yield event.plain_result(f"搜索失败: {e}")
             return
-
-        if limit > 50:
-            limit = 50
-
-        messages = await self._api.search(keyword, limit=limit)
-
-        if not messages:
+        if not msgs:
             yield event.plain_result(f"未找到包含 '{keyword}' 的消息")
             return
-
-        lines = [f"🔍 找到 {len(messages)} 条包含 '{keyword}' 的消息:"]
-        for msg in messages:
-            time_str = time.strftime(
-                "%m-%d %H:%M",
-                time.localtime(msg.timestamp / 1000)
-            )
-            content = msg.message_str or "[非文本消息]"
-            lines.append(f"[{time_str}] {msg.sender_name or msg.sender_id}: {content}")
-
-        yield event.plain_result("\n".join(lines))
+        yield event.plain_result(self._fmt_msgs(msgs, f"🔍 找到 {len(msgs)} 条包含 '{keyword}' 的消息:"))
 
     @msg_record.command("help")
     async def cmd_help(self, event: AstrMessageEvent):
         if not self._check_commands_enabled(event):
             return
-        help_text = """📖 消息记录器帮助
+        yield event.plain_result("""📖 消息记录器帮助
 
 📊 统计与管理:
 /msg_record stats - 查看统计信息
-/msg_record cleanup - 手动清理
+/msg_record cleanup - 手动清理过期消息
 
 📝 时间查询:
-/msg_record today - 查看今天的消息
-/msg_record yesterday - 查看昨天的消息
-/msg_record history <时间范围> - 按时间查询
-  时间范围支持: last7d、last30d、week、month
-  或日期: 2024-01-01、2024-01-01~2024-01-15
+/msg_record today [limit] - 查看今天的消息
+/msg_record yesterday [limit] - 查看昨天的消息
+/msg_record history [time_range] [limit] - 按时间查询
+  时间范围: last7d、last30d、week、month 或日期如 2024-01-01
 
-🔍 其他查询:
-/msg_record query [sender_id] [limit] - 查询消息
-/msg_record search <关键词> [limit] - 搜索消息
+🔍 查询与搜索:
+/msg_record query [sender_id] [limit] - 按发送者查询消息
+/msg_record search <keyword> [limit] - 全文搜索消息
 
-其他插件可通过 get_api() 方法调用查询接口。"""
-        yield event.plain_result(help_text)
+选项: limit 默认 10，最大 50""")
 
     @msg_record.command("today")
     async def cmd_today(self, event: AstrMessageEvent, limit: int = 20):
-        if not self._check_commands_enabled(event):
+        if not self._cmd_check(event):
+            if not self._api: yield event.plain_result("数据库未初始化")
             return
-        if not self._api:
-            yield event.plain_result("数据库未初始化")
+        limit = max(1, min(limit, 50))
+        try:
+            msgs = await self._api.get_today(limit=limit)
+        except Exception as e:
+            yield event.plain_result(f"查询失败: {e}")
             return
-
-        if limit > 50:
-            limit = 50
-
-        messages = await self._api.get_today(limit=limit)
-
-        if not messages:
+        if not msgs:
             yield event.plain_result("今天暂无消息记录")
             return
-
-        lines = [f"📅 今天共 {len(messages)} 条消息:"]
-        for msg in messages:
-            time_str = time.strftime(
-                "%H:%M",
-                time.localtime(msg.timestamp / 1000)
-            )
-            content = msg.message_str or "[非文本消息]"
-            if len(content) > 50:
-                content = content[:50] + "..."
-            lines.append(f"[{time_str}] {msg.sender_name or msg.sender_id}: {content}")
-
-        yield event.plain_result("\n".join(lines))
+        yield event.plain_result(self._fmt_msgs(msgs, f"📅 今天共 {len(msgs)} 条消息:"))
 
     @msg_record.command("yesterday")
     async def cmd_yesterday(self, event: AstrMessageEvent, limit: int = 20):
-        if not self._check_commands_enabled(event):
+        if not self._cmd_check(event):
+            if not self._api: yield event.plain_result("数据库未初始化")
             return
-        if not self._api:
-            yield event.plain_result("数据库未初始化")
+        limit = max(1, min(limit, 50))
+        try:
+            msgs = await self._api.get_yesterday(limit=limit)
+        except Exception as e:
+            yield event.plain_result(f"查询失败: {e}")
             return
-
-        if limit > 50:
-            limit = 50
-
-        messages = await self._api.get_yesterday(limit=limit)
-
-        if not messages:
+        if not msgs:
             yield event.plain_result("昨天暂无消息记录")
             return
-
-        lines = [f"📅 昨天共 {len(messages)} 条消息:"]
-        for msg in messages:
-            time_str = time.strftime(
-                "%H:%M",
-                time.localtime(msg.timestamp / 1000)
-            )
-            content = msg.message_str or "[非文本消息]"
-            if len(content) > 50:
-                content = content[:50] + "..."
-            lines.append(f"[{time_str}] {msg.sender_name or msg.sender_id}: {content}")
-
-        yield event.plain_result("\n".join(lines))
+        yield event.plain_result(self._fmt_msgs(msgs, f"📅 昨天共 {len(msgs)} 条消息:"))
 
     @msg_record.command("history")
     async def cmd_history(self, event: AstrMessageEvent, time_range: str = "week", limit: int = 30):
-        if not self._check_commands_enabled(event):
+        if not self._cmd_check(event):
+            if not self._api: yield event.plain_result("数据库未初始化")
             return
-        if not self._api:
-            yield event.plain_result("数据库未初始化")
+        limit = max(1, min(limit, 50))
+        try:
+            start_time, end_time = parse_time_range(time_range)
+            time_desc = format_time_range(start_time, end_time)
+            msgs = await self._api.query(time=time_range, limit=limit)
+        except Exception as e:
+            yield event.plain_result(f"查询失败: {e}")
             return
-
-        if limit > 50:
-            limit = 50
-
-        start_time, end_time = parse_time_range(time_range)
-        time_desc = format_time_range(start_time, end_time)
-
-        messages = await self._api.query(time=time_range, limit=limit)
-
-        if not messages:
+        if not msgs:
             yield event.plain_result(f"在 {time_desc} 期间暂无消息记录")
             return
-
-        lines = [f"📅 {time_desc} 共 {len(messages)} 条消息:"]
-        for msg in messages:
-            time_str = time.strftime(
-                "%m-%d %H:%M",
-                time.localtime(msg.timestamp / 1000)
-            )
-            content = msg.message_str or "[非文本消息]"
-            if len(content) > 50:
-                content = content[:50] + "..."
-            lines.append(f"[{time_str}] {msg.sender_name or msg.sender_id}: {content}")
-
-        yield event.plain_result("\n".join(lines))
+        yield event.plain_result(self._fmt_msgs(msgs, f"📅 {time_desc} 共 {len(msgs)} 条消息:"))
