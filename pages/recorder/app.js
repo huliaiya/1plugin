@@ -1166,19 +1166,20 @@ async function downloadExportFile(taskId) {
     } else {
       if (progressEl) progressEl.innerHTML = `<p><span class="inline-spinner"></span>正在准备下载...</p>`;
       const result = await apiGet('export/download_data', { task_id: taskId });
-      if (!result || !result.base64) {
+      const data = extractData(result);
+      if (!data || !data.base64) {
         throw new Error('未获取到文件数据');
       }
-      const binaryStr = atob(result.base64);
+      const binaryStr = atob(data.base64);
       const bytes = new Uint8Array(binaryStr.length);
       for (let i = 0; i < binaryStr.length; i++) {
         bytes[i] = binaryStr.charCodeAt(i);
       }
-      const blob = new Blob([bytes], { type: result.mimetype || 'application/octet-stream' });
+      const blob = new Blob([bytes], { type: data.mimetype || 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = result.filename || 'download.bin';
+      a.download = data.filename || 'download.bin';
       document.body.appendChild(a);
       a.click();
       a.remove();

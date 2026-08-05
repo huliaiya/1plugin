@@ -152,7 +152,7 @@ class TestConstants:
         assert PLUGIN_DIR_NAME == "astrbot_plugin_fox_toolbox"
 
     def test_schema_version(self):
-        assert SCHEMA_VERSION == 2
+        assert SCHEMA_VERSION == 3
 
     def test_valid_message_types(self):
         assert "group" in VALID_MESSAGE_TYPES

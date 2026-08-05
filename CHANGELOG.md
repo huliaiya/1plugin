@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.8] - 2026-08-05
+
+### Fixed
+
+- **修复 WebUI 小文件导出下载失败**：`downloadExportFile` 读取 `export/download_data` 响应时缺少 `extractData()`，导致 `base64` 字段始终取不到，≤50MB 的文件下载必定失败；已改用 `extractData(result)` 后再读取 `data.base64`/`data.mimetype`/`data.filename`
+- **修复 `test_schema_version` 测试断言过时**：`SCHEMA_VERSION` 已升级至 3，测试断言仍为 2，已同步更新
+
 ## [0.0.7] - 2026-08-05
 
 ### Added

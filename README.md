@@ -551,6 +551,11 @@ ruff format .
 
 ## 📝 更新日志
 
+### v0.0.8（2026-08-05）
+
+- 修复 WebUI 小文件导出下载失败（`downloadExportFile` 缺少 `extractData()`，导致 base64 下载必定失败）
+- 修复 `test_schema_version` 测试断言过时（`SCHEMA_VERSION` 已升级至 3，断言仍为 2）
+
 ### v0.0.7（2026-08-05）
 
 - WebUI 全面响应式自适应：手机/平板/电脑三套断点完美适配
