@@ -39,6 +39,14 @@ Entries discovered by the Agent during task execution should follow this format:
   - 每次修改代码后必须递增版本号（metadata.yaml 的 version，小版本 +1）
   - 文档更新和版本号更新缺一不可，完成代码修改后立即执行
 
+[User Instruction Summary]
+- Date: 2026-08-05
+- Context: 用户纠正版本号写法：0.1.13 应进位为 0.2.0
+- Instructions:
+  - 版本号规范：patch（第三位）达到或超过 10 时，进位到 minor（第二位 +1）并将第三位置 0，不使用 0.1.13 这种写法
+  - 示例：0.1.12 的下一个版本是 0.2.0，而不是 0.1.13
+  - 版本号改动需同时同步 metadata.yaml、app.js BUILD_VERSION、index.html `?v=`、CHANGELOG.md、README.md
+
 [Project Knowledge Summary]
 - Date: 2026-08-05
 - Context: Discovered by Agent while performing Dashboard 状态卡片修复与可运行性验证

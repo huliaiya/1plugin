@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.13] - 2026-08-05
+## [0.2.0] - 2026-08-05
 
 ### Fixed
 
@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **消息时间趋势图布局优化**：压缩图表卡片高度（桌面 420→340px、平板 280→240px、手机 250→210px），ECharts 绘图区下移并收紧底部留白（`top: 46` / `bottom: 2%`），图例紧凑排布，消除图表下方大片空白
-- **前端资源版本号升级**：Plugin Page 的 `app.js` 与 `style.css` 查询参数升级至 `0.1.13`
+- **前端资源版本号升级**：Plugin Page 的 `app.js` 与 `style.css` 查询参数升级至 `0.2.0`
 
 ### Verified
 
