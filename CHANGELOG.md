@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-08-05
+
+### Fixed
+
+- **旧版 `web_api.py` 与新版 `main.py` 混用时注册崩溃**：`register_all_web_apis` 恢复为 2 参数签名，初始化失败原因改由 `context.fox_toolbox_db_error` 透传，避免 `takes 2 positional arguments but 3 were given` 导致页面/API 全部未注册
+- **数据库连接错误信息透出**：`status`/`stats` 接口的 `db_status` 携带具体连接错误（如 `Can't connect to MySQL server`），前端状态卡片与 dashboard 顶部横幅直接展示原因
+
+### Changed
+
+- **前端资源版本号升级**：Plugin Page 的 `app.js` 与 `style.css` 查询参数升级至 `0.2.2`
+
+### Verified
+
+- `PYTHONPATH=/workspace python3 -m pytest -q`（212 passed / 71 skipped）
+- `python3 -m compileall fox_toolbox main.py`
+- `node --check pages/recorder/app.js`
+- `register_all_web_apis(ctx, None)` 2 参数签名注册 30 个 API 成功，status/stats 降级数据携带 MySQL 错误详情
+
 ## [0.2.1] - 2026-08-05
 
 ### Fixed

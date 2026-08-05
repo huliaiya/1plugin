@@ -552,6 +552,12 @@ ruff format .
 
 ## 📝 更新日志
 
+### v0.2.2（2026-08-05）
+
+- 修复旧版 `web_api.py` 与新版 `main.py` 混用时 `register_all_web_apis` 参数不匹配崩溃，页面/API 不再因版本不同步而全部未注册
+- `status`/`stats` 接口的 `db_status` 携带具体 MySQL 连接错误，前端状态卡片与顶部横幅直接展示失败原因
+- Plugin Page 前端资源版本号升级到 `0.2.2`
+
 ### v0.2.1（2026-08-05）
 
 - 修复 MySQL 不可用时 WebUI 整页空白：初始化失败后仍注册全部 Web API，页面可打开并显示降级状态

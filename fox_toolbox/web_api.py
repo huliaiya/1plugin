@@ -321,10 +321,12 @@ async def _cleanup_temp_dir() -> None:
     await asyncio.to_thread(_do_cleanup)
 
 
-async def register_all_web_apis(context, db: Database, db_error: str = ""):
+async def register_all_web_apis(context, db: Database):
     await _cleanup_temp_dir()
 
     prefix = f"/{PLUGIN_DIR_NAME}"
+
+    db_error = getattr(context, "fox_toolbox_db_error", "")
 
     # ========== Stats APIs ==========
 
