@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2026-08-06
+
+### Changed
+
+- **液态玻璃质感增强**：卡片边缘折射光晕改用独立大图层向外显著扩散（扩散半径 _PX(14)、外溢 _PX(18)），形成明显的 accent 色彩色散感，逼近 Apple Liquid Glass 效果
+- **通透度提升**：玻璃填充透明度由 178 降至 108，背景彩色光斑更易透过卡片显现
+- **背景光斑加丰富**：新增两组彩色光斑（青绿/紫），饱和度提升，为玻璃透出提供更丰富的色彩
+- **高光与描边强化**：顶部高光不透明度提升、双层内描边内外亮度差加大，增强玻璃厚度感
+
+### Verified
+
+- `python3 -m compileall fox_toolbox main.py` 通过
+- 图片视觉审查确认折射彩边光晕明显增强、文字可读性良好
+- `PYTHONPATH=/workspace python3 -m pytest -q` 与基线一致（10 failed, 202 passed, 71 errors，无回归）
+
 ## [0.2.4] - 2026-08-06
 
 ### Changed

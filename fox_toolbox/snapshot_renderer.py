@@ -51,9 +51,10 @@ _TEXT = (30, 41, 59)
 _TEXT_LIGHT = (100, 116, 139)
 _TEXT_WHITE = (255, 255, 255)
 
-_GLASS_FILL = (255, 255, 255, 178)
-_GLASS_BORDER = (255, 255, 255, 200)
-_GLASS_HIGHLIGHT = (255, 255, 255, 96)
+_GLASS_FILL = (255, 255, 255, 108)
+_GLASS_BORDER = (255, 255, 255, 225)
+_GLASS_HIGHLIGHT = (255, 255, 255, 135)
+_GLASS_EDGE_GLOW = 220
 _TRACK = (226, 232, 240, 210)
 
 _CHART_COLORS = [
@@ -252,7 +253,7 @@ def _round_rect(draw, xy, radius, fill=None, outline=None, width=1):
 
 
 def _make_background(size) -> Image.Image:
-    """柔和渐变 + 光斑背景。"""
+    """柔和渐变 + 彩色光斑背景，为玻璃卡片提供透出内容。"""
     w, h = size
     small = Image.new("RGB", (max(w, 1), 2))
     sp = small.load()
@@ -263,14 +264,16 @@ def _make_background(size) -> Image.Image:
     overlay = Image.new("RGBA", size, (0, 0, 0, 0))
     od = ImageDraw.Draw(overlay)
     blobs = [
-        (int(w * 0.12), int(h * 0.08), int(w * 0.28), (129, 212, 250, 70)),
-        (int(w * 0.88), int(h * 0.05), int(w * 0.24), (196, 181, 253, 55)),
-        (int(w * 0.78), int(h * 0.62), int(w * 0.30), (110, 231, 183, 50)),
-        (int(w * 0.20), int(h * 0.85), int(w * 0.26), (251, 207, 232, 60)),
+        (int(w * 0.12), int(h * 0.08), int(w * 0.30), (129, 212, 250, 95)),
+        (int(w * 0.88), int(h * 0.05), int(w * 0.26), (196, 181, 253, 85)),
+        (int(w * 0.78), int(h * 0.62), int(w * 0.32), (110, 231, 183, 80)),
+        (int(w * 0.20), int(h * 0.85), int(w * 0.28), (251, 207, 232, 85)),
+        (int(w * 0.50), int(h * 0.42), int(w * 0.22), (167, 243, 208, 60)),
+        (int(w * 0.62), int(h * 0.18), int(w * 0.20), (196, 181, 253, 55)),
     ]
     for cx, cy, r, color in blobs:
         od.ellipse([cx - r, cy - r, cx + r, cy + r], fill=color)
-    overlay = overlay.filter(ImageFilter.GaussianBlur(_PX(90)))
+    overlay = overlay.filter(ImageFilter.GaussianBlur(_PX(85)))
     bg.alpha_composite(overlay)
     return bg
 
@@ -279,13 +282,34 @@ def _make_background(size) -> Image.Image:
 
 
 def _draw_glass_card(img: Image.Image, blurred_bg: Image.Image, xy, title: Optional[str] = None, accent: Optional[Tuple] = None):
-    """绘制毛玻璃卡片，返回内容区 (x0, y0, x1, y1)。"""
+    """绘制液态玻璃卡片，返回内容区 (x0, y0, x1, y1)。
+
+    质感层次（由外到内）：
+      1. 外层折射光晕：accent 色彩沿卡片边缘向外柔光扩散，模拟玻璃色散
+      2. 毛玻璃本体：从预模糊背景取区 + 半透白提亮，模拟 backdrop-filter
+      3. 顶部高光渐变：模拟环境光从上方照射
+      4. 双层内描边：外层白色亮边 + 内层暗边，形成玻璃厚度感
+    """
     x0, y0, x1, y1 = xy
-    pad = _PX(6)
+    cw, ch = x1 - x0, y1 - y0
+    pad = _PX(8)
+
+    # 1. 外层折射光晕：独立大图层，向外显著扩散后直接贴到主图
+    if accent:
+        glow_pad = _PX(18)
+        glow_layer = Image.new("RGBA", (cw + glow_pad * 2, ch + glow_pad * 2), (0, 0, 0, 0))
+        ImageDraw.Draw(glow_layer).rounded_rectangle(
+            [glow_pad - _PX(3), glow_pad - _PX(3),
+             glow_pad + cw + _PX(3), glow_pad + ch + _PX(3)],
+            radius=_CARD_RADIUS + _PX(2), fill=accent + (_GLASS_EDGE_GLOW,),
+        )
+        glow = glow_layer.filter(ImageFilter.GaussianBlur(_PX(14)))
+        img.paste(glow, (x0 - glow_pad, y0 - glow_pad), glow)
+
+    # 2. 毛玻璃本体：从预模糊背景取区 + 提亮
     region = blurred_bg.crop((x0 - pad, y0 - pad, x1 + pad, y1 + pad))
     bright = Image.new("RGBA", region.size, _GLASS_FILL)
     region.alpha_composite(bright)
-
     mask = Image.new("L", region.size, 0)
     ImageDraw.Draw(mask).rounded_rectangle(
         [pad, pad, region.width - pad, region.height - pad],
@@ -293,17 +317,19 @@ def _draw_glass_card(img: Image.Image, blurred_bg: Image.Image, xy, title: Optio
     )
     img.paste(region, (x0 - pad, y0 - pad), mask)
 
-    # 顶部高光渐变 + 内描边 + 边缘光（合并到局部图层一次 paste）
-    deco = Image.new("RGBA", (x1 - x0, y1 - y0), (0, 0, 0, 0))
+    # 3+4. 顶部高光 + 双层内描边（局部图层一次 paste）
+    deco = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
     dd = ImageDraw.Draw(deco)
-    hl_h = int((y1 - y0) * 0.45)
+    hl_h = int(ch * 0.5)
     for yy in range(hl_h):
         t = yy / max(hl_h - 1, 1)
-        a = int(_GLASS_HIGHLIGHT[3] * (1 - t) * 0.7)
-        dd.line([(0, yy), (x1 - x0, yy)], fill=(255, 255, 255, a))
-    _round_rect(dd, (0, 0, x1 - x0, y1 - y0), _CARD_RADIUS, outline=_GLASS_BORDER, width=_PX(2))
+        a = int(_GLASS_HIGHLIGHT[3] * (1 - t) ** 1.5)
+        dd.line([(0, yy), (cw, yy)], fill=(255, 255, 255, a))
+    _round_rect(dd, (0, 0, cw, ch), _CARD_RADIUS, outline=_GLASS_BORDER, width=_PX(2))
+    _round_rect(dd, (_PX(1), _PX(1), cw - _PX(1), ch - _PX(1)), _CARD_RADIUS - 1,
+                outline=(255, 255, 255, 70), width=_PX(1))
     if accent:
-        _round_rect(dd, (0, 0, _PX(3), y1 - y0), _CARD_RADIUS, fill=accent + (90,))
+        _round_rect(dd, (_PX(1), _PX(2), _PX(4), ch - _PX(2)), _PX(2), fill=accent + (140,))
     img.paste(deco, (x0, y0), deco)
 
     if title:
