@@ -584,6 +584,108 @@ def _draw_ranking(img, xy, items: List[Dict], name_key: str, count_key: str, col
         _draw_text(draw, (x1 - cw, ry + _PX(3)), count_str, f_count, _TEXT, img)
 
 
+_PLATFORM_LABELS = {
+    "telegram": "Telegram",
+    "discord": "Discord",
+    "qq_official": "QQ 官方",
+    "qq_private": "QQ 私有",
+    "wechat": "微信",
+}
+
+
+def _draw_platform_donut(img, xy, platform_stats: Dict[str, int]):
+    """平台分布圆环图（对齐 WebUI platformChart：饼图 + 右侧图例）。
+
+    platform_stats: {platform_key: count}
+    """
+    x0, y0, x1, y1 = xy
+    inner_w = x1 - x0
+    inner_h = y1 - y0
+    draw = ImageDraw.Draw(img)
+    if not platform_stats:
+        _draw_text(draw, (x0 + inner_w // 2 - _PX(50), y0 + inner_h // 2), "暂无平台数据", _get_font(_PX(15)), _TEXT_LIGHT, img)
+        return
+
+    items = sorted(platform_stats.items(), key=lambda kv: kv[1], reverse=True)
+    total = sum(v for _, v in items) or 1
+
+    # 圆环布局：左侧圆环，右侧图例（对齐 WebUI center 40% / legend right 5%）
+    donut_d = min(inner_h, inner_w * 0.5)
+    donut_r_out = donut_d / 2
+    donut_r_in = donut_r_out * 0.55
+    cx = x0 + donut_r_out + _PX(8)
+    cy = y0 + inner_h / 2
+
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
+
+    start = -90.0
+    for idx, (plat, val) in enumerate(items):
+        color = _CHART_COLORS[idx % len(_CHART_COLORS)]
+        sweep = val * 360.0 / total
+        if sweep <= 0:
+            continue
+        ld.pieslice(
+            [cx - donut_r_out, cy - donut_r_out, cx + donut_r_out, cy + donut_r_out],
+            start, start + sweep, fill=color + (255,),
+        )
+        start += sweep
+
+    # 中心镂空：用 alpha 0 擦除内圆区域，形成真正的圆环
+    mask = Image.new("L", layer.size, 255)
+    ImageDraw.Draw(mask).ellipse(
+        [cx - donut_r_in, cy - donut_r_in, cx + donut_r_in, cy + donut_r_in],
+        fill=0,
+    )
+    layer.putalpha(mask)
+    img.alpha_composite(layer)
+
+    # 中心总量文字
+    f_total = _get_font(_PX(26), bold=True)
+    f_total_lbl = _get_font(_PX(13))
+    total_str = f"{total:,}"
+    tw = _text_width(draw, total_str, f_total)
+    _draw_gradient_text(draw, (cx - tw / 2, cy - _PX(22)), total_str, f_total, _GRADIENT_BLUE, img)
+    lw = _text_width(draw, "总消息", f_total_lbl)
+    _draw_text(draw, (cx - lw / 2, cy + _PX(12)), "总消息", f_total_lbl, _TEXT_LIGHT, img)
+
+    # 右侧图例
+    f_name = _get_font(_PX(16))
+    f_count = _get_font(_PX(15))
+    row_h = _PX(38)
+    legend_x = x0 + donut_d + _PX(40)
+    legend_w = x1 - legend_x
+    max_rows = max(1, int(inner_h // row_h))
+    for idx, (plat, val) in enumerate(items[:max_rows]):
+        ry = y0 + idx * row_h
+        if ry + row_h > y1:
+            break
+        color = _CHART_COLORS[idx % len(_CHART_COLORS)]
+        label = _PLATFORM_LABELS.get(plat, plat or "未知")
+        pct = val * 100 / total
+
+        dot = Image.new("RGBA", (inner_w, row_h), (0, 0, 0, 0))
+        dd = ImageDraw.Draw(dot)
+        dd.ellipse([0, _PX(6), _PX(16), _PX(6) + _PX(16)], fill=color + (255,))
+        img.paste(dot, (legend_x, ry), dot)
+        _draw_text(draw, (legend_x + _PX(24), ry + _PX(2)), label, f_name, _TEXT, img)
+
+        bar_x = legend_x + _PX(24)
+        bar_y = ry + _PX(26)
+        bar_w = legend_w - _PX(24)
+        bar = Image.new("RGBA", (bar_w, _PX(7)), (0, 0, 0, 0))
+        bd = ImageDraw.Draw(bar)
+        _round_rect(bd, (0, 0, bar_w, _PX(7)), _PX(4), fill=_TRACK)
+        fill_w = int(bar_w * (val / total))
+        if fill_w > 0:
+            _round_rect(bd, (0, 0, fill_w, _PX(7)), _PX(4), fill=color + (255,))
+        img.paste(bar, (bar_x, bar_y), bar)
+
+        txt = f"{val:,} ({pct:.1f}%)"
+        tw2 = _text_width(draw, txt, f_count)
+        _draw_text(draw, (x1 - tw2, ry + _PX(3)), txt, f_count, _TEXT_LIGHT, img)
+
+
 def _draw_content_types(img, xy, content_types: List[Dict]):
     x0, y0, x1, y1 = xy
     inner_w = x1 - x0
@@ -638,6 +740,7 @@ def render_snapshot(
     sender_ranking: List[Dict],
     group_ranking: List[Dict],
     content_types: List[Dict],
+    platform_stats: Optional[Dict[str, int]] = None,
     generated_at: Optional[float] = None,
 ) -> bytes:
     """渲染仪表盘快照 PNG，返回 PNG 字节数据。
@@ -649,12 +752,15 @@ def render_snapshot(
         sender_ranking: 发送者排行 [{"sender_id","sender_name","platform","count"}]
         group_ranking: 群组排行 [{"group_id","platform","count","sender_count"}]
         content_types: 内容类型统计 [{"type","label","count"}]
+        platform_stats: 平台分布统计 {platform: count}，默认取 stats.platform_stats
         generated_at: 生成时间戳，默认当前
     """
     if generated_at is None:
         generated_at = time.time()
+    if platform_stats is None:
+        platform_stats = stats.platform_stats or {}
 
-    canvas_h = _PX(1900)
+    canvas_h = _PX(2200)
     img = _make_background((_W_FULL, canvas_h))
     # 预模糊背景一次，供所有毛玻璃卡片复用（对齐 backdrop-filter blur(14px)）
     blurred_bg = img.filter(ImageFilter.GaussianBlur(_PX(14)))
@@ -674,6 +780,16 @@ def render_snapshot(
         timeline,
     )
     y += chart_h + _PX(48) + _PX(18)
+
+    # 平台分布卡片（对齐 WebUI platformChart 圆环图）
+    plat_h = _PX(280)
+    _draw_glass_card(img, blurred_bg, (_PX(_PADDING), y, _W_FULL - _PX(_PADDING), y + plat_h), title="平台分布", accent=_PRIMARY_DARK)
+    _draw_platform_donut(
+        img,
+        (_PX(_PADDING) + _PX(20), y + _PX(66), _W_FULL - _PX(_PADDING) - _PX(20), y + plat_h - _PX(16)),
+        platform_stats,
+    )
+    y += plat_h + _PX(18)
 
     # 发送者 + 群组排行
     gap = _PX(_CARD_GAP)

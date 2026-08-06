@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.8] - 2026-08-06
+
+### Added
+
+- **快照新增"平台分布"卡片（对齐 WebUI）**：`_draw_platform_donut` 渲染圆环图（甜甜圈）+ 右侧图例，展示各平台消息占比。圆环中心显示总消息数（蓝色渐变）+"总消息"标签；右侧每行含颜色圆点、平台名称、进度条、数值百分比；平台名映射（telegram->Telegram、discord->Discord、qq_official->QQ 官方、wechat->微信等），未映射则显示原始 key。位置在时间趋势与排行之间
+- `render_snapshot` 新增 `platform_stats` 参数（默认回退 `stats.platform_stats`）；`main.py` 的 `cmd_snapshot` 传入 `stats.platform_stats`
+- 新增 `_PLATFORM_LABELS` 平台名映射表
+
+### Changed
+
+- 快照画布高度 `_PX(1900)` -> `_PX(2200)`，容纳新增的平台分布卡片
+- 前端资源版本号升级至 `0.2.8`
+
+### Verified
+
+- `python3 -m py_compile fox_toolbox/snapshot_renderer.py main.py` 通过
+- `node --check pages/recorder/app.js` 通过
+- 图片视觉审查确认：圆环完整镂空、中心 1,296,560/总消息清晰、5 色扇形对应图例正确、Telegram 63.3%/Discord 23.0%/QQ 官方 7.9%/微信 4.9%/aiocqhttp 0.9%、布局对齐无重叠
+- 整图审查确认各卡片排列连贯、风格统一、无渲染异常
+- `PYTHONPATH=/workspace python3 -m pytest -q` 与基线一致（无回归）
+
 ## [0.2.7] - 2026-08-06
 
 ### Changed

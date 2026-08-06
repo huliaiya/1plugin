@@ -888,6 +888,7 @@ class MessageRecorder(Star):
             sender_ranking,
             group_ranking,
             content_types,
+            stats.platform_stats or {},
         )
 
         from fox_toolbox.web_api import _get_plugin_data_dir
