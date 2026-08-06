@@ -60,9 +60,9 @@ _CARD_GAP = 20
 
 # ========== 色彩配置 ==========
 
-# 现代渐变背景
-_BG_GRADIENT_START = (248, 250, 252)  # 淡灰色
-_BG_GRADIENT_END = (241, 245, 249)    # 更淡的灰色
+# 优雅渐变背景
+_BG_GRADIENT_START = (240, 248, 255)  # 淡蓝色
+_BG_GRADIENT_END = (230, 240, 255)    # 更淡的蓝色
 _BG_WHITE = (255, 255, 255)           # 纯白色
 
 # 主色调
@@ -299,7 +299,7 @@ def _round_rect(draw, xy, radius, fill=None, outline=None, width=1):
 # ========== 背景 ==========
 
 def _make_background(size) -> Image.Image:
-    """现代优雅背景。"""
+    """优雅渐变背景。"""
     img = Image.new("RGBA", size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     
@@ -312,20 +312,6 @@ def _make_background(size) -> Image.Image:
         g = int(_BG_GRADIENT_START[1] * (1 - ratio) + _BG_GRADIENT_END[1] * ratio)
         b = int(_BG_GRADIENT_START[2] * (1 - ratio) + _BG_GRADIENT_END[2] * ratio)
         draw.line([(0, i), (w, i)], fill=(r, g, b, 255))
-    
-    # 添加微妙的装饰性光点
-    import random
-    random.seed(42)  # 固定种子，确保每次生成的光点位置相同
-    for _ in range(15):
-        x = random.randint(0, w)
-        y = random.randint(0, h)
-        radius = random.randint(30, 80)
-        # 使用更微妙的颜色
-        color = (255, 255, 255, 15)
-        for i in range(radius):
-            alpha = int(15 * (1 - i / radius))
-            if alpha > 0:
-                draw.ellipse([x - i, y - i, x + i, y + i], fill=(color[0], color[1], color[2], alpha))
     
     return img
 
