@@ -93,6 +93,10 @@ _CHART_COLORS = [
     (79, 70, 229),    # 靛蓝色
     (236, 72, 153),   # 粉色
     (20, 184, 166),   # 青色
+    (249, 115, 22),   # 橙色
+    (15, 118, 110),   # 深青色
+    (124, 58, 237),   # 深紫色
+    (234, 179, 8),    # 金黄色
 ]
 
 # 统计卡片配置
@@ -767,19 +771,32 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
 
     items.sort(key=lambda kv: kv[1], reverse=True)
     total = sum(v for _, v in items) or 1
+    
+    # 如果数据项太多，合并后面的为"其他"
+    max_display_items = 6
+    if len(items) > max_display_items:
+        other_items = items[max_display_items:]
+        other_count = sum(v for _, v in other_items)
+        items = items[:max_display_items]
+        items.append(("其他", other_count))
 
     # 简化的饼图布局
     pie_d = min(inner_h, inner_w * 0.6)
     pie_r = pie_d / 2
     cx = x0 + pie_r + _PX(20)
     cy = y0 + inner_h / 2
+    
+    # 添加饼图背景圆圈
+    draw.ellipse([cx - pie_r, cy - pie_r, cx + pie_r, cy + pie_r], fill=(245, 247, 250))
 
     # 绘制饼图
     start = -90.0
     for idx, (lbl, val) in enumerate(items):
         if idx >= len(_CHART_COLORS):
-            break
-        color = _CHART_COLORS[idx]
+            # 如果颜色不够，循环使用颜色
+            color = _CHART_COLORS[idx % len(_CHART_COLORS)]
+        else:
+            color = _CHART_COLORS[idx]
         sweep = val * 360.0 / total
         if sweep <= 0:
             continue
@@ -797,17 +814,30 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
     f_name = _get_font(_PX(14))
     f_count = _get_font(_PX(14))
     
-    for idx, (lbl, val) in enumerate(items):
-        if idx >= 6:  # 最多显示6个
-            break
+    # 检查是否有足够空间显示图例
+    if legend_w < _PX(100):
+        # 如果空间不足，缩小饼图尺寸
+        pie_d = min(inner_h, inner_w * 0.4)
+        pie_r = pie_d / 2
+        cx = x0 + pie_r + _PX(20)
+        legend_x = x0 + pie_d + _PX(40)
+        legend_w = inner_w - pie_d - _PX(60)
+    
+    # 限制显示的数量，确保图例不超出边界
+    max_legend_items = 6
+    display_items = items[:max_legend_items]
+    
+    for idx, (lbl, val) in enumerate(display_items):
         if idx >= len(_CHART_COLORS):
-            break
+            # 如果颜色不够，循环使用颜色
+            color = _CHART_COLORS[idx % len(_CHART_COLORS)]
+        else:
+            color = _CHART_COLORS[idx]
             
         ry = y0 + _PX(20) + idx * _PX(30)
         if ry + _PX(30) > y1 - _PX(20):
             break
             
-        color = _CHART_COLORS[idx]
         pct = val * 100 / total
 
         # 颜色标识
@@ -836,7 +866,7 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
                   _get_font(_PX(18)), _TEXT_MEDIUM, img)
         return
 
-    # 系列定义
+    # 系列定义 - 使用正确的消息类型数据
     series_defs = [
         ("群聊", "group_count", _CHART_COLORS[0]),
         ("私聊", "private_count", _CHART_COLORS[1]),
@@ -851,17 +881,24 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
         return sum(_to_int(p.get(k, 0)) for _, k, _ in series_defs)
 
     max_total = max((seg_total(p) for p in platforms), default=1) or 1
+    
+    # 限制显示的平台数量，避免过于拥挤
+    max_platforms = 10
+    display_platforms = platforms[:max_platforms]
 
-    n = len(platforms)
+    n = len(display_platforms)
     slot_w = inner_w / n
     bar_w = min(slot_w * 0.6, _PX(50))
 
     f_val = _get_font(_PX(12))
-    for i, p in enumerate(platforms):
+    for i, p in enumerate(display_platforms):
         cx_bar = x0 + slot_w * i + (slot_w - bar_w) / 2
         total = seg_total(p)
+        
+        # 即使total为0也要绘制坐标轴标签
         if total <= 0:
             continue
+            
         h_total = chart_h * total / max_total
         seg_bottom = chart_bottom
         for idx, (label, key, color) in enumerate(series_defs):
@@ -878,9 +915,9 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
         tw = _text_width(draw, total_str, f_val)
         _draw_text(draw, (cx_bar + bar_w / 2 - tw / 2, chart_bottom - _PX(20)), total_str, f_val, _TEXT_MEDIUM, img)
 
-    # X轴平台名标签
+    # X轴平台名标签 - 确保所有平台标签都显示
     f_lbl = _get_font(_PX(12))
-    for i, p in enumerate(platforms):
+    for i, p in enumerate(display_platforms):
         label = _truncate(draw, str(p.get("platform_name") or p.get("platform") or "未知"), f_lbl, int(slot_w - _PX(8)))
         lw = _text_width(draw, label, f_lbl)
         lx = x0 + slot_w * i + (slot_w - lw) / 2
@@ -889,6 +926,21 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
     # 峰值标注
     peak_text = f"峰值 {max_total:,}"
     _draw_text(draw, (x0, y0 + _PX(8)), peak_text, _get_font(_PX(12), bold=True), _TEXT_MEDIUM, img)
+    
+    # 添加图例
+    legend_x = x0 + _PX(10)
+    legend_y = y1 - _PX(15)
+    f_legend = _get_font(_PX(11))
+    
+    for idx, (label, key, color) in enumerate(series_defs):
+        legend_x_pos = legend_x + idx * _PX(80)
+        if legend_x_pos + _PX(50) > x1:
+            break
+            
+        # 颜色块
+        draw.rectangle([legend_x_pos, legend_y, legend_x_pos + _PX(8), legend_y + _PX(8)], fill=color)
+        # 标签
+        _draw_text(draw, (legend_x_pos + _PX(12), legend_y - _PX(1)), label, f_legend, _TEXT_MEDIUM, img)
 
 
 # ========== 主入口 ==========

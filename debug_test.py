@@ -105,7 +105,7 @@ except Exception as e:
 print("\n🧪 测试空数据情况...")
 
 empty_cases = [
-    ("空内容类型", [], sender_ranking, group_ranking, content_types, platform_detail),
+    ("空内容类型", stats, timeline, sender_ranking, group_ranking, [], platform_detail),
     ("空平台详情", stats, timeline, sender_ranking, group_ranking, content_types, []),
     ("空排行榜", stats, timeline, [], [], content_types, platform_detail),
     ("空时间趋势", stats, [], sender_ranking, group_ranking, content_types, platform_detail),
