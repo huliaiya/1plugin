@@ -687,47 +687,221 @@ def _draw_platform_donut(img, xy, platform_stats: Dict[str, int]):
 
 
 def _draw_content_types(img, xy, content_types: List[Dict]):
+    """绘制内容类型分布饼图，对齐 WebUI 的 contentTypeChart。
+    
+    Args:
+        img: PIL Image 对象
+        xy: 绘制区域 (x0, y0, x1, y1)
+        content_types: 内容类型统计 [{"type","label","count"}]
+    """
     x0, y0, x1, y1 = xy
-    inner_w = x1 - x0
     draw = ImageDraw.Draw(img)
+    
     if not content_types:
-        _draw_text(draw, (x0 + _PX(10), y0 + _PX(10)), "暂无数据", _get_font(_PX(15)), _TEXT_LIGHT, img)
+        _draw_text(draw, (x0 + _PX(20), y0 + _PX(20)), "暂无内容类型数据", _get_font(_PX(14)), _TEXT_LIGHT, img)
         return
 
-    f_label = _get_font(_PX(15))
-    f_count = _get_font(_PX(14))
-    items = content_types[:8]
-    max_c = max((it.get("count", 0) for it in items), default=1) or 1
-    total = sum((it.get("count", 0) for it in content_types), 0) or 1
-    row_h = _PX(36)
-    for i, it in enumerate(items):
-        ry = y0 + i * row_h
-        if ry + row_h > y1:
-            break
-        label = str(it.get("label", it.get("type", "")))
-        count = it.get("count", 0)
-        pct = count * 100 / total
-        color = _CHART_COLORS[i % len(_CHART_COLORS)]
+    # 计算总数和各类型占比
+    total = sum(ct.get('count', 0) for ct in content_types)
+    if total == 0:
+        _draw_text(draw, (x0 + _PX(20), y0 + _PX(20)), "暂无内容类型数据", _get_font(_PX(14)), _TEXT_LIGHT, img)
+        return
 
-        cb = Image.new("RGBA", (inner_w, row_h), (0, 0, 0, 0))
-        cod = ImageDraw.Draw(cb)
-        _round_rect(cod, (0, _PX(4), _PX(14), _PX(18)), _PX(4), fill=color + (255,))
-        img.paste(cb, (x0, ry), cb)
-        _draw_text(draw, (x0 + _PX(24), ry), label, f_label, _TEXT, img)
+    # 饼图参数（对齐 WebUI）
+    chart_center_x = x0 + int((x1 - x0) * 0.35)  # 35% 位置
+    chart_center_y = y0 + int((y1 - y0) * 0.5)   # 垂直居中
+    outer_radius = int((y1 - y0) * 0.28)         # 外径 28%
+    inner_radius = int(outer_radius * 0.5)        # 内径 50%（甜甜圈）
+    
+    # 颜色（对齐 WebUI 的 colors 数组）
+    colors = ['#4fc3f7', '#29b6f6', '#03a9f4', '#64b5f6', '#81d4fa', '#b3e5fc', '#4dd0e1', '#0288d1', '#039be5', '#80deea', '#26c6da', '#4fc3f7', '#29b6f6', '#64b5f6', '#81d4fa', '#4dd0e1']
+    
+    # 计算角度并绘制饼图
+    current_angle = 0
+    
+    for i, ct in enumerate(content_types[:8]):  # 最多显示8种类型
+        count = ct.get('count', 0)
+        if count == 0:
+            continue
+            
+        percentage = count / total
+        angle = int(percentage * 360)
+        
+        if angle > 0:
+            color = colors[i % len(colors)]
+            
+            # 绘制扇形（带圆角）
+            start_angle = current_angle
+            end_angle = current_angle + angle
+            
+            # 创建扇形路径
+            points = []
+            
+            # 外圆弧
+            for a in range(start_angle, end_angle + 1, 2):
+                x = chart_center_x + outer_radius * math.cos(math.radians(a - 90))
+                y = chart_center_y + outer_radius * math.sin(math.radians(a - 90))
+                points.append((x, y))
+            
+            # 内圆弧（反向）
+            for a in range(end_angle, start_angle - 1, -2):
+                x = chart_center_x + inner_radius * math.cos(math.radians(a - 90))
+                y = chart_center_y + inner_radius * math.sin(math.radians(a - 90))
+                points.append((x, y))
+            
+            if len(points) >= 3:
+                draw.polygon(points, fill=color)
+            
+            current_angle += angle
+    
+    # 绘制中心文字（总数量）
+    total_text = f"{total}"
+    label_text = "总消息"
+    
+    # 总数量
+    _draw_text(draw, (chart_center_x, chart_center_y - _PX(10)), total_text, _get_font(_PX(20)), _TEXT_DARK, img)
+    
+    # 标签
+    _draw_text(draw, (chart_center_x, chart_center_y + _PX(10)), label_text, _get_font(_PX(12)), _TEXT_LIGHT, img)
+    
+    # 绘制图例
+    legend_x = x1 - _PX(180)  # 右侧图例
+    legend_y = y0 + _PX(20)
+    legend_item_height = _PX(30)
+    
+    for i, ct in enumerate(content_types[:8]):  # 最多显示8种类型
+        count = ct.get('count', 0)
+        if count == 0:
+            continue
+            
+        percentage = (count / total) * 100
+        color = colors[i % len(colors)]
+        label = ct.get('label', ct.get('type', f'类型{i+1}'))
+        
+        # 颜色圆点
+        draw.ellipse([legend_x, legend_y, legend_x + _PX(12), legend_y + _PX(12)], fill=color)
+        
+        # 类型名称
+        _draw_text(draw, (legend_x + _PX(20), legend_y + _PX(4)), label, _get_font(_PX(12)), _TEXT_DARK, img)
+        
+        # 进度条背景
+        progress_x = legend_x + _PX(100)
+        progress_y = legend_y + _PX(8)
+        progress_w = _PX(60)
+        progress_h = _PX(4)
+        
+        draw.rectangle([progress_x, progress_y, progress_x + progress_w, progress_y + progress_h], fill=_GLASS_BG)
+        
+        # 进度条
+        progress_fill_w = int(progress_w * percentage / 100)
+        if progress_fill_w > 0:
+            draw.rectangle([progress_x, progress_y, progress_x + progress_fill_w, progress_y + progress_h], fill=color)
+        
+        # 百分比数字
+        _draw_text(draw, (progress_x + progress_w + _PX(8), legend_y + _PX(2)), f"{percentage:.1f}%", _get_font(_PX(11)), _TEXT_DARK, img)
+        
+        legend_y += legend_item_height
 
-        bar_x = x0 + _PX(140)
-        bar_w = inner_w - _PX(240)
-        bar = Image.new("RGBA", (bar_w, _PX(10)), (0, 0, 0, 0))
-        bd = ImageDraw.Draw(bar)
-        _round_rect(bd, (0, 0, bar_w, _PX(10)), _PX(5), fill=_TRACK)
-        fill_w = int(bar_w * (count / max_c))
-        if fill_w > 0:
-            _round_rect(bd, (0, 0, fill_w, _PX(10)), _PX(5), fill=color + (255,))
-        img.paste(bar, (bar_x, ry + _PX(6)), bar)
 
-        txt = f"{count:,} ({pct:.1f}%)"
-        tw = _text_width(draw, txt, f_count)
-        _draw_text(draw, (x1 - tw, ry + _PX(1)), txt, f_count, _TEXT_LIGHT, img)
+def _draw_platform_detail(img, xy, platforms: List[Dict]):
+    """平台消息详情堆叠柱状图（对齐 WebUI platformDetailChart：各平台群聊/私聊/频道堆叠柱）。
+
+    platforms: [{"platform","platform_name","total","group_count","private_count","channel_count",...}]
+    """
+    x0, y0, x1, y1 = xy
+    inner_w = x1 - x0
+    inner_h = y1 - y0
+    draw = ImageDraw.Draw(img)
+    if not platforms:
+        _draw_text(draw, (x0 + inner_w // 2 - _PX(50), y0 + inner_h // 2), "暂无平台数据", _get_font(_PX(15)), _TEXT_LIGHT, img)
+        return
+
+    # 系列定义（对齐 WebUI platformDetailChart 配色，自下而上堆叠）
+    series_defs = [
+        ("群聊", "group_count", (79, 195, 247)),
+        ("私聊", "private_count", (41, 182, 246)),
+        ("频道", "channel_count", (129, 212, 250)),
+    ]
+
+    legend_h = _PX(20)
+    label_h = _PX(26)
+    chart_top = y0 + legend_h + _PX(8)
+    chart_bottom = y1 - label_h
+    chart_h = chart_bottom - chart_top
+
+    def seg_total(p: Dict) -> int:
+        return sum(p.get(k, 0) or 0 for _, k, _ in series_defs)
+
+    max_total = max((seg_total(p) for p in platforms), default=1) or 1
+
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
+
+    for g in range(4):
+        gy = chart_top + g * chart_h / 3
+        ld.line([(x0, gy), (x1, gy)], fill=(0, 0, 0, 16), width=_PX(1))
+
+    n = len(platforms)
+    slot_w = inner_w / n
+    bar_w = min(slot_w * 0.55, _PX(60))
+
+    f_val = _get_font(_PX(12))
+    for i, p in enumerate(platforms):
+        cx_bar = x0 + slot_w * i + (slot_w - bar_w) / 2
+        total = seg_total(p)
+        if total <= 0:
+            continue
+        h_total = chart_h * total / max_total
+        seg_bottom = chart_bottom
+        for idx, (label, key, color) in enumerate(series_defs):
+            v = p.get(key, 0) or 0
+            if v <= 0:
+                continue
+            h = h_total * v / total
+            seg_top = seg_bottom - h
+            ld.rectangle([cx_bar, seg_top, cx_bar + bar_w, seg_bottom], fill=color + (255,))
+            seg_bottom = seg_top
+
+        # 顶部段圆角（对齐 WebUI 柱状图圆角质感）
+        top_v = next((p.get(k, 0) for lbl, k, c in reversed(series_defs) if (p.get(k, 0) or 0) > 0), 0)
+        top_h = h_total * top_v / total
+        top_y = chart_bottom - h_total
+        r = min(_PX(5), bar_w / 2, top_h / 2)
+        if r > 1:
+            top_color = next(c for lbl, k, c in reversed(series_defs) if (p.get(k, 0) or 0) > 0)
+            ld.rounded_rectangle([cx_bar, top_y, cx_bar + bar_w, top_y + top_h], radius=r, fill=top_color + (255,))
+            if top_h > r:
+                ld.rectangle([cx_bar, top_y + top_h - r, cx_bar + bar_w, top_y + top_h], fill=top_color + (255,))
+
+        # 柱顶总量
+        total_str = f"{total:,}"
+        tw = _text_width(draw, total_str, f_val)
+        _draw_text(draw, (cx_bar + bar_w / 2 - tw / 2, top_y - _PX(18)), total_str, f_val, _TEXT_LIGHT, img)
+
+    img.alpha_composite(layer)
+
+    # 图例（左上角，对齐 WebUI legend 三色）
+    f_legend = _get_font(_PX(12))
+    lx = x0
+    ly = y0 - _PX(2)
+    for label, key, color in series_defs:
+        lw = _text_width(draw, label, f_legend)
+        dot = Image.new("RGBA", (int(lw + _PX(16)), _PX(12)), (0, 0, 0, 0))
+        dd = ImageDraw.Draw(dot)
+        dd.ellipse([0, _PX(3), _PX(9), _PX(3) + _PX(9)], fill=color + (255,))
+        img.paste(dot, (int(lx), int(ly)), dot)
+        _draw_text(draw, (lx + _PX(14), ly), label, f_legend, _TEXT, img)
+        lx += _PX(14) + lw + _PX(18)
+
+    # X 轴平台名标签
+    f_lbl = _get_font(_PX(13))
+    for i, p in enumerate(platforms):
+        label = _truncate(draw, str(p.get("platform_name") or p.get("platform") or "未知"), f_lbl, int(slot_w - _PX(6)))
+        lw = _text_width(draw, label, f_lbl)
+        lx = x0 + slot_w * i + (slot_w - lw) / 2
+        _draw_text(draw, (lx, chart_bottom + _PX(8)), label, f_lbl, _TEXT_LIGHT, img)
+
+    _draw_text(draw, (x0, y0 + _PX(18)), f"峰值 {max_total:,}", _get_font(_PX(12)), _TEXT_LIGHT, img)
 
 
 # ========== 主入口 ==========
@@ -741,6 +915,7 @@ def render_snapshot(
     group_ranking: List[Dict],
     content_types: List[Dict],
     platform_stats: Optional[Dict[str, int]] = None,
+    platform_detail: Optional[List[Dict]] = None,
     generated_at: Optional[float] = None,
 ) -> bytes:
     """渲染仪表盘快照 PNG，返回 PNG 字节数据。
@@ -753,6 +928,7 @@ def render_snapshot(
         group_ranking: 群组排行 [{"group_id","platform","count","sender_count"}]
         content_types: 内容类型统计 [{"type","label","count"}]
         platform_stats: 平台分布统计 {platform: count}，默认取 stats.platform_stats
+        platform_detail: 平台消息详情统计 [{"platform","platform_name","total","group_count","private_count","channel_count",...}]，默认取数据库查询结果
         generated_at: 生成时间戳，默认当前
     """
     if generated_at is None:
@@ -760,7 +936,7 @@ def render_snapshot(
     if platform_stats is None:
         platform_stats = stats.platform_stats or {}
 
-    canvas_h = _PX(2200)
+    canvas_h = _PX(2800)
     img = _make_background((_W_FULL, canvas_h))
     # 预模糊背景一次，供所有毛玻璃卡片复用（对齐 backdrop-filter blur(14px)）
     blurred_bg = img.filter(ImageFilter.GaussianBlur(_PX(14)))
@@ -816,6 +992,16 @@ def render_snapshot(
         group_ranking, "display_name", "count", _SUCCESS,
     )
     y += rank_h + _PX(18)
+
+    # 平台消息详情卡片（对齐 WebUI platformDetailChart）
+    pd_h = _PX(300)
+    _draw_glass_card(img, blurred_bg, (_PX(_PADDING), y, _W_FULL - _PX(_PADDING), y + pd_h), title="平台消息详情", accent=_PRIMARY)
+    _draw_platform_detail(
+        img,
+        (_PX(_PADDING) + _PX(20), y + _PX(66), _W_FULL - _PX(_PADDING) - _PX(20), y + pd_h - _PX(16)),
+        platform_detail or [],
+    )
+    y += pd_h + _PX(18)
 
     # 内容类型分布
     ct_h = _PX(330)

@@ -859,7 +859,7 @@ class MessageRecorder(Star):
         """生成 WebUI 仪表盘快照图片并发送。
 
         用 Pillow 将数据库统计数据渲染成与 WebUI 风格一致的 PNG，
-        包含统计卡片、时间趋势、发送者/群组排行、内容类型分布。
+        包含统计卡片、时间趋势、发送者/群组排行、平台分布、平台详情、内容类型分布。
         数据库不可用时降级返回文本提示。
         """
         if not self._check_initialized() or not self._db:
@@ -872,6 +872,7 @@ class MessageRecorder(Star):
             sender_ranking = await self._db.get_sender_ranking(limit=8)
             group_ranking = await self._db.get_group_ranking(limit=8)
             content_types = await self._db.get_content_type_stats()
+            platform_detail = await self._db.get_platform_detail_stats()
         except Exception as e:
             yield event.plain_result(f"生成快照失败: {e}")
             return
@@ -889,6 +890,7 @@ class MessageRecorder(Star):
             group_ranking,
             content_types,
             stats.platform_stats or {},
+            platform_detail,
         )
 
         from fox_toolbox.web_api import _get_plugin_data_dir

@@ -5,16 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.10] - 2026-08-06
+
+### Added
+- **快照新增"内容类型分布"卡片（对齐 WebUI）**：`_draw_content_types` 渲染饼图（甜甜圈），展示各内容类型消息占比。饼图中心显示总消息数，右侧图例含颜色圆点/类型名/进度条/百分比数值，使用与 WebUI 一致的配色方案（#4fc3f7、#29b6f6 等），支持最多8种内容类型显示
+- `render_snapshot` 画布高度增加到 `_PX(2800)`，容纳新增的内容类型卡片
+- 新增饼图绘制算法，支持圆角扇形、中心文字、图例进度条
+
+### Changed
+- 内容类型分布从列表形式改为饼图形式，完全对齐 WebUI 的 contentTypeChart
+- 快照画布高度 `_PX(2500)` -> `_PX(2800)`，容纳新增的内容类型卡片
+- 前端资源版本号升级至 `0.2.10`
+
+## [0.2.9] - 2026-08-06
+
+### Added
+- **快照新增"平台消息详情"卡片（对齐 WebUI）**：`_draw_platform_detail` 渲染堆叠柱状图，展示各平台群聊/私聊/频道消息分布。每平台包含三色堆叠柱（群聊#4fc3f7、私聊#29b6f6、频道#81d4fa），顶部显示平台总消息数，左上角图例含三色圆点/系列名，X轴平台名自动映射（Telegram/Discord/QQ 官方/微信等），位置在平台分布与内容类型之间
+- `render_snapshot` 新增 `platform_detail` 参数（默认回退数据库查询结果）；`main.py` 的 `cmd_snapshot` 新增 `platform_detail` 数据获取
+- 新增 `_draw_platform_detail` 堆叠柱状图绘制函数，支持多系列堆叠、圆角柱体、网格线、峰值标注
+
+### Changed
+- 快照画布高度 `_PX(2200)` -> `_PX(2500)`，容纳新增的平台详情卡片
+- 前端资源版本号升级至 `0.2.9`
+- 修复 `app.js` 的 `BUILD_VERSION` 与版本号同步问题（0.2.2 → 0.2.9）
+
 ## [0.2.8] - 2026-08-06
 
 ### Added
-
 - **快照新增"平台分布"卡片（对齐 WebUI）**：`_draw_platform_donut` 渲染圆环图（甜甜圈）+ 右侧图例，展示各平台消息占比。圆环中心显示总消息数（蓝色渐变）+"总消息"标签；右侧每行含颜色圆点、平台名称、进度条、数值百分比；平台名映射（telegram->Telegram、discord->Discord、qq_official->QQ 官方、wechat->微信等），未映射则显示原始 key。位置在时间趋势与排行之间
 - `render_snapshot` 新增 `platform_stats` 参数（默认回退 `stats.platform_stats`）；`main.py` 的 `cmd_snapshot` 传入 `stats.platform_stats`
 - 新增 `_PLATFORM_LABELS` 平台名映射表
 
 ### Changed
-
 - 快照画布高度 `_PX(1900)` -> `_PX(2200)`，容纳新增的平台分布卡片
 - 前端资源版本号升级至 `0.2.8`
 
