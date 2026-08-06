@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-08-07
+
+### Fixed
+- **修复插件在 AstrBot 中加载失败 `ImportError: cannot import name '_to_int'`（热重载缓存根因）**：main.py 全部 11 处 `from fox_toolbox.xxx import ...` 改为相对导入 `from .fox_toolbox.xxx import ...`，符合 AstrBot 官方插件规范
+  - 此前使用绝对导入时，`fox_toolbox` 作为顶层包缓存于 `sys.modules`，AstrBot 热重载只清理 `data.plugins.<插件名>.*` 前缀模块，旧版模块残留导致更新文件后仍报错
+  - 改为相对导入后，所有模块以 `data.plugins.astrbot_plugin_fox_toolbox.*` 前缀命名，热重载可正确清理，更新文件后无需完全重启进程
+- 更新 `scripts/fix_deploy.sh`：改用 `cp -r src/. dest/` 合并覆盖语法，确保已存在的旧目录内文件被更新；新增同步后校验输出
+
+### Changed
+- 插件模块命名空间统一为 `data.plugins.astrbot_plugin_fox_toolbox.fox_toolbox.*`
+
 ## [0.3.1] - 2026-08-07
 
 ### Added

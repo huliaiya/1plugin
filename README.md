@@ -547,6 +547,11 @@ ruff format .
 
 ## 📝 更新日志
 
+### v0.3.2（2026-08-07）
+
+- 修复插件加载失败 `ImportError: cannot import name '_to_int'`：main.py 全部导入改为相对导入 `from .fox_toolbox.xxx import`，符合 AstrBot 官方规范，根治热重载时顶层包模块缓存残留导致的问题（更新文件后无需完全重启 AstrBot）
+- 更新 `scripts/fix_deploy.sh`：合并覆盖语法确保旧目录文件被更新，新增同步校验输出
+
 ### v0.3.1（2026-08-07）
 
 - 新增 `scripts/fix_deploy.sh` 一键同步脚本：在 AstrBot 部署服务器上执行 `bash scripts/fix_deploy.sh`，将插件代码完整对齐到远程最新版本，避免 main.py 与 fox_toolbox/ 文件版本混用导致的导入错误

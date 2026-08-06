@@ -15,20 +15,20 @@ from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star
 
-from fox_toolbox.database import Database
-from fox_toolbox.db_explorer import DbExplorer
-from fox_toolbox.api import MessageRecorderAPI
-from fox_toolbox.models import MessageRecord
-from fox_toolbox.time_utils import parse_time_range, format_time_range, normalize_timestamp
-from fox_toolbox.media_downloader import MediaDownloader, MEDIA_TYPE_MAP
-from fox_toolbox.serializer import (
+from .fox_toolbox.database import Database
+from .fox_toolbox.db_explorer import DbExplorer
+from .fox_toolbox.api import MessageRecorderAPI
+from .fox_toolbox.models import MessageRecord
+from .fox_toolbox.time_utils import parse_time_range, format_time_range, normalize_timestamp
+from .fox_toolbox.media_downloader import MediaDownloader, MEDIA_TYPE_MAP
+from .fox_toolbox.serializer import (
     serialize_message_chain,
     extract_reply_info,
     extract_media_url as serializer_extract_media_url,
 )
-from fox_toolbox.platform_adapter import get_adapter
-from fox_toolbox.web_api import register_all_web_apis, cleanup_expired_tasks
-from fox_toolbox.snapshot_renderer import render_snapshot, _to_int
+from .fox_toolbox.platform_adapter import get_adapter
+from .fox_toolbox.web_api import register_all_web_apis, cleanup_expired_tasks
+from .fox_toolbox.snapshot_renderer import render_snapshot, _to_int
 
 MAX_CONCURRENT_SAVES = 8
 MAX_CONCURRENT_DOWNLOADS = 4
@@ -895,7 +895,7 @@ class MessageRecorder(Star):
             yield event.plain_result(f"快照渲染失败: {e}")
             return
 
-        from fox_toolbox.web_api import _get_plugin_data_dir
+        from .fox_toolbox.web_api import _get_plugin_data_dir
         temp_dir = _get_plugin_data_dir() / "temp"
         temp_dir.mkdir(parents=True, exist_ok=True)
         snapshot_path = temp_dir / f"snapshot_{int(time.time() * 1000)}.png"
