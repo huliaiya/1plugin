@@ -1467,7 +1467,7 @@ body::before {
 
   /* 主内容 */
   .main-content {
-    padding: 0.8rem 0.6rem;
+    padding: 0.8rem 0.6rem 2.5rem;
   }
 
   /* 统计卡片 —— 手机端 2 列 */
@@ -1503,7 +1503,7 @@ body::before {
   }
 
   .chart-box {
-    height: 210px;
+    height: 280px;
   }
 
   .chart-title {

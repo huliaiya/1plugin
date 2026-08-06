@@ -436,6 +436,10 @@ def _draw_stat_cards(img, blurred_bg, y, stats: MessageStats, db_table_count: in
 
 
 def _draw_timeline(img, xy, timeline: List[Dict]):
+    """多系列时间趋势折线图（对齐 WebUI：总/群/私/频道四色线）。
+
+    数据点结构：{"date","count","group_count","private_count","channel_count"}
+    """
     x0, y0, x1, y1 = xy
     inner_w = x1 - x0
     inner_h = y1 - y0
@@ -444,18 +448,31 @@ def _draw_timeline(img, xy, timeline: List[Dict]):
         _draw_text(draw, (x0 + inner_w // 2 - _PX(60), y0 + inner_h // 2), "暂无时间趋势数据", _get_font(_PX(16)), _TEXT_LIGHT, img)
         return
 
-    counts = [p.get("count", 0) for p in timeline]
-    max_c = max(counts) if counts else 1
-    if max_c <= 0:
-        max_c = 1
+    # 系列定义（对齐 WebUI timelineChart 配色）
+    series_defs = [
+        ("总消息", "count", (79, 195, 247)),
+        ("群聊", "group_count", (102, 187, 106)),
+        ("私聊", "private_count", (255, 167, 38)),
+        ("频道", "channel_count", (239, 83, 80)),
+    ]
+
     n = len(timeline)
     step_x = inner_w / max(n - 1, 1) if n > 1 else inner_w
-    points = []
-    for i, c in enumerate(counts):
-        px = x0 + (i * step_x if n > 1 else inner_w / 2)
-        py = y1 - _PX(10) - (c / max_c) * (inner_h - _PX(36))
-        points.append((px, py))
 
+    # 计算每系列数据点（纵坐标以全系列最大值为基准，统一刻度）
+    series_points = []
+    max_c = 1
+    for label, key, color in series_defs:
+        pts = []
+        for i, p in enumerate(timeline):
+            v = p.get(key, 0) or 0
+            if v > max_c:
+                max_c = v
+            pts.append(v)
+        series_points.append((label, key, color, pts))
+    max_c = max(max_c, 1)
+
+    # 图表区局部图层（网格、面积、折线、点一次性绘制）
     layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
     ld = ImageDraw.Draw(layer)
 
@@ -463,28 +480,59 @@ def _draw_timeline(img, xy, timeline: List[Dict]):
         gy = y0 + _PX(12) + g * (inner_h - _PX(24)) / 3
         ld.line([(x0, gy), (x1, gy)], fill=(0, 0, 0, 16), width=_PX(1))
 
-    if len(points) >= 2:
-        fill_pts = points + [(points[-1][0], y1 - _PX(8)), (points[0][0], y1 - _PX(8))]
-        ld.polygon(fill_pts, fill=_PRIMARY + (50,))
-        ld.line(points, fill=_PRIMARY_DARK, width=_PX(3), joint="curve")
+    def to_points(vals):
+        pts = []
+        for i, v in enumerate(vals):
+            px = x0 + (i * step_x if n > 1 else inner_w / 2)
+            py = y1 - _PX(10) - (v / max_c) * (inner_h - _PX(36))
+            pts.append((px, py))
+        return pts
 
-    for px, py in points:
-        r = _PX(5)
-        ld.ellipse([px - r, py - r, px + r, py + r], fill=_TEXT_WHITE, outline=_PRIMARY_DARK, width=_PX(2))
+    # 先画"总消息"区域填充，再画全部折线（总最粗且在最上）
+    for idx, (label, key, color, vals) in enumerate(series_points):
+        pts = to_points(vals)
+        if idx == 0 and len(pts) >= 2:
+            fill_pts = pts + [(pts[-1][0], y1 - _PX(8)), (pts[0][0], y1 - _PX(8))]
+            ld.polygon(fill_pts, fill=color + (40,))
+
+    for idx, (label, key, color, vals) in enumerate(series_points):
+        pts = to_points(vals)
+        if len(pts) < 2:
+            continue
+        width = _PX(4) if idx == 0 else _PX(2)
+        ld.line(pts, fill=color + (255,), width=width, joint="curve")
+        r = _PX(4) if idx == 0 else _PX(3)
+        for px, py in pts:
+            ld.ellipse([px - r, py - r, px + r, py + r], fill=_TEXT_WHITE, outline=color, width=_PX(2))
 
     img.alpha_composite(layer)
 
+    # 图例（左上角，对齐 WebUI legend 四色）
+    f_legend = _get_font(_PX(12))
+    lx = x0
+    ly = y0 - _PX(2)
+    for label, key, color in series_defs:
+        lw = _text_width(draw, label, f_legend)
+        dot = Image.new("RGBA", (int(lw + _PX(16)), _PX(12)), (0, 0, 0, 0))
+        dd = ImageDraw.Draw(dot)
+        dd.ellipse([0, _PX(3), _PX(9), _PX(3) + _PX(9)], fill=color + (255,))
+        img.paste(dot, (int(lx), int(ly)), dot)
+        _draw_text(draw, (lx + _PX(14), ly), label, f_legend, _TEXT, img)
+        lx += _PX(14) + lw + _PX(18)
+
+    # X 轴标签
     f_lbl = _get_font(_PX(13))
     label_indices = list(range(n)) if n <= 6 else [0, n // 2, n - 1]
     for i in label_indices:
         if 0 <= i < n:
             label = str(timeline[i].get("date", ""))[-5:]
             tw = _text_width(draw, label, f_lbl)
-            lx = points[i][0] - tw / 2
-            lx = max(x0, min(lx, x1 - tw))
-            _draw_text(draw, (lx, y1 - _PX(2)), label, f_lbl, _TEXT_LIGHT, img)
+            px = x0 + (i * step_x if n > 1 else inner_w / 2)
+            lpx = px - tw / 2
+            lpx = max(x0, min(lpx, x1 - tw))
+            _draw_text(draw, (lpx, y1 - _PX(2)), label, f_lbl, _TEXT_LIGHT, img)
 
-    _draw_text(draw, (x0, y0 - _PX(2)), f"峰值 {max_c:,}", _get_font(_PX(13)), _TEXT_LIGHT, img)
+    _draw_text(draw, (x0, y0 + _PX(18)), f"峰值 {max_c:,}", _get_font(_PX(12)), _TEXT_LIGHT, img)
 
 
 def _draw_ranking(img, xy, items: List[Dict], name_key: str, count_key: str, color):

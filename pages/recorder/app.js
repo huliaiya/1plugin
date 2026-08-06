@@ -7,7 +7,7 @@ let pluginContext = null;
 const DEBUG = new URLSearchParams(window.location.search).has('debug');
 
 const viewDataLoaded = { dashboard: false, search: false, export: false, database: false };
-const dataCache = { platforms: null, stats: null, dbStatus: null };
+const dataCache = { platforms: null, stats: null, dbStatus: null, contentTypes: null };
 
 let echartsLoaded = false;
 let echartsLoading = false;
@@ -543,9 +543,10 @@ async function loadDashboardData(force = false) {
     if (contentTypesResult) {
       try {
         const ctData = extractData(contentTypesResult);
+        dataCache.contentTypes = ctData?.types || [];
         await loadEcharts().catch(() => {});
         clearChartSkeleton('contentTypeChart');
-        updateContentTypeChart(ctData?.types || []);
+        updateContentTypeChart(dataCache.contentTypes);
       } catch (e) {
         logError('Failed to process content types:', e);
         clearChartSkeleton('contentTypeChart');
@@ -640,9 +641,18 @@ function ensureChart(id) {
 }
 
 let _resizeTimer = null;
+let _lastMobile = null;
 function handleChartResize() {
   if (_resizeTimer) clearTimeout(_resizeTimer);
   _resizeTimer = setTimeout(() => {
+    const mobile = window.innerWidth <= 768;
+    if (_lastMobile !== null && _lastMobile !== mobile) {
+      // 跨越移动端断点，重新渲染圆环图以切换图例布局
+      const stats = dataCache.stats;
+      if (stats?.platform_stats) updatePlatformChart(stats.platform_stats);
+      if (dataCache.contentTypes?.length) updateContentTypeChart(dataCache.contentTypes);
+    }
+    _lastMobile = mobile;
     timelineChart?.resize();
     platformChart?.resize();
     contentTypeChart?.resize();
@@ -720,11 +730,18 @@ function updatePlatformChart(platformStats) {
     name: getPlatformIcon(name), value
   }));
 
+  const mobile = window.innerWidth <= 768;
   platformChart.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-    legend: { orient: 'vertical', right: '5%', top: 'center' },
+    legend: mobile
+      ? { orient: 'horizontal', type: 'scroll', bottom: 0, left: 'center',
+          itemWidth: 10, itemHeight: 10, itemGap: 8, pageIconSize: 9,
+          textStyle: { fontSize: 10 } }
+      : { orient: 'vertical', right: '5%', top: 'center' },
     series: [{
-      type: 'pie', radius: ['40%', '70%'], center: ['40%', '50%'],
+      type: 'pie',
+      radius: mobile ? ['38%', '62%'] : ['40%', '70%'],
+      center: mobile ? ['50%', '42%'] : ['40%', '50%'],
       avoidLabelOverlap: false,
       itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
       label: { show: false, position: 'center' },
@@ -772,12 +789,19 @@ function updateContentTypeChart(types) {
   const data = types.map(t => ({ name: t.label, value: t.count }));
   const colors = ['#4fc3f7', '#29b6f6', '#03a9f4', '#64b5f6', '#81d4fa', '#b3e5fc', '#4dd0e1', '#0288d1', '#039be5', '#80deea', '#26c6da', '#4fc3f7', '#29b6f6', '#64b5f6', '#81d4fa', '#4dd0e1'];
 
+  const mobile = window.innerWidth <= 768;
   contentTypeChart.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-    legend: { orient: 'vertical', right: '5%', top: 'center', textStyle: { fontSize: 11 } },
+    legend: mobile
+      ? { orient: 'horizontal', type: 'scroll', bottom: 0, left: 'center',
+          itemWidth: 10, itemHeight: 10, itemGap: 8, pageIconSize: 9,
+          textStyle: { fontSize: 10 } }
+      : { orient: 'vertical', right: '5%', top: 'center', textStyle: { fontSize: 11 } },
     color: colors,
     series: [{
-      type: 'pie', radius: ['35%', '65%'], center: ['35%', '50%'],
+      type: 'pie',
+      radius: mobile ? ['34%', '58%'] : ['35%', '65%'],
+      center: mobile ? ['50%', '42%'] : ['35%', '50%'],
       avoidLabelOverlap: false,
       itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 2 },
       label: { show: false, position: 'center' },

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.7] - 2026-08-06
+
+### Changed
+
+- **快照时间趋势图升级为多系列折线图（对齐 WebUI）**：`_draw_timeline` 重写，按 `count / group_count / private_count / channel_count` 四系列绘制四条折线（总消息-蓝、群聊-绿、私聊-橙、频道-红），左上角图例带对应颜色圆点，"总消息"系列保留浅蓝区域填充，各系列统一 Y 轴刻度
+- **WebUI 手机端圆环图布局修复**：`app.js` 在移动端（≤768px）将平台分布/内容类型圆环图的图例改为底部横向滚动（`orient: 'horizontal', type: 'scroll'`）、圆环缩小并上移，避免图例与圆环重叠；`style.css` 手机端图表容器高度 210→280px、主内容底部 padding 增加 2.5rem，防止圆环图底部被浏览器导航栏遮挡
+- **前端资源版本号升级**：Plugin Page 的 `app.js` 与 `style.css` 查询参数升级至 `0.2.7`
+
+### Verified
+
+- `python3 -m py_compile fox_toolbox/snapshot_renderer.py` 通过
+- `node --check pages/recorder/app.js` 通过
+- 图片视觉审查确认：四条折线配色分明、图例四色对应正确、浅蓝面积填充、日期标签清晰、无重叠拥挤
+- `PYTHONPATH=/workspace python3 -m pytest -q` 与基线一致（无回归）
+
 ## [0.2.6] - 2026-08-06
 
 ### Fixed
