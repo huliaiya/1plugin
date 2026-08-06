@@ -60,18 +60,18 @@ _CARD_GAP = 20
 
 # ========== 色彩配置 ==========
 
-# 渐变背景
-_BG_GRADIENT_START = (240, 248, 255)  # 淡蓝色
-_BG_GRADIENT_END = (248, 240, 255)    # 淡紫色
+# 现代渐变背景
+_BG_GRADIENT_START = (248, 250, 252)  # 淡灰色
+_BG_GRADIENT_END = (241, 245, 249)    # 更淡的灰色
 _BG_WHITE = (255, 255, 255)           # 纯白色
 
 # 主色调
-_PRIMARY = (59, 130, 246)      # 蓝色
-_SUCCESS = (34, 197, 94)       # 绿色
-_WARNING = (251, 191, 36)     # 黄色
-_DANGER = (239, 68, 68)        # 红色
-_PURPLE = (147, 51, 234)       # 紫色
-_INDIGO = (99, 102, 241)       # 靛蓝色
+_PRIMARY = (37, 99, 235)      # 蓝色
+_SUCCESS = (16, 185, 129)     # 绿色
+_WARNING = (245, 158, 11)     # 黄色
+_DANGER = (239, 68, 68)       # 红色
+_PURPLE = (139, 92, 246)      # 紫色
+_INDIGO = (79, 70, 229)       # 靛蓝色
 
 # 文字颜色
 _TEXT_DARK = (17, 24, 39)      # 深色文字
@@ -79,18 +79,18 @@ _TEXT_MEDIUM = (55, 65, 81)    # 中等灰色文字
 _TEXT_LIGHT = (107, 114, 128)  # 浅灰色文字
 
 # 现代玻璃效果
-_GLASS_FILL = (255, 255, 255, 220)    # 85% 透明白色
-_GLASS_BORDER = (229, 231, 235, 180) # 70% 透明边框
-_GLASS_SHADOW = (0, 0, 0, 40)         # 柔和阴影
+_GLASS_FILL = (255, 255, 255, 235)    # 92% 透明白色
+_GLASS_BORDER = (229, 231, 235, 100) # 40% 透明边框
+_GLASS_SHADOW = (0, 0, 0, 25)        # 柔和阴影
 
 # 图表颜色
 _CHART_COLORS = [
-    (59, 130, 246),   # 蓝色
-    (34, 197, 94),    # 绿色
-    (251, 191, 36),   # 黄色
+    (37, 99, 235),    # 蓝色
+    (16, 185, 129),   # 绿色
+    (245, 158, 11),   # 黄色
     (239, 68, 68),    # 红色
-    (147, 51, 234),   # 紫色
-    (99, 102, 241),   # 靛蓝色
+    (139, 92, 246),   # 紫色
+    (79, 70, 229),    # 靛蓝色
     (236, 72, 153),   # 粉色
     (20, 184, 166),   # 青色
 ]
@@ -299,11 +299,11 @@ def _round_rect(draw, xy, radius, fill=None, outline=None, width=1):
 # ========== 背景 ==========
 
 def _make_background(size) -> Image.Image:
-    """优雅渐变背景。"""
+    """现代优雅背景。"""
     img = Image.new("RGBA", size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    # 创建从左上到右下的渐变
+    # 创建从左上到右下的优雅渐变
     w, h = size
     for i in range(h):
         # 计算当前行的颜色
@@ -313,16 +313,17 @@ def _make_background(size) -> Image.Image:
         b = int(_BG_GRADIENT_START[2] * (1 - ratio) + _BG_GRADIENT_END[2] * ratio)
         draw.line([(0, i), (w, i)], fill=(r, g, b, 255))
     
-    # 添加一些装饰性的光点
+    # 添加微妙的装饰性光点
     import random
     random.seed(42)  # 固定种子，确保每次生成的光点位置相同
-    for _ in range(20):
+    for _ in range(15):
         x = random.randint(0, w)
         y = random.randint(0, h)
-        radius = random.randint(50, 150)
-        color = random.choice([(255, 255, 255, 30), (240, 248, 255, 20)])
+        radius = random.randint(30, 80)
+        # 使用更微妙的颜色
+        color = (255, 255, 255, 15)
         for i in range(radius):
-            alpha = int(30 * (1 - i / radius))
+            alpha = int(15 * (1 - i / radius))
             if alpha > 0:
                 draw.ellipse([x - i, y - i, x + i, y + i], fill=(color[0], color[1], color[2], alpha))
     
@@ -334,10 +335,10 @@ def _make_background(size) -> Image.Image:
 def _draw_glass_card(img: Image.Image, xy, title: Optional[str] = None, accent: Optional[Tuple] = None):
     """绘制现代玻璃卡片，返回内容区 (x0, y0, x1, y1)。
     
-    现代优雅的玻璃效果：
+    现代简洁的玻璃效果：
     - 高透明白色背景
     - 柔和阴影
-    - 细腻边框
+    - 简洁边框
     - 可选标题
     """
     x0, y0, x1, y1 = xy
@@ -345,12 +346,12 @@ def _draw_glass_card(img: Image.Image, xy, title: Optional[str] = None, accent: 
     pad = _PX(16)
 
     # 绘制阴影
-    shadow_offset = _PX(6)
+    shadow_offset = _PX(4)
     shadow = Image.new("RGBA", (cw + shadow_offset * 2, ch + shadow_offset * 2), (0, 0, 0, 0))
     shadow_draw = ImageDraw.Draw(shadow)
     _round_rect(shadow_draw, (shadow_offset, shadow_offset, cw + shadow_offset, ch + shadow_offset), 
                 _CARD_RADIUS, fill=_GLASS_SHADOW)
-    shadow = shadow.filter(ImageFilter.GaussianBlur(_PX(12)))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(_PX(8)))
     img.paste(shadow, (x0 - shadow_offset, y0 - shadow_offset), shadow)
 
     # 绘制玻璃主体
@@ -360,21 +361,10 @@ def _draw_glass_card(img: Image.Image, xy, title: Optional[str] = None, accent: 
     # 添加顶部高光效果
     highlight = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
     highlight_draw = ImageDraw.Draw(highlight)
-    for i in range(_PX(40)):
-        alpha = int(40 * (1 - i / _PX(40)))
+    for i in range(_PX(30)):
+        alpha = int(30 * (1 - i / _PX(30)))
         highlight_draw.rectangle([0, i, cw, i + 1], fill=(255, 255, 255, alpha))
     glass.alpha_composite(highlight)
-    
-    # 如果有强调色，添加轻微的彩色光晕
-    if accent:
-        glow = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
-        glow_draw = ImageDraw.Draw(glow)
-        # 底部轻微彩色光晕
-        for i in range(ch // 4):
-            alpha = int(25 * (1 - i / (ch // 4)))
-            glow_draw.rectangle([0, ch - i - 1, cw, ch - i], fill=accent + (alpha,))
-        glow = glow.filter(ImageFilter.GaussianBlur(_PX(25)))
-        glass.alpha_composite(glow)
     
     # 应用圆角遮罩
     mask = Image.new("L", (cw, ch), 0)
@@ -446,7 +436,7 @@ def _draw_stat_cards(img, y, stats: MessageStats, db_table_count: int):
     ]
     gap = _PX(_CARD_GAP)
     card_w = (_W_FULL - _PX(_PADDING) * 2 - gap * 2) // 3
-    card_h = _PX(120)
+    card_h = _PX(100)
     draw = ImageDraw.Draw(img)
     
     for idx in range(6):
@@ -459,30 +449,18 @@ def _draw_stat_cards(img, y, stats: MessageStats, db_table_count: int):
         # 绘制卡片
         card_content = _draw_glass_card(img, (cx, cy, cx + card_w, cy + card_h), accent=color)
         
-        # 绘制图标
-        icon_size = _PX(24)
-        icon_x = cx + _PX(16)
-        icon_y = cy + _PX(16)
-        icon_symbols = ["📊", "💬", "👤", "📡", "🌐", "🗄️"]
-        _paste_emoji(img, (icon_x, icon_y), icon_symbols[idx], _get_font(icon_size), draw)
-        
-        f_val = _get_font(_PX(36), bold=True)
-        f_lbl = _get_font(_PX(14))
+        f_val = _get_font(_PX(32), bold=True)
+        f_lbl = _get_font(_PX(12))
         val_str = f"{values[idx]:,}" if isinstance(values[idx], int) else str(values[idx])
         
-        # 数值文字
+        # 数值文字（居中）
         vw = _text_width(draw, val_str, f_val)
-        vx = cx + card_w - vw - _PX(16)
-        _draw_text(draw, (vx, cy + _PX(16)), val_str, f_val, _TEXT_DARK, img)
+        vx = cx + (card_w - vw) // 2
+        _draw_text(draw, (vx, cy + _PX(20)), val_str, f_val, _TEXT_DARK, img)
         
-        # 标签文字
+        # 标签文字（居中）
         lw = _text_width(draw, label, f_lbl)
-        lx = cx + card_w - lw - _PX(16)
-        _draw_text(draw, (lx, cy + _PX(64)), label, f_lbl, _TEXT_MEDIUM, img)
-        
-        # 装饰线条
-        line_y = cy + card_h - _PX(8)
-        draw.line([(cx + _PX(8), line_y), (cx + _PX(32), line_y)], fill=color, width=_PX(2))
+        _draw_text(draw, (cx + (card_w - lw) // 2, cy + _PX(56)), label, f_lbl, _TEXT_MEDIUM, img)
     
     return y + 2 * card_h + gap + _PX(20)
 
@@ -813,7 +791,9 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
     # 绘制饼图
     start = -90.0
     for idx, (lbl, val) in enumerate(items):
-        color = _CHART_COLORS[idx % len(_CHART_COLORS)]
+        if idx >= len(_CHART_COLORS):
+            break
+        color = _CHART_COLORS[idx]
         sweep = val * 360.0 / total
         if sweep <= 0:
             continue
@@ -834,12 +814,14 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
     for idx, (lbl, val) in enumerate(items):
         if idx >= 6:  # 最多显示6个
             break
+        if idx >= len(_CHART_COLORS):
+            break
             
         ry = y0 + _PX(20) + idx * _PX(30)
         if ry + _PX(30) > y1 - _PX(20):
             break
             
-        color = _CHART_COLORS[idx % len(_CHART_COLORS)]
+        color = _CHART_COLORS[idx]
         pct = val * 100 / total
 
         # 颜色标识
@@ -1040,7 +1022,7 @@ def render_snapshot(
 
     # 8. 底部水印
     draw = ImageDraw.Draw(img)
-    watermark_text = "由狐狸插件 /huli_record snapshot 生成 · 现代优雅风格 v2.1"
+    watermark_text = "由狐狸插件 /huli_record snapshot 生成 · 现代简洁风格 v2.2"
     f_watermark = _get_font(_PX(12))
     _draw_text(draw, (_PX(24), y + _PX(12)), watermark_text, f_watermark, _TEXT_MEDIUM, img)
 
