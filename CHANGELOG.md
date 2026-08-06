@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.11] - 2026-08-06
+
+### Fixed
+- **修复 `/huli_record snapshot` 报错 `'dict' object cannot be interpreted as an integer`**：新增 `_to_int` 安全类型转换函数，对所有统计数值（时间趋势、排行、平台分布、平台详情、内容类型、数据表数量）做防御性转换，兼容 MySQL 驱动的 Decimal、None、字符串数字、dict 等异常类型，杜绝渲染崩溃
+- 修复 `_draw_content_types` 饼图中 `math` 未导入导致的 NameError
+- 修复 `_draw_content_types` 饼图引用不存在的 `_TEXT_DARK`、`_GLASS_BG` 常量导致的 NameError（改用 `_TEXT`、`_TRACK`）
+- `_draw_platform_detail`、`_draw_content_types` 兼容 dict 类型输入（自动转换为列表结构）
+
+### Changed
+- 快照渲染器全面采用防御性编程，任意异常数据都不会导致命令崩溃，最多显示空数据占位文案
+
 ## [0.2.10] - 2026-08-06
 
 ### Added

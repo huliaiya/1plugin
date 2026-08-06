@@ -547,6 +547,12 @@ ruff format .
 
 ## 📝 更新日志
 
+### v0.2.11（2026-08-06）
+
+- 修复 `/huli_record snapshot` 报错 `'dict' object cannot be interpreted as an integer`：新增 `_to_int` 安全类型转换函数，对所有统计数值做防御性转换，兼容 MySQL 驱动的 Decimal、None、dict 等异常类型，杜绝渲染崩溃
+- 修复 `_draw_content_types` 饼图中 `math` 未导入、`_TEXT_DARK`/`_GLASS_BG` 常量不存在导致的 NameError
+- 快照渲染器全面采用防御性编程，任意异常数据都不会导致命令崩溃
+
 ### v0.2.10（2026-08-06）
 
 - 快照新增"内容类型分布"卡片（对齐 WebUI）：饼图展示各内容类型消息占比，中心显示总消息数，右侧图例含颜色圆点/类型名/进度条/百分比数值，使用与 WebUI 一致的配色方案

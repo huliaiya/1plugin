@@ -12,6 +12,7 @@
 """
 
 import io
+import math
 import time
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
@@ -27,6 +28,26 @@ _SCALE = 2
 _W = 1080
 _W_FULL = _W * _SCALE
 _PX = lambda v: int(v * _SCALE)
+
+
+def _to_int(value, default=0):
+    """将任意类型的值安全转换为整数；无法转换时返回 default。
+
+    兼容 MySQL 驱动可能返回的 Decimal、字符串数字、None 等类型，
+    杜绝 'dict' object cannot be interpreted as an integer 之类报错。
+    """
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value.strip()))
+        except (ValueError, TypeError):
+            return default
+    return default
 
 # ========== 布局常量 ==========
 
@@ -403,12 +424,12 @@ def _draw_header(img, y, stats: MessageStats, generated_at: float):
 
 def _draw_stat_cards(img, blurred_bg, y, stats: MessageStats, db_table_count: int):
     values = [
-        stats.total_count,
-        stats.group_message_count,
-        stats.private_message_count,
-        stats.channel_message_count,
-        len(stats.platform_stats),
-        db_table_count,
+        _to_int(stats.total_count),
+        _to_int(stats.group_message_count),
+        _to_int(stats.private_message_count),
+        _to_int(stats.channel_message_count),
+        _to_int(len(stats.platform_stats or {})),
+        _to_int(db_table_count),
     ]
     gap = _PX(_CARD_GAP)
     card_w = (_W_FULL - _PX(_PADDING) * 2 - gap * 2) // 3
@@ -465,7 +486,7 @@ def _draw_timeline(img, xy, timeline: List[Dict]):
     for label, key, color in series_defs:
         pts = []
         for i, p in enumerate(timeline):
-            v = p.get(key, 0) or 0
+            v = _to_int(p.get(key, 0))
             if v > max_c:
                 max_c = v
             pts.append(v)
@@ -546,7 +567,7 @@ def _draw_ranking(img, xy, items: List[Dict], name_key: str, count_key: str, col
     f_name = _get_font(_PX(16))
     f_count = _get_font(_PX(15))
     f_rank = _get_font(_PX(14), bold=True)
-    max_c = max((it.get(count_key, 0) for it in items), default=1) or 1
+    max_c = max((_to_int(it.get(count_key, 0)) for it in items), default=1) or 1
     row_h = _PX(40)
     top3 = [_WARNING, (192, 192, 192), (205, 127, 50)]
     for i, it in enumerate(items[:8]):
@@ -555,7 +576,7 @@ def _draw_ranking(img, xy, items: List[Dict], name_key: str, count_key: str, col
             break
         name = str(it.get(name_key) or it.get("sender_id") or it.get("group_id") or "未知")
         name = _truncate(draw, name, f_name, inner_w - _PX(140))
-        count = it.get(count_key, 0)
+        count = _to_int(it.get(count_key, 0))
         count_str = f"{count:,}"
 
         rank_color = top3[i] if i < 3 else _TEXT_LIGHT
@@ -606,7 +627,7 @@ def _draw_platform_donut(img, xy, platform_stats: Dict[str, int]):
         _draw_text(draw, (x0 + inner_w // 2 - _PX(50), y0 + inner_h // 2), "暂无平台数据", _get_font(_PX(15)), _TEXT_LIGHT, img)
         return
 
-    items = sorted(platform_stats.items(), key=lambda kv: kv[1], reverse=True)
+    items = sorted(((k, _to_int(v)) for k, v in platform_stats.items()), key=lambda kv: kv[1], reverse=True)
     total = sum(v for _, v in items) or 1
 
     # 圆环布局：左侧圆环，右侧图例（对齐 WebUI center 40% / legend right 5%）
@@ -697,12 +718,17 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
     x0, y0, x1, y1 = xy
     draw = ImageDraw.Draw(img)
     
+    if isinstance(content_types, dict):
+        content_types = [
+            {"type": k, "label": k, "count": v} for k, v in content_types.items()
+        ]
+    
     if not content_types:
         _draw_text(draw, (x0 + _PX(20), y0 + _PX(20)), "暂无内容类型数据", _get_font(_PX(14)), _TEXT_LIGHT, img)
         return
 
     # 计算总数和各类型占比
-    total = sum(ct.get('count', 0) for ct in content_types)
+    total = sum(_to_int(ct.get('count', 0)) for ct in content_types)
     if total == 0:
         _draw_text(draw, (x0 + _PX(20), y0 + _PX(20)), "暂无内容类型数据", _get_font(_PX(14)), _TEXT_LIGHT, img)
         return
@@ -720,7 +746,7 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
     current_angle = 0
     
     for i, ct in enumerate(content_types[:8]):  # 最多显示8种类型
-        count = ct.get('count', 0)
+        count = _to_int(ct.get('count', 0))
         if count == 0:
             continue
             
@@ -759,7 +785,7 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
     label_text = "总消息"
     
     # 总数量
-    _draw_text(draw, (chart_center_x, chart_center_y - _PX(10)), total_text, _get_font(_PX(20)), _TEXT_DARK, img)
+    _draw_text(draw, (chart_center_x, chart_center_y - _PX(10)), total_text, _get_font(_PX(20)), _TEXT, img)
     
     # 标签
     _draw_text(draw, (chart_center_x, chart_center_y + _PX(10)), label_text, _get_font(_PX(12)), _TEXT_LIGHT, img)
@@ -770,7 +796,7 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
     legend_item_height = _PX(30)
     
     for i, ct in enumerate(content_types[:8]):  # 最多显示8种类型
-        count = ct.get('count', 0)
+        count = _to_int(ct.get('count', 0))
         if count == 0:
             continue
             
@@ -782,7 +808,7 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
         draw.ellipse([legend_x, legend_y, legend_x + _PX(12), legend_y + _PX(12)], fill=color)
         
         # 类型名称
-        _draw_text(draw, (legend_x + _PX(20), legend_y + _PX(4)), label, _get_font(_PX(12)), _TEXT_DARK, img)
+        _draw_text(draw, (legend_x + _PX(20), legend_y + _PX(4)), label, _get_font(_PX(12)), _TEXT, img)
         
         # 进度条背景
         progress_x = legend_x + _PX(100)
@@ -790,7 +816,7 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
         progress_w = _PX(60)
         progress_h = _PX(4)
         
-        draw.rectangle([progress_x, progress_y, progress_x + progress_w, progress_y + progress_h], fill=_GLASS_BG)
+        draw.rectangle([progress_x, progress_y, progress_x + progress_w, progress_y + progress_h], fill=_TRACK)
         
         # 进度条
         progress_fill_w = int(progress_w * percentage / 100)
@@ -798,7 +824,7 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
             draw.rectangle([progress_x, progress_y, progress_x + progress_fill_w, progress_y + progress_h], fill=color)
         
         # 百分比数字
-        _draw_text(draw, (progress_x + progress_w + _PX(8), legend_y + _PX(2)), f"{percentage:.1f}%", _get_font(_PX(11)), _TEXT_DARK, img)
+        _draw_text(draw, (progress_x + progress_w + _PX(8), legend_y + _PX(2)), f"{percentage:.1f}%", _get_font(_PX(11)), _TEXT, img)
         
         legend_y += legend_item_height
 
@@ -812,6 +838,8 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
     inner_w = x1 - x0
     inner_h = y1 - y0
     draw = ImageDraw.Draw(img)
+    if isinstance(platforms, dict):
+        platforms = [{"platform": k, "total": v} for k, v in platforms.items()]
     if not platforms:
         _draw_text(draw, (x0 + inner_w // 2 - _PX(50), y0 + inner_h // 2), "暂无平台数据", _get_font(_PX(15)), _TEXT_LIGHT, img)
         return
@@ -830,7 +858,7 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
     chart_h = chart_bottom - chart_top
 
     def seg_total(p: Dict) -> int:
-        return sum(p.get(k, 0) or 0 for _, k, _ in series_defs)
+        return sum(_to_int(p.get(k, 0)) for _, k, _ in series_defs)
 
     max_total = max((seg_total(p) for p in platforms), default=1) or 1
 
@@ -854,7 +882,7 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
         h_total = chart_h * total / max_total
         seg_bottom = chart_bottom
         for idx, (label, key, color) in enumerate(series_defs):
-            v = p.get(key, 0) or 0
+            v = _to_int(p.get(key, 0))
             if v <= 0:
                 continue
             h = h_total * v / total
@@ -863,12 +891,12 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
             seg_bottom = seg_top
 
         # 顶部段圆角（对齐 WebUI 柱状图圆角质感）
-        top_v = next((p.get(k, 0) for lbl, k, c in reversed(series_defs) if (p.get(k, 0) or 0) > 0), 0)
+        top_v = next((_to_int(p.get(k, 0)) for lbl, k, c in reversed(series_defs) if _to_int(p.get(k, 0)) > 0), 0)
         top_h = h_total * top_v / total
         top_y = chart_bottom - h_total
         r = min(_PX(5), bar_w / 2, top_h / 2)
         if r > 1:
-            top_color = next(c for lbl, k, c in reversed(series_defs) if (p.get(k, 0) or 0) > 0)
+            top_color = next(c for lbl, k, c in reversed(series_defs) if _to_int(p.get(k, 0)) > 0)
             ld.rounded_rectangle([cx_bar, top_y, cx_bar + bar_w, top_y + top_h], radius=r, fill=top_color + (255,))
             if top_h > r:
                 ld.rectangle([cx_bar, top_y + top_h - r, cx_bar + bar_w, top_y + top_h], fill=top_color + (255,))

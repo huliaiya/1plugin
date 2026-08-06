@@ -879,7 +879,7 @@ class MessageRecorder(Star):
         png_data = await asyncio.to_thread(
             render_snapshot,
             stats,
-            int(table_count) if isinstance(table_count, (int, float)) else max(int(table_count or 0), 0),
+            table_count,
             timeline,
             sender_ranking,
             group_ranking,
