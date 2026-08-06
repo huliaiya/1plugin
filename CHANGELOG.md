@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] - 2026-08-06
+
+### Changed
+
+- **快照图视觉全面升级为液态玻璃（Liquid Glass）风格**：卡片背后真实模糊背景模拟 backdrop-filter，叠加顶部高光渐变、内描边、彩色折射边缘光与柔和光斑背景，层次与质感大幅提升
+- **解决文字模糊**：改用 NotoSansCJK 矢量字体（中文/数字清晰渲染），全图 2x 超采样后 LANCZOS 降采样消除锯齿
+- **解决表情无法显示**：集成 NotoColorEmoji 彩色 emoji 字体，标题与内容中的 emoji 按位图缩放合成
+- **细节美化**：排行 Top 3 金银铜徽标、图标圆点光晕、进度条圆角化、数值加粗、时间趋势折线柔光
+- **性能优化**：背景整体预模糊一次（卡片复用），小元素改用局部图层 paste，渲染耗时由约 6.5s 降至约 2.7s
+
+### Verified
+
+- `python3 -m compileall fox_toolbox main.py` 通过
+- 示例数据渲染快照成功生成，emoji 与中文正常显示
+- `PYTHONPATH=/workspace python3 -m pytest -q` 与改动前基线一致（未引入回归）
+
 ## [0.2.3] - 2026-08-06
 
 ### Added
