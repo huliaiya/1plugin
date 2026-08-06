@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-08-07
+
+### Added
+- 新增 `scripts/fix_deploy.sh` 一键同步脚本：在 AstrBot 部署服务器上执行，将插件代码完整对齐到远程最新版本（fox_toolbox/、main.py、pages/、metadata.yaml），避免 main.py 与 fox_toolbox/ 文件版本混用导致的 `ImportError: cannot import name '_to_int'`
+
 ## [0.3.0] - 2026-08-06
 
 ### Fixed

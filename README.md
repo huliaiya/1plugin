@@ -547,6 +547,10 @@ ruff format .
 
 ## 📝 更新日志
 
+### v0.3.1（2026-08-07）
+
+- 新增 `scripts/fix_deploy.sh` 一键同步脚本：在 AstrBot 部署服务器上执行 `bash scripts/fix_deploy.sh`，将插件代码完整对齐到远程最新版本，避免 main.py 与 fox_toolbox/ 文件版本混用导致的导入错误
+
 ### v0.3.0（2026-08-06）
 
 - 修复 `/huli_record snapshot` 报错 `'dict' object cannot be interpreted as an integer`：新增 `_to_int` 安全类型转换函数，对所有统计数值做防御性转换，兼容 MySQL 驱动的 Decimal、None、dict 等异常类型，杜绝渲染崩溃
