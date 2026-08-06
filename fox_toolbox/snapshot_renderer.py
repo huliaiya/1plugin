@@ -1,7 +1,7 @@
 """WebUI 仪表盘快照渲染器
 
 用 Pillow 把数据库统计数据渲染成一张与 WebUI 风格一致的 PNG，
-供 /msg_record snapshot 指令直接发到聊天。
+供 /huli_record snapshot 指令直接发到聊天。
 
 视觉对齐 pages/recorder 的 Liquid Glass UI：
 1. 浅色渐变背景 + 柔和光斑（饱和度克制）
@@ -1015,7 +1015,7 @@ def render_snapshot(
 
     # 底部水印
     draw = ImageDraw.Draw(img)
-    _draw_text(draw, (_PX(_PADDING), y), "由狐狸插件 /msg_record snapshot 生成 · Liquid Glass 风格", _get_font(_PX(13)), _TEXT_LIGHT, img)
+    _draw_text(draw, (_PX(_PADDING), y), "由狐狸插件 /huli_record snapshot 生成 · Liquid Glass 风格", _get_font(_PX(13)), _TEXT_LIGHT, img)
 
     final_h = y + _PX(34)
     img = img.crop((0, 0, _W_FULL, final_h))

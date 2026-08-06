@@ -33,7 +33,7 @@
     "type": "bool",
     "description": "是否启用消息记录指令",
     "default": true,
-    "hint": "启用后可通过 /msg_record 指令查询消息记录、查看统计等"
+    "hint": "启用后可通过 /huli_record 指令查询消息记录、查看统计等"
   },
   "max_records": {
     "type": "int",

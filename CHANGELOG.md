@@ -115,9 +115,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`/msg_record snapshot` 指令**：将数据库统计渲染成与 WebUI 风格一致的 PNG 快照图并发到聊天，包含统计卡片、消息时间趋势、发送者/群组排行 Top 8、内容类型分布
+- **`/huli_record snapshot` 指令**：将数据库统计渲染成与 WebUI 风格一致的 PNG 快照图并发到聊天，包含统计卡片、消息时间趋势、发送者/群组排行 Top 8、内容类型分布
 - 新增 `fox_toolbox/snapshot_renderer.py`，基于 Pillow 渲染 Liquid Glass 风格仪表盘快照，零新增重依赖（仅复用已存在的 Pillow）
-- `/msg_record help` 帮助文本补充 snapshot 指令说明
+- `/huli_record help` 帮助文本补充 snapshot 指令说明
 
 ### Verified
 
@@ -186,7 +186,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **数据库浏览（只读）**：整合参考插件 astrbot_plugin_mysql（作者 Chris95743）的「表浏览 / SQL 查询」能力，在 Plugin Page 新增「数据库」视图，支持数据表列表（含行数）、表结构查看、表数据预览，以及只读 SQL 查询面板
 - **只读查询安全策略**：新增 `fox_toolbox/db_explorer.py`，仅允许 `SELECT / SHOW / DESCRIBE / DESC` 前缀语句；拦截 `DROP`、`TRUNCATE`、`FLUSH`、`GRANT`、`REVOKE`、`ALTER/CREATE USER`、`RENAME TABLE`、`LOCK` 与注释注入（`--`、`/* */`）；自动追加 `LIMIT` 防止大表全量拉取；查询超时上限 15 秒
-- **数据库浏览命令**：新增 `/msg_record tables` 命令，可在聊天中查看数据库业务表列表（自动跳过 `_schema_meta` 系统表）
+- **数据库浏览命令**：新增 `/huli_record tables` 命令，可在聊天中查看数据库业务表列表（自动跳过 `_schema_meta` 系统表）
 - **新增 Web API**：`GET db/tables`、`GET db/schema?table=`、`GET db/data?table=&limit=&offset=`、`POST db/query`（接收 `sql` 与 `max_rows`），共注册 26 个 API
 
 ### Changed

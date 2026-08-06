@@ -671,9 +671,8 @@ class MessageRecorder(Star):
         return self.config.get("enable_commands", True)
 
     # ========== 管理指令 ==========
-
-    @filter.command_group("msg_record")
-    def msg_record():
+    @filter.command_group("huli_record")
+    def huli_record():
         pass
 
     def _cmd_check(self, event):
@@ -689,7 +688,7 @@ class MessageRecorder(Star):
             lines.append(f"[{ts}] {msg.sender_name or msg.sender_id}: {c}")
         return "\n".join(lines)
 
-    @msg_record.command("stats")
+    @huli_record.command("stats")
     async def cmd_stats(self, event: AstrMessageEvent):
         if not self._cmd_check(event):
             if not self._api: yield event.plain_result("数据库未初始化")
@@ -710,7 +709,7 @@ class MessageRecorder(Star):
             lines.append("最新消息: " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stats.newest_timestamp / 1000)))
         yield event.plain_result("\n".join(lines))
 
-    @msg_record.command("cleanup")
+    @huli_record.command("cleanup")
     async def cmd_cleanup(self, event: AstrMessageEvent):
         if not self._cmd_check(event):
             if not self._api: yield event.plain_result("数据库未初始化")
@@ -722,7 +721,7 @@ class MessageRecorder(Star):
             return
         yield event.plain_result(f"✅ 已清理 {result['by_age'] + result['by_limit']} 条消息记录")
 
-    @msg_record.command("query")
+    @huli_record.command("query")
     async def cmd_query(self, event: AstrMessageEvent, sender_id: str = "", limit: int = 10):
         if not self._cmd_check(event):
             if not self._api: yield event.plain_result("数据库未初始化")
@@ -738,7 +737,7 @@ class MessageRecorder(Star):
             return
         yield event.plain_result(self._fmt_msgs(msgs, f"📝 查询到 {len(msgs)} 条消息:"))
 
-    @msg_record.command("search")
+    @huli_record.command("search")
     async def cmd_search(self, event: AstrMessageEvent, keyword: str, limit: int = 10):
         if not self._cmd_check(event):
             if not self._api: yield event.plain_result("数据库未初始化")
@@ -754,33 +753,29 @@ class MessageRecorder(Star):
             return
         yield event.plain_result(self._fmt_msgs(msgs, f"🔍 找到 {len(msgs)} 条包含 '{keyword}' 的消息:"))
 
-    @msg_record.command("help")
+    @huli_record.command("help")
     async def cmd_help(self, event: AstrMessageEvent):
         if not self._check_commands_enabled(event):
             return
         yield event.plain_result("""📖 消息记录器帮助
 
 📊 统计与管理:
-/msg_record stats - 查看统计信息
-/msg_record snapshot - 生成 WebUI 仪表盘快照图
-/msg_record cleanup - 手动清理过期消息
+/huli_record stats - 查看统计信息
+/huli_record snapshot - 生成 WebUI 仪表盘快照图
+/huli_record cleanup - 手动清理过期消息
 
-📝 时间查询:
-/msg_record today [limit] - 查看今天的消息
-/msg_record yesterday [limit] - 查看昨天的消息
-/msg_record history [time_range] [limit] - 按时间查询
-  时间范围: last7d、last30d、week、month 或日期如 2024-01-01
+/huli_record today [limit] - 查看今天的消息
+/huli_record yesterday [limit] - 查看昨天的消息
+/huli_record history [time_range] [limit] - 按时间查询
 
-🔍 查询与搜索:
-/msg_record query [sender_id] [limit] - 按发送者查询消息
-/msg_record search <keyword> [limit] - 全文搜索消息
+/huli_record query [sender_id] [limit] - 按发送者查询消息
+/huli_record search <keyword> [limit] - 全文搜索消息
 
-🗂️ 数据库浏览（只读）:
-/msg_record tables - 查看数据库中的业务表列表
+/huli_record tables - 查看数据库中的业务表列表
 
 选项: limit 默认 10，最大 50""")
 
-    @msg_record.command("today")
+    @huli_record.command("today")
     async def cmd_today(self, event: AstrMessageEvent, limit: int = 20):
         if not self._cmd_check(event):
             if not self._api: yield event.plain_result("数据库未初始化")
@@ -796,7 +791,7 @@ class MessageRecorder(Star):
             return
         yield event.plain_result(self._fmt_msgs(msgs, f"📅 今天共 {len(msgs)} 条消息:"))
 
-    @msg_record.command("yesterday")
+    @huli_record.command("yesterday")
     async def cmd_yesterday(self, event: AstrMessageEvent, limit: int = 20):
         if not self._cmd_check(event):
             if not self._api: yield event.plain_result("数据库未初始化")
@@ -812,7 +807,7 @@ class MessageRecorder(Star):
             return
         yield event.plain_result(self._fmt_msgs(msgs, f"📅 昨天共 {len(msgs)} 条消息:"))
 
-    @msg_record.command("history")
+    @huli_record.command("history")
     async def cmd_history(self, event: AstrMessageEvent, time_range: str = "week", limit: int = 30):
         if not self._cmd_check(event):
             if not self._api: yield event.plain_result("数据库未初始化")
@@ -830,7 +825,7 @@ class MessageRecorder(Star):
             return
         yield event.plain_result(self._fmt_msgs(msgs, f"📅 {time_desc} 共 {len(msgs)} 条消息:"))
 
-    @msg_record.command("tables")
+    @huli_record.command("tables")
     async def cmd_tables(self, event: AstrMessageEvent):
         """查看数据库中已创建的数据表（只读浏览）
 
@@ -854,7 +849,7 @@ class MessageRecorder(Star):
             lines.append(f"  - {t['name']}（{row_text}）")
         yield event.plain_result("\n".join(lines))
 
-    @msg_record.command("snapshot")
+    @huli_record.command("snapshot")
     async def cmd_snapshot(self, event: AstrMessageEvent):
         """生成 WebUI 仪表盘快照图片并发送。
 
@@ -884,7 +879,7 @@ class MessageRecorder(Star):
         png_data = await asyncio.to_thread(
             render_snapshot,
             stats,
-            max(table_count, 0),
+            int(table_count) if isinstance(table_count, (int, float)) else max(int(table_count or 0), 0),
             timeline,
             sender_ranking,
             group_ranking,

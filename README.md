@@ -195,19 +195,14 @@ Web 面板采用 **Liquid Glass** 液态玻璃设计风格，通过现代 CSS �
 
 | 指令 | 说明 | 示例 |
 |------|------|------|
-| `/msg_record stats` | 查看消息统计信息 | `/msg_record stats` |
-| `/msg_record cleanup` | 手动触发清理 | `/msg_record cleanup` |
-| `/msg_record query [sender_id] [limit]` | 查询消息记录 | `/msg_record query 123456 20` |
-| `/msg_record search <关键词> [limit]` | 搜索消息内容 | `/msg_record search hello 10` |
-| `/msg_record help` | 查看帮助信息 | `/msg_record help` |
-
-### 时间查询指令
-
-| 指令 | 说明 | 示例 |
-|------|------|------|
-| `/msg_record today` | 查看今天的消息 | `/msg_record today` |
-| `/msg_record yesterday` | 查看昨天的消息 | `/msg_record yesterday` |
-| `/msg_record history <时间范围>` | 按时间范围查询 | `/msg_record history last7d` |
+| `/huli_record stats` | 查看消息统计信息 | `/huli_record stats` |
+| `/huli_record cleanup` | 手动触发清理 | `/huli_record cleanup` |
+| `/huli_record query [sender_id] [limit]` | 查询消息记录 | `/huli_record query 123456 20` |
+| `/huli_record search <关键词> [limit]` | 搜索消息内容 | `/huli_record search hello 10` |
+| `/huli_record help` | 查看帮助信息 | `/huli_record help` |
+| `/huli_record today` | 查看今天的消息 | `/huli_record today` |
+| `/huli_record yesterday` | 查看昨天的消息 | `/huli_record yesterday` |
+| `/huli_record history <时间范围>` | 按时间范围查询 | `/huli_record history last7d` |
 
 **时间范围格式支持：**
 
@@ -593,9 +588,9 @@ ruff format .
 
 ### v0.2.3（2026-08-06）
 
-- 新增 `/msg_record snapshot` 指令：将数据库统计渲染成与 WebUI 风格一致的 PNG 快照图发到聊天，包含统计卡片、时间趋势、发送者/群组排行、内容类型分布
+- 新增 `/huli_record snapshot` 指令：将数据库统计渲染成与 WebUI 风格一致的 PNG 快照图发到聊天，包含统计卡片、时间趋势、发送者/群组排行、内容类型分布
 - 新增 `fox_toolbox/snapshot_renderer.py`，基于 Pillow 渲染 Liquid Glass 风格仪表盘，无新增重依赖
-- `/msg_record help` 补充 snapshot 指令说明
+- `/huli_record help` 补充 snapshot 指令说明
 
 ### v0.2.2（2026-08-05）
 
@@ -621,7 +616,7 @@ ruff format .
 
 - 新增「数据库浏览」视图：数据表列表（含行数）、表结构查看、表数据预览、只读 SQL 查询面板，能力整合自参考插件 astrbot_plugin_mysql（作者 Chris95743）
 - 只读查询安全策略：仅允许 `SELECT / SHOW / DESCRIBE / DESC`，拦截 DROP/TRUNCATE/GRANT/注释注入等危险操作，自动附加 LIMIT 防止大表全量拉取，查询超时上限 15 秒
-- 新增 `/msg_record tables` 聊天命令，查看数据库业务表列表（自动跳过 `_schema_meta` 系统表）
+- 新增 `/huli_record tables` 聊天命令，查看数据库业务表列表（自动跳过 `_schema_meta` 系统表）
 - 消息时间趋势图优化：线条加粗、数据点与坐标文字放大，图表高度提升至 420px
 - 统计卡片浮动动画更明显（±10px），页面背景新增动态极光流光
 - 修复 SQL 安全校验误报：字符串字面量中的关键词（如 `LIKE '%grant%'`）不再被误判为危险操作
