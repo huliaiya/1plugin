@@ -415,8 +415,9 @@ def _draw_header(img, y, stats: MessageStats, generated_at: float):
     _draw_text(draw, (x, y), "狐狸插件 · 仪表盘快照", f_title, _TEXT, img)
 
     sub = time.strftime("生成时间 %Y-%m-%d %H:%M:%S", time.localtime(generated_at))
-    if stats.newest_timestamp:
-        latest = time.strftime("最新消息 %m-%d %H:%M", time.localtime(stats.newest_timestamp / 1000))
+    newest_ts = _to_int(stats.newest_timestamp, default=0)
+    if newest_ts > 0:
+        latest = time.strftime("最新消息 %m-%d %H:%M", time.localtime(newest_ts / 1000))
         sub = sub + "  ·  " + latest
     _draw_text(draw, (_PADDING * _SCALE, y + _PX(46)), sub, f_sub, _TEXT_LIGHT, img)
     return y + _PX(80)

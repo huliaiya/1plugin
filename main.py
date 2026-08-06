@@ -28,7 +28,7 @@ from fox_toolbox.serializer import (
 )
 from fox_toolbox.platform_adapter import get_adapter
 from fox_toolbox.web_api import register_all_web_apis, cleanup_expired_tasks
-from fox_toolbox.snapshot_renderer import render_snapshot
+from fox_toolbox.snapshot_renderer import render_snapshot, _to_int
 
 MAX_CONCURRENT_SAVES = 8
 MAX_CONCURRENT_DOWNLOADS = 4
@@ -703,10 +703,12 @@ class MessageRecorder(Star):
             lines.append(f"频道消息: {stats.channel_message_count}")
         if stats.platform_stats:
             lines.append("平台分布:\n" + "\n".join(f"  - {p}: {c}" for p, c in stats.platform_stats.items()))
-        if stats.oldest_timestamp:
-            lines.append("最早消息: " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stats.oldest_timestamp / 1000)))
-        if stats.newest_timestamp:
-            lines.append("最新消息: " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stats.newest_timestamp / 1000)))
+        oldest_ts = _to_int(stats.oldest_timestamp)
+        newest_ts = _to_int(stats.newest_timestamp)
+        if oldest_ts:
+            lines.append("最早消息: " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(oldest_ts / 1000)))
+        if newest_ts:
+            lines.append("最新消息: " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(newest_ts / 1000)))
         yield event.plain_result("\n".join(lines))
 
     @huli_record.command("cleanup")
@@ -876,17 +878,22 @@ class MessageRecorder(Star):
             yield event.plain_result("暂无消息记录，无法生成快照")
             return
 
-        png_data = await asyncio.to_thread(
-            render_snapshot,
-            stats,
-            table_count,
-            timeline,
-            sender_ranking,
-            group_ranking,
-            content_types,
-            stats.platform_stats or {},
-            platform_detail,
-        )
+        try:
+            png_data = await asyncio.to_thread(
+                render_snapshot,
+                stats,
+                table_count,
+                timeline,
+                sender_ranking,
+                group_ranking,
+                content_types,
+                stats.platform_stats or {},
+                platform_detail,
+            )
+        except Exception as e:
+            logger.error(f"[FoxToolbox] 快照渲染失败: {e}", exc_info=True)
+            yield event.plain_result(f"快照渲染失败: {e}")
+            return
 
         from fox_toolbox.web_api import _get_plugin_data_dir
         temp_dir = _get_plugin_data_dir() / "temp"

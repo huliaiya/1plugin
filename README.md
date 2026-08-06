@@ -547,10 +547,13 @@ ruff format .
 
 ## 📝 更新日志
 
-### v0.2.11（2026-08-06）
+### v0.3.0（2026-08-06）
 
 - 修复 `/huli_record snapshot` 报错 `'dict' object cannot be interpreted as an integer`：新增 `_to_int` 安全类型转换函数，对所有统计数值做防御性转换，兼容 MySQL 驱动的 Decimal、None、dict 等异常类型，杜绝渲染崩溃
 - 修复 `_draw_content_types` 饼图中 `math` 未导入、`_TEXT_DARK`/`_GLASS_BG` 常量不存在导致的 NameError
+- `/huli_record snapshot` 增加渲染兜底：渲染异常时返回友好提示并记录完整日志，不再让 astrbot 弹出崩溃异常
+- 加固 `_draw_header` 最新消息时间戳与 `/huli_record stats` 最早/最新消息时间戳，异常类型（dict 等）不再导致 TypeError
+- 命令名称统一为 `huli_record`（原 `msg_record`），所有子命令同步更新
 - 快照渲染器全面采用防御性编程，任意异常数据都不会导致命令崩溃
 
 ### v0.2.10（2026-08-06）
