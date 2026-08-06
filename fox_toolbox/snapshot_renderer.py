@@ -1,15 +1,14 @@
 """WebUI 仪表盘快照渲染器
 
-用 Pillow 把数据库统计数据渲染成一张 Liquid Glass 风格的 PNG，
+用 Pillow 把数据库统计数据渲染成一张与 WebUI 风格一致的 PNG，
 供 /msg_record snapshot 指令直接发到聊天。
 
-视觉关键点：
-1. 2x 超采样 + LANCZOS 降采样，消除文字与圆角锯齿
-2. NotoSansCJK 矢量字体 + NotoColorEmoji 彩色 emoji 合成，解决模糊与表情缺失
-3. 真毛玻璃：预模糊背景一次，卡片从模糊背景取区 + 提亮，模拟 backdrop-filter
-4. 液态玻璃质感：顶部高光渐变、内描边、折射边缘光、柔和光斑背景
-
-性能：背景整体只模糊一次；小元素均用局部图层 paste，避免全图 alpha_composite。
+视觉对齐 pages/recorder 的 Liquid Glass UI：
+1. 浅色渐变背景 + 柔和光斑（饱和度克制）
+2. 玻璃卡片：半透白 0.55 + 模糊背景 + 投影 + 内部彩色光斑
+3. stat-value 蓝色渐变文字
+4. 2x 超采样 + LANCZOS 降采样保证清晰
+5. NotoSansCJK 矢量字体 + NotoColorEmoji 彩色 emoji
 """
 
 import io
@@ -35,10 +34,10 @@ _PADDING = 34
 _CARD_RADIUS = 22
 _CARD_GAP = 18
 
-# ========== 色彩 ==========
+# ========== 色彩（对齐 WebUI :root 变量）==========
 
-_BG_TOP = (236, 244, 255)
-_BG_BOTTOM = (245, 233, 248)
+_BG_TOP = (240, 247, 255)
+_BG_BOTTOM = (252, 228, 236)
 
 _PRIMARY = (79, 195, 247)
 _PRIMARY_DARK = (2, 136, 209)
@@ -51,11 +50,23 @@ _TEXT = (30, 41, 59)
 _TEXT_LIGHT = (100, 116, 139)
 _TEXT_WHITE = (255, 255, 255)
 
-_GLASS_FILL = (255, 255, 255, 108)
-_GLASS_BORDER = (255, 255, 255, 225)
-_GLASS_HIGHLIGHT = (255, 255, 255, 135)
-_GLASS_EDGE_GLOW = 220
+# 玻璃材质（对齐 --glass-bg: rgba(255,255,255,0.55)）
+_GLASS_FILL = (255, 255, 255, 140)
+_GLASS_BORDER = (255, 255, 255, 115)
+_GLASS_HIGHLIGHT = (255, 255, 255, 90)
 _TRACK = (226, 232, 240, 210)
+_SHADOW = (0, 0, 0, 18)
+
+# stat-value 蓝色渐变（对齐 .rainbow-text）
+_GRADIENT_BLUE = [
+    (79, 195, 247),
+    (41, 182, 246),
+    (3, 169, 244),
+    (100, 181, 246),
+    (129, 212, 250),
+    (179, 229, 252),
+    (77, 208, 225),
+]
 
 _CHART_COLORS = [
     (79, 195, 247),
@@ -179,23 +190,26 @@ def _text_width(draw, text: str, font) -> int:
 
 
 def _paste_emoji(canvas: Image.Image, xy, ch: str, ref_font, draw):
-    """把单个 emoji 渲染到独立图层再混合到目标画布（局部 paste，避免全图开销）。"""
+    """渲染单个 emoji：以 109px 原尺寸绘制后 LANCZOS 下采样到目标大小，保证清晰。"""
     emoji_font = _get_emoji_font()
     if emoji_font is None:
         draw.text(xy, ch, font=ref_font, fill=(120, 120, 120))
         return
-    e_size = int(ref_font.size * 1.05) + 4
-    layer = Image.new("RGBA", (e_size, e_size), (0, 0, 0, 0))
+    # 目标尺寸：稍大于字体大小，保证视觉平衡
+    target = int(ref_font.size * 1.15)
+    # 以 109px 原尺寸渲染到独立图层
+    raw_size = 109
+    layer = Image.new("RGBA", (raw_size + 8, raw_size + 8), (0, 0, 0, 0))
     ld = ImageDraw.Draw(layer)
     try:
-        ld.text((2, 2), ch, font=emoji_font, embedded_color=True)
+        ld.text((4, 4), ch, font=emoji_font, embedded_color=True)
     except TypeError:
-        ld.text((2, 2), ch, font=emoji_font)
-    size = int(ref_font.size * 1.05)
-    if layer.width != size:
-        layer = layer.resize((size, size), Image.LANCZOS)
+        ld.text((4, 4), ch, font=emoji_font)
+    # LANCZOS 高质量下采样到目标尺寸
+    layer = layer.resize((target, target), Image.LANCZOS)
     x, y = xy
-    y_off = int(ref_font.size * 0.06)
+    # 垂直微调，让 emoji 与文字基线对齐
+    y_off = int(ref_font.size * 0.02)
     canvas.paste(layer, (int(x), int(y - y_off)), layer)
 
 
@@ -214,7 +228,7 @@ def _draw_text(draw: ImageDraw.ImageDraw, xy, text: str, font, fill, canvas: Ima
                 cx += _measure_text(draw, buf, font)
                 buf = ""
             _paste_emoji(canvas, (cx, y), ch, font, draw)
-            cx += int(font.size * 0.95)
+            cx += int(font.size * 1.0)
         else:
             buf += ch
     if buf:
@@ -249,64 +263,79 @@ def _round_rect(draw, xy, radius, fill=None, outline=None, width=1):
         draw.pieslice([x1 - 2 * r, y1 - 2 * r, x1, y1], 0, 90, fill=fill)
 
 
-# ========== 背景 ==========
+def _draw_gradient_text(draw, xy, text, font, colors, canvas):
+    """绘制水平渐变文字（模拟 -webkit-background-clip: text）。"""
+    x, y = xy
+    if not text:
+        return
+    w = _text_width(draw, text, font)
+    if w <= 0:
+        return
+    # 逐像素列采样渐变色
+    seg = max(w // len(colors), 1)
+    cx = x
+    for i, ch in enumerate(text):
+        cw = _measure_text(draw, ch, font)
+        t = (cx - x) / max(w, 1)
+        idx = int(t * (len(colors) - 1))
+        color = colors[min(idx, len(colors) - 1)]
+        draw.text((cx, y), ch, font=font, fill=color)
+        cx += cw
+
+
+# ========== 背景（对齐 WebUI body 背景）==========
 
 
 def _make_background(size) -> Image.Image:
-    """柔和渐变 + 彩色光斑背景，为玻璃卡片提供透出内容。"""
+    """浅色渐变 + 柔和光斑背景（对齐 WebUI body）。"""
     w, h = size
     small = Image.new("RGB", (max(w, 1), 2))
-    sp = small.load()
-    sp[0, 0] = _BG_TOP
-    sp[0, 1] = _BG_BOTTOM
+    small.paste(_BG_TOP, (0, 0, max(w, 1), 1))
+    small.paste(_BG_BOTTOM, (0, 1, max(w, 1), 2))
     bg = small.resize((w, h), Image.BILINEAR).convert("RGBA")
 
     overlay = Image.new("RGBA", size, (0, 0, 0, 0))
     od = ImageDraw.Draw(overlay)
     blobs = [
-        (int(w * 0.12), int(h * 0.08), int(w * 0.30), (129, 212, 250, 95)),
-        (int(w * 0.88), int(h * 0.05), int(w * 0.26), (196, 181, 253, 85)),
-        (int(w * 0.78), int(h * 0.62), int(w * 0.32), (110, 231, 183, 80)),
-        (int(w * 0.20), int(h * 0.85), int(w * 0.28), (251, 207, 232, 85)),
-        (int(w * 0.50), int(h * 0.42), int(w * 0.22), (167, 243, 208, 60)),
-        (int(w * 0.62), int(h * 0.18), int(w * 0.20), (196, 181, 253, 55)),
+        (int(w * 0.15), int(h * 0.05), int(w * 0.26), (79, 195, 247, 32)),
+        (int(w * 0.85), int(h * 0.95), int(w * 0.24), (41, 182, 246, 28)),
+        (int(w * 0.50), int(h * 0.50), int(w * 0.20), (255, 183, 77, 18)),
+        (int(w * 0.70), int(h * 0.30), int(w * 0.18), (129, 199, 132, 16)),
     ]
     for cx, cy, r, color in blobs:
         od.ellipse([cx - r, cy - r, cx + r, cy + r], fill=color)
-    overlay = overlay.filter(ImageFilter.GaussianBlur(_PX(85)))
+    overlay = overlay.filter(ImageFilter.GaussianBlur(_PX(80)))
     bg.alpha_composite(overlay)
     return bg
 
 
-# ========== 毛玻璃卡片 ==========
+# ========== 毛玻璃卡片（对齐 WebUI .card / .stat-card）==========
 
 
 def _draw_glass_card(img: Image.Image, blurred_bg: Image.Image, xy, title: Optional[str] = None, accent: Optional[Tuple] = None):
-    """绘制液态玻璃卡片，返回内容区 (x0, y0, x1, y1)。
+    """绘制毛玻璃卡片，返回内容区 (x0, y0, x1, y1)。
 
-    质感层次（由外到内）：
-      1. 外层折射光晕：accent 色彩沿卡片边缘向外柔光扩散，模拟玻璃色散
-      2. 毛玻璃本体：从预模糊背景取区 + 半透白提亮，模拟 backdrop-filter
-      3. 顶部高光渐变：模拟环境光从上方照射
-      4. 双层内描边：外层白色亮边 + 内层暗边，形成玻璃厚度感
+    对齐 WebUI：
+    - backdrop-filter blur(14px) saturate(150%)：预模糊背景 + 提亮
+    - box-shadow：投影
+    - border 1px rgba(255,255,255,0.45)
+    - 顶部内高光 inset 0 1px 0 rgba(255,255,255,0.6)
+    - 内部彩色光斑 ::after radial-gradient
     """
     x0, y0, x1, y1 = xy
     cw, ch = x1 - x0, y1 - y0
     pad = _PX(8)
 
-    # 1. 外层折射光晕：独立大图层，向外显著扩散后直接贴到主图
-    if accent:
-        glow_pad = _PX(18)
-        glow_layer = Image.new("RGBA", (cw + glow_pad * 2, ch + glow_pad * 2), (0, 0, 0, 0))
-        ImageDraw.Draw(glow_layer).rounded_rectangle(
-            [glow_pad - _PX(3), glow_pad - _PX(3),
-             glow_pad + cw + _PX(3), glow_pad + ch + _PX(3)],
-            radius=_CARD_RADIUS + _PX(2), fill=accent + (_GLASS_EDGE_GLOW,),
-        )
-        glow = glow_layer.filter(ImageFilter.GaussianBlur(_PX(14)))
-        img.paste(glow, (x0 - glow_pad, y0 - glow_pad), glow)
+    # 投影（对齐 box-shadow 0 8px 32px rgba(0,0,0,0.08)）
+    shadow = Image.new("RGBA", (cw + _PX(20), ch + _PX(20)), (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).rounded_rectangle(
+        [_PX(10), _PX(10), cw + _PX(10), ch + _PX(10)],
+        radius=_CARD_RADIUS, fill=(0, 0, 0, 22),
+    )
+    shadow = shadow.filter(ImageFilter.GaussianBlur(_PX(10)))
+    img.paste(shadow, (x0 - _PX(10), y0 - _PX(4)), shadow)
 
-    # 2. 毛玻璃本体：从预模糊背景取区 + 提亮
+    # 毛玻璃本体：预模糊背景取区 + 半透白提亮
     region = blurred_bg.crop((x0 - pad, y0 - pad, x1 + pad, y1 + pad))
     bright = Image.new("RGBA", region.size, _GLASS_FILL)
     region.alpha_composite(bright)
@@ -317,19 +346,29 @@ def _draw_glass_card(img: Image.Image, blurred_bg: Image.Image, xy, title: Optio
     )
     img.paste(region, (x0 - pad, y0 - pad), mask)
 
-    # 3+4. 顶部高光 + 双层内描边（局部图层一次 paste）
+    # 装饰层：顶部高光 + 内描边 + 内部彩色光斑（一次 paste）
     deco = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
     dd = ImageDraw.Draw(deco)
-    hl_h = int(ch * 0.5)
+
+    # 内部彩色光斑（对齐 .stat-card::after）
+    if accent:
+        spot = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
+        sd = ImageDraw.Draw(spot)
+        sd.ellipse([int(cw * 0.1), int(ch * 0.1), int(cw * 0.7), int(ch * 0.7)],
+                   fill=accent + (22,))
+        spot = spot.filter(ImageFilter.GaussianBlur(_PX(30)))
+        deco.alpha_composite(spot)
+
+    # 顶部高光渐变（对齐 inset 0 1px 0 rgba(255,255,255,0.6)）
+    hl_h = int(ch * 0.4)
     for yy in range(hl_h):
         t = yy / max(hl_h - 1, 1)
-        a = int(_GLASS_HIGHLIGHT[3] * (1 - t) ** 1.5)
+        a = int(_GLASS_HIGHLIGHT[3] * (1 - t) ** 1.2)
         dd.line([(0, yy), (cw, yy)], fill=(255, 255, 255, a))
-    _round_rect(dd, (0, 0, cw, ch), _CARD_RADIUS, outline=_GLASS_BORDER, width=_PX(2))
-    _round_rect(dd, (_PX(1), _PX(1), cw - _PX(1), ch - _PX(1)), _CARD_RADIUS - 1,
-                outline=(255, 255, 255, 70), width=_PX(1))
-    if accent:
-        _round_rect(dd, (_PX(1), _PX(2), _PX(4), ch - _PX(2)), _PX(2), fill=accent + (140,))
+
+    # 内描边（对齐 border 1px rgba(255,255,255,0.45)）
+    _round_rect(dd, (0, 0, cw, ch), _CARD_RADIUS, outline=_GLASS_BORDER, width=_PX(1))
+
     img.paste(deco, (x0, y0), deco)
 
     if title:
@@ -351,7 +390,7 @@ def _draw_header(img, y, stats: MessageStats, generated_at: float):
     f_sub = _get_font(_PX(17))
     x = _PADDING * _SCALE
     _paste_emoji(img, (x, y), "🦊", f_title, draw)
-    x += int(f_title.size * 1.15)
+    x += int(f_title.size * 1.3)
     _draw_text(draw, (x, y), "狐狸插件 · 仪表盘快照", f_title, _TEXT, img)
 
     sub = time.strftime("生成时间 %Y-%m-%d %H:%M:%S", time.localtime(generated_at))
@@ -383,21 +422,16 @@ def _draw_stat_cards(img, blurred_bg, y, stats: MessageStats, db_table_count: in
         label, color = _STAT_CARDS[idx]
         _draw_glass_card(img, blurred_bg, (cx, cy, cx + card_w, cy + card_h), accent=color)
 
-        # 图标圆点 + 光晕（局部图层）
-        icon = Image.new("RGBA", (card_w, card_h), (0, 0, 0, 0))
-        id_ = ImageDraw.Draw(icon)
-        dot_r = _PX(11)
-        dot_c = (_PX(20) + dot_r, _PX(28))
-        id_.ellipse([dot_c[0] - dot_r, dot_c[1] - dot_r, dot_c[0] + dot_r, dot_c[1] + dot_r], fill=color + (255,))
-        glow = icon.filter(ImageFilter.GaussianBlur(_PX(6)))
-        img.paste(glow, (cx, cy), glow)
-        img.paste(icon, (cx, cy), icon)
-
         f_val = _get_font(_PX(38), bold=True)
         f_lbl = _get_font(_PX(16))
         val_str = f"{values[idx]:,}" if isinstance(values[idx], int) else str(values[idx])
-        _draw_text(draw, (cx + _PX(48), cy + _PX(16)), val_str, f_val, color, img)
-        _draw_text(draw, (cx + _PX(48), cy + _PX(66)), label, f_lbl, _TEXT_LIGHT, img)
+        # stat-value 蓝色渐变文字（对齐 .stat-value）
+        vw = _text_width(draw, val_str, f_val)
+        vx = cx + (card_w - vw) // 2
+        _draw_gradient_text(draw, (vx, cy + _PX(18)), val_str, f_val, _GRADIENT_BLUE, img)
+        # 标签居中
+        lw = _text_width(draw, label, f_lbl)
+        _draw_text(draw, (cx + (card_w - lw) // 2, cy + _PX(68)), label, f_lbl, _TEXT_LIGHT, img)
     return y + 2 * card_h + gap + _PX(10)
 
 
@@ -422,7 +456,6 @@ def _draw_timeline(img, xy, timeline: List[Dict]):
         py = y1 - _PX(10) - (c / max_c) * (inner_h - _PX(36))
         points.append((px, py))
 
-    # 图表区局部图层（网格、填充、折线、点一次性绘制）
     layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
     ld = ImageDraw.Draw(layer)
 
@@ -435,19 +468,12 @@ def _draw_timeline(img, xy, timeline: List[Dict]):
         ld.polygon(fill_pts, fill=_PRIMARY + (50,))
         ld.line(points, fill=_PRIMARY_DARK, width=_PX(3), joint="curve")
 
-        # 折线柔光（只对折线单独模糊）
-        glow_layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        ImageDraw.Draw(glow_layer).line(points, fill=_PRIMARY_DARK + (140,), width=_PX(6), joint="curve")
-        glow = glow_layer.filter(ImageFilter.GaussianBlur(_PX(5)))
-        img.alpha_composite(glow)
-
     for px, py in points:
         r = _PX(5)
         ld.ellipse([px - r, py - r, px + r, py + r], fill=_TEXT_WHITE, outline=_PRIMARY_DARK, width=_PX(2))
 
     img.alpha_composite(layer)
 
-    # X 轴标签
     f_lbl = _get_font(_PX(13))
     label_indices = list(range(n)) if n <= 6 else [0, n // 2, n - 1]
     for i in label_indices:
@@ -484,7 +510,6 @@ def _draw_ranking(img, xy, items: List[Dict], name_key: str, count_key: str, col
         count = it.get(count_key, 0)
         count_str = f"{count:,}"
 
-        # 排名徽标
         rank_color = top3[i] if i < 3 else _TEXT_LIGHT
         badge = Image.new("RGBA", (inner_w, row_h), (0, 0, 0, 0))
         bd = ImageDraw.Draw(badge)
@@ -497,7 +522,6 @@ def _draw_ranking(img, xy, items: List[Dict], name_key: str, count_key: str, col
 
         _draw_text(draw, (x0 + _PX(30), ry + _PX(2)), name, f_name, _TEXT, img)
 
-        # 进度条
         bar_y = ry + _PX(26)
         bar_w = inner_w - _PX(140)
         bar = Image.new("RGBA", (bar_w, _PX(7)), (0, 0, 0, 0))
@@ -535,14 +559,12 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
         pct = count * 100 / total
         color = _CHART_COLORS[i % len(_CHART_COLORS)]
 
-        # 色块
         cb = Image.new("RGBA", (inner_w, row_h), (0, 0, 0, 0))
         cod = ImageDraw.Draw(cb)
         _round_rect(cod, (0, _PX(4), _PX(14), _PX(18)), _PX(4), fill=color + (255,))
         img.paste(cb, (x0, ry), cb)
         _draw_text(draw, (x0 + _PX(24), ry), label, f_label, _TEXT, img)
 
-        # 条形
         bar_x = x0 + _PX(140)
         bar_w = inner_w - _PX(240)
         bar = Image.new("RGBA", (bar_w, _PX(10)), (0, 0, 0, 0))
@@ -586,8 +608,8 @@ def render_snapshot(
 
     canvas_h = _PX(1900)
     img = _make_background((_W_FULL, canvas_h))
-    # 预模糊背景一次，供所有毛玻璃卡片复用
-    blurred_bg = img.filter(ImageFilter.GaussianBlur(_PX(18)))
+    # 预模糊背景一次，供所有毛玻璃卡片复用（对齐 backdrop-filter blur(14px)）
+    blurred_bg = img.filter(ImageFilter.GaussianBlur(_PX(14)))
 
     y = _PX(_PADDING)
     y = _draw_header(img, y, stats, generated_at)

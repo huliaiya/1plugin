@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] - 2026-08-06
+
+### Fixed
+
+- **修复背景渲染为全黑的严重问题**：Pillow 的 `Image.load()` 像素访问器直接索引赋值在 `resize` 时数据丢失，导致渐变背景生成全黑。改用 `Image.paste` 填充后恢复浅色渐变背景
+- **修复 emoji 模糊不可辨**：改为以 109px 原尺寸渲染 emoji 后 LANCZOS 高质量下采样，狐狸 🦊 等图标恢复清晰可辨
+
+### Changed
+
+- **全面对齐 WebUI Liquid Glass 风格**：浅色渐变背景（淡蓝→淡粉）、半透白磨砂卡片 + 柔和投影、移除花哨的彩色折射外发光、统计数值改为 WebUI 同款蓝色渐变文字并居中、卡片内部加入 accent 彩色光斑
+
+### Verified
+
+- `python3 -m compileall fox_toolbox main.py` 通过
+- 图片视觉审查确认：浅色背景清爽、🦊 emoji 清晰可辨、蓝色渐变数值居中、布局整齐、高度贴合 WebUI
+- `PYTHONPATH=/workspace python3 -m pytest -q` 与基线一致（10 failed, 202 passed, 71 errors，无回归）
+
 ## [0.2.5] - 2026-08-06
 
 ### Changed
