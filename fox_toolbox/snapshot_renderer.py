@@ -598,11 +598,11 @@ def _draw_ranking(img, xy, items: List[Dict], name_key: str, count_key: str, col
             rank_color = rank_colors[i]
             draw.ellipse([x0 + _PX(8), ry + _PX(8), x0 + badge_size + _PX(8), ry + badge_size + _PX(8)], 
                        fill=rank_color)
-            rank_color_text = _BG_WHITE
+            rank_color_text = (0, 0, 0)  # 金银铜用黑色文字
         else:
             draw.ellipse([x0 + _PX(8), ry + _PX(8), x0 + badge_size + _PX(8), ry + badge_size + _PX(8)], 
-                       fill=_TEXT_MEDIUM)
-            rank_color_text = _BG_WHITE
+                       fill=(229, 231, 235))
+            rank_color_text = (107, 114, 128)  # 其他排名用灰色文字
         
         # 排名文字
         rank_txt = str(i + 1)
@@ -612,20 +612,22 @@ def _draw_ranking(img, xy, items: List[Dict], name_key: str, count_key: str, col
         # 名称
         _draw_text(draw, (x0 + _PX(40), ry + _PX(8)), name, f_name, _TEXT_DARK, img)
 
-        # 进度条
+        # 进度条背景
         bar_y = ry + _PX(24)
         bar_w = inner_w - _PX(160)
         bar_bg = Image.new("RGBA", (bar_w, _PX(6)), (0, 0, 0, 0))
         bar_bg_draw = ImageDraw.Draw(bar_bg)
-        _round_rect(bar_bg_draw, (0, 0, bar_w, _PX(6)), _PX(3), fill=(229, 231, 235, 100))
+        _round_rect(bar_bg_draw, (0, 0, bar_w, _PX(6)), _PX(3), fill=(229, 231, 235))
         img.paste(bar_bg, (x0 + _PX(40), bar_y), bar_bg)
 
-        # 进度条填充
+        # 进度条填充 - 修复颜色问题
         fill_w = int(bar_w * (count / max_c))
         if fill_w > 0:
             bar_fill = Image.new("RGBA", (fill_w, _PX(6)), (0, 0, 0, 0))
             bar_fill_draw = ImageDraw.Draw(bar_fill)
-            _round_rect(bar_fill_draw, (0, 0, fill_w, _PX(6)), _PX(3), fill=color + (255,))
+            # 使用正确的RGBA格式
+            fill_color = color + (180,) if len(color) == 3 else color
+            _round_rect(bar_fill_draw, (0, 0, fill_w, _PX(6)), _PX(3), fill=fill_color)
             img.paste(bar_fill, (x0 + _PX(40), bar_y), bar_fill)
 
         # 数值
@@ -743,7 +745,7 @@ def _draw_platform_donut(img, xy, platform_stats: Dict[str, int]):
 
 
 def _draw_content_types(img, xy, content_types: List[Dict]):
-    """绘制内容类型分布圆环图。"""
+    """绘制内容类型分布饼图。"""
     x0, y0, x1, y1 = xy
     inner_w = x1 - x0
     inner_h = y1 - y0
@@ -780,13 +782,13 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
         items = items[:max_display_items]
         items.append(("其他", other_count))
 
-    # 简化的饼图布局
-    pie_d = min(inner_h, inner_w * 0.6)
+    # 饼图布局优化
+    pie_d = min(inner_h, inner_w * 0.5)
     pie_r = pie_d / 2
-    cx = x0 + pie_r + _PX(20)
+    cx = x0 + pie_r + _PX(30)
     cy = y0 + inner_h / 2
     
-    # 添加饼图背景圆圈
+    # 绘制饼图背景
     draw.ellipse([cx - pie_r, cy - pie_r, cx + pie_r, cy + pie_r], fill=(245, 247, 250))
 
     # 绘制饼图
@@ -808,9 +810,9 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
         )
         start += sweep
 
-    # 图例
-    legend_x = x0 + pie_d + _PX(40)
-    legend_w = inner_w - pie_d - _PX(60)
+    # 图例区域优化
+    legend_x = x0 + pie_d + _PX(50)
+    legend_w = inner_w - pie_d - _PX(70)
     f_name = _get_font(_PX(14))
     f_count = _get_font(_PX(14))
     
@@ -819,9 +821,9 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
         # 如果空间不足，缩小饼图尺寸
         pie_d = min(inner_h, inner_w * 0.4)
         pie_r = pie_d / 2
-        cx = x0 + pie_r + _PX(20)
-        legend_x = x0 + pie_d + _PX(40)
-        legend_w = inner_w - pie_d - _PX(60)
+        cx = x0 + pie_r + _PX(30)
+        legend_x = x0 + pie_d + _PX(50)
+        legend_w = inner_w - pie_d - _PX(70)
     
     # 限制显示的数量，确保图例不超出边界
     max_legend_items = 6
@@ -834,22 +836,22 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
         else:
             color = _CHART_COLORS[idx]
             
-        ry = y0 + _PX(20) + idx * _PX(30)
-        if ry + _PX(30) > y1 - _PX(20):
+        ry = y0 + _PX(30) + idx * _PX(35)
+        if ry + _PX(35) > y1 - _PX(20):
             break
             
         pct = val * 100 / total
 
-        # 颜色标识
-        draw.ellipse([legend_x, ry + _PX(8), legend_x + _PX(12), ry + _PX(20)], fill=color)
+        # 颜色标识圆圈
+        draw.ellipse([legend_x, ry + _PX(8), legend_x + _PX(14), ry + _PX(22)], fill=color)
         
         # 类型名称
-        _draw_text(draw, (legend_x + _PX(20), ry + _PX(8)), lbl, f_name, _TEXT_DARK, img)
+        _draw_text(draw, (legend_x + _PX(24), ry + _PX(8)), lbl, f_name, _TEXT_DARK, img)
 
         # 数值和百分比
         txt = f"{val:,} ({pct:.1f}%)"
         tw2 = _text_width(draw, txt, f_count)
-        _draw_text(draw, (x1 - tw2 - _PX(8), ry + _PX(8)), txt, f_count, _TEXT_MEDIUM, img)
+        _draw_text(draw, (x1 - tw2 - _PX(15), ry + _PX(8)), txt, f_count, _TEXT_MEDIUM, img)
 
 
 def _draw_platform_detail(img, xy, platforms: List[Dict]):
@@ -873,8 +875,8 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
         ("频道", "channel_count", _CHART_COLORS[2]),
     ]
 
-    chart_top = y0 + _PX(30)
-    chart_bottom = y1 - _PX(30)
+    chart_top = y0 + _PX(50)
+    chart_bottom = y1 - _PX(50)
     chart_h = chart_bottom - chart_top
 
     def seg_total(p: Dict) -> int:
@@ -887,9 +889,34 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
     display_platforms = platforms[:max_platforms]
 
     n = len(display_platforms)
+    if n == 0:
+        _draw_text(draw, (x0 + inner_w // 2, y0 + inner_h // 2), "暂无平台数据", 
+                  _get_font(_PX(18)), _TEXT_MEDIUM, img)
+        return
+        
     slot_w = inner_w / n
     bar_w = min(slot_w * 0.6, _PX(50))
 
+    # 绘制图例
+    legend_y = y0 + _PX(15)
+    f_legend = _get_font(_PX(11))
+    
+    for idx, (label, key, color) in enumerate(series_defs):
+        legend_x_pos = x0 + _PX(20) + idx * _PX(100)
+        if legend_x_pos + _PX(50) > x1:
+            break
+            
+        # 颜色块
+        draw.rectangle([legend_x_pos, legend_y, legend_x_pos + _PX(8), legend_y + _PX(8)], fill=color)
+        # 标签
+        _draw_text(draw, (legend_x_pos + _PX(12), legend_y - _PX(1)), label, f_legend, _TEXT_MEDIUM, img)
+
+    # 绘制峰值标注
+    peak_text = f"峰值 {max_total:,}"
+    _draw_text(draw, (x1 - _text_width(draw, peak_text, _get_font(_PX(12), bold=True)) - _PX(20), y0 + _PX(15)), 
+              peak_text, _get_font(_PX(12), bold=True), _TEXT_MEDIUM, img)
+
+    # 绘制柱状图
     f_val = _get_font(_PX(12))
     for i, p in enumerate(display_platforms):
         cx_bar = x0 + slot_w * i + (slot_w - bar_w) / 2
@@ -922,25 +949,6 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
         lw = _text_width(draw, label, f_lbl)
         lx = x0 + slot_w * i + (slot_w - lw) / 2
         _draw_text(draw, (lx, chart_bottom + _PX(8)), label, f_lbl, _TEXT_MEDIUM, img)
-
-    # 峰值标注
-    peak_text = f"峰值 {max_total:,}"
-    _draw_text(draw, (x0, y0 + _PX(8)), peak_text, _get_font(_PX(12), bold=True), _TEXT_MEDIUM, img)
-    
-    # 添加图例
-    legend_x = x0 + _PX(10)
-    legend_y = y1 - _PX(15)
-    f_legend = _get_font(_PX(11))
-    
-    for idx, (label, key, color) in enumerate(series_defs):
-        legend_x_pos = legend_x + idx * _PX(80)
-        if legend_x_pos + _PX(50) > x1:
-            break
-            
-        # 颜色块
-        draw.rectangle([legend_x_pos, legend_y, legend_x_pos + _PX(8), legend_y + _PX(8)], fill=color)
-        # 标签
-        _draw_text(draw, (legend_x_pos + _PX(12), legend_y - _PX(1)), label, f_legend, _TEXT_MEDIUM, img)
 
 
 # ========== 主入口 ==========
