@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-06
+
+### Fixed
+- **修复 `/huli_record snapshot` 快照图大面积变黑（旧版圆环图 putalpha bug）**：旧版 `_draw_platform_donut` 用全不透明掩码绘制内圆镂空，导致非圆环区域 RGB 置黑后以 alpha 255 合成，整幅图被黑色覆盖；改为在圆环图层上用透明色重绘内圆镂空，彻底解决黑屏
+- 修复 `_make_background` putpixel 缺少 alpha 导致背景出现透明黑（改用 1px 渐变条 resize 方案）
+- 修复 `_draw_ranking` 空数据分支引用未定义变量 `inner_h`、`_draw_glass_card` 内发光椭圆坐标越界
+
+### Changed
+- `_draw_content_types` 由旧版独立 hex 色饼图重构为与平台分布一致的玻璃态圆环图（RGBA 分段、发光中心文字、右侧图例进度条、统一配色）
+- 全图文字可读性优化：标题/统计卡片数值/图例/坐标轴/柱顶值/排行榜文字整体放大 1~2 级，次要文字颜色加深（slate-600），提升长图压缩后的清晰度
+- 圆环分段新增白色分隔线并加粗，增强小分段辨识度
+- 排行榜长名称改为中间省略（保留首尾），长群 ID 更易辨认
+- 空数据状态统一为居中的玻璃态虚线圆角框 + 空圆环图标
+- 快照水印版本号同步更新
+
 ## [0.3.2] - 2026-08-07
 
 ### Fixed
