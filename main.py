@@ -28,6 +28,7 @@ from fox_toolbox.serializer import (
 )
 from fox_toolbox.platform_adapter import get_adapter
 from fox_toolbox.web_api import register_all_web_apis, cleanup_expired_tasks
+from fox_toolbox.snapshot_renderer import render_snapshot
 
 MAX_CONCURRENT_SAVES = 8
 MAX_CONCURRENT_DOWNLOADS = 4
@@ -761,6 +762,7 @@ class MessageRecorder(Star):
 
 📊 统计与管理:
 /msg_record stats - 查看统计信息
+/msg_record snapshot - 生成 WebUI 仪表盘快照图
 /msg_record cleanup - 手动清理过期消息
 
 📝 时间查询:
@@ -851,3 +853,53 @@ class MessageRecorder(Star):
             row_text = f"{t['row_count']} 行" if t["row_count"] >= 0 else "?"
             lines.append(f"  - {t['name']}（{row_text}）")
         yield event.plain_result("\n".join(lines))
+
+    @msg_record.command("snapshot")
+    async def cmd_snapshot(self, event: AstrMessageEvent):
+        """生成 WebUI 仪表盘快照图片并发送。
+
+        用 Pillow 将数据库统计数据渲染成与 WebUI 风格一致的 PNG，
+        包含统计卡片、时间趋势、发送者/群组排行、内容类型分布。
+        数据库不可用时降级返回文本提示。
+        """
+        if not self._check_initialized() or not self._db:
+            yield event.plain_result("数据库未初始化，无法生成快照")
+            return
+        try:
+            stats = await self._db.get_stats()
+            table_count = await self._db.get_table_count()
+            timeline = await self._db.get_timeline_stats(interval="day")
+            sender_ranking = await self._db.get_sender_ranking(limit=8)
+            group_ranking = await self._db.get_group_ranking(limit=8)
+            content_types = await self._db.get_content_type_stats()
+        except Exception as e:
+            yield event.plain_result(f"生成快照失败: {e}")
+            return
+
+        if stats.total_count == 0:
+            yield event.plain_result("暂无消息记录，无法生成快照")
+            return
+
+        png_data = await asyncio.to_thread(
+            render_snapshot,
+            stats,
+            max(table_count, 0),
+            timeline,
+            sender_ranking,
+            group_ranking,
+            content_types,
+        )
+
+        from fox_toolbox.web_api import _get_plugin_data_dir
+        temp_dir = _get_plugin_data_dir() / "temp"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        snapshot_path = temp_dir / f"snapshot_{int(time.time() * 1000)}.png"
+        snapshot_path.write_bytes(png_data)
+
+        try:
+            yield event.image_result(str(snapshot_path))
+        finally:
+            try:
+                snapshot_path.unlink(missing_ok=True)
+            except Exception:
+                pass

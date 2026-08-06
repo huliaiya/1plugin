@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-08-06
+
+### Added
+
+- **`/msg_record snapshot` 指令**：将数据库统计渲染成与 WebUI 风格一致的 PNG 快照图并发到聊天，包含统计卡片、消息时间趋势、发送者/群组排行 Top 8、内容类型分布
+- 新增 `fox_toolbox/snapshot_renderer.py`，基于 Pillow 渲染 Liquid Glass 风格仪表盘快照，零新增重依赖（仅复用已存在的 Pillow）
+- `/msg_record help` 帮助文本补充 snapshot 指令说明
+
+### Verified
+
+- `python3 -m compileall fox_toolbox main.py` 通过
+- `render_snapshot` 参数签名与 `main.py` 调用一致，复用 `Database.get_stats/get_timeline_stats/get_sender_ranking/get_group_ranking/get_content_type_stats/get_table_count` 现有方法
+- `PYTHONPATH=/workspace python3 -m pytest -q` 与改动前基线一致（未引入回归）
+
 ## [0.2.2] - 2026-08-05
 
 ### Fixed

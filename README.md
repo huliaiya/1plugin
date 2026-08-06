@@ -552,6 +552,12 @@ ruff format .
 
 ## 📝 更新日志
 
+### v0.2.3（2026-08-06）
+
+- 新增 `/msg_record snapshot` 指令：将数据库统计渲染成与 WebUI 风格一致的 PNG 快照图发到聊天，包含统计卡片、时间趋势、发送者/群组排行、内容类型分布
+- 新增 `fox_toolbox/snapshot_renderer.py`，基于 Pillow 渲染 Liquid Glass 风格仪表盘，无新增重依赖
+- `/msg_record help` 补充 snapshot 指令说明
+
 ### v0.2.2（2026-08-05）
 
 - 修复旧版 `web_api.py` 与新版 `main.py` 混用时 `register_all_web_apis` 参数不匹配崩溃，页面/API 不再因版本不同步而全部未注册
