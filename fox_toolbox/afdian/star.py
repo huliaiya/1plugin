@@ -308,18 +308,38 @@ class AfdianFeature:
         """无公网轮询循环：定时拉取订单，发现新订单时走与 Webhook 相同的处理逻辑。
 
         每轮拉取最新若干订单，与本地库比对（按 out_trade_no 排重），
-        新订单调用 `_afdian_handle_new_order`（通知订阅会话 + 备注匹配自动回复，
+        新订单调用 `on_afdian_new_order`（通知订阅会话 + 备注匹配自动回复，
         与 Webhook 回调逻辑一致）。
         """
+        # 等待历史订单同步完成，避免把历史订单误判为新订单触发通知
+        if self.afdian_sync_task and not self.afdian_sync_task.done():
+            try:
+                await self.afdian_sync_task
+            except (asyncio.CancelledError, Exception):
+                pass
         interval = self.afdian_cfg.poll_interval
         while True:
             if not self.afdian_cfg.enabled:
                 break
             try:
+                await self._afdian_cleanup_expired_pending()
                 await self.afdian_poll_once()
             except Exception as e:
                 logger.warning(f"[Afdian] 轮询检测失败: {e}")
             await asyncio.sleep(interval)
+
+    async def _afdian_cleanup_expired_pending(self):
+        """清理超时未支付的待确认订单，避免 pending 记录无限累积。"""
+        timeout = self.afdian_cfg.poll_timeout
+        now = time.time()
+        expired = [
+            sid
+            for sid, info in self.afdian_pending_orders.items()
+            if now - (info.get("created_at") or now) > timeout
+        ]
+        for sid in expired:
+            self.afdian_pending_orders.pop(sid, None)
+            logger.info(f"[Afdian] 订单等待支付超时，移除待确认记录 {sid}")
 
     async def afdian_poll_once(self):
         """执行一次轮询检测：拉取最近订单并处理新增订单。
