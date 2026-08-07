@@ -21,6 +21,64 @@ _SELECT_COLUMNS = """
 """
 
 
+def _has_value(value: Optional[str]) -> bool:
+    return value is not None and str(value).strip() != ""
+
+
+def _infer_message_bucket(
+    message_type: Optional[str],
+    group_id: Optional[str] = None,
+    channel_id: Optional[str] = None,
+) -> str:
+    """兼容历史脏数据，推断消息应归属的统计桶。"""
+    normalized = str(message_type or "").strip().lower()
+    if normalized in {"group", "private", "channel", "forum"}:
+        if normalized == "forum":
+            return "channel"
+        return normalized
+    if _has_value(channel_id):
+        return "channel"
+    if _has_value(group_id):
+        return "group"
+    return "private"
+
+
+def _parse_content_types(raw: Any, message_str: Optional[str] = None) -> List[str]:
+    """兼容逗号串、JSON 数组和历史脏格式。"""
+    if raw is None:
+        return ["Plain"] if message_str else []
+
+    if isinstance(raw, list):
+        values = [str(item).strip() for item in raw if str(item).strip()]
+    else:
+        text = str(raw).strip()
+        if not text:
+            return ["Plain"] if message_str else []
+        values: List[str] = []
+        if text.startswith("[") and text.endswith("]"):
+            try:
+                parsed = json.loads(text)
+                if isinstance(parsed, list):
+                    values = [str(item).strip() for item in parsed if str(item).strip()]
+            except json.JSONDecodeError:
+                values = []
+        if not values:
+            normalized = text
+            for sep in ("|", ";", "/"):
+                normalized = normalized.replace(sep, ",")
+            values = [part.strip().strip('"\'') for part in normalized.split(",") if part.strip().strip('"\'')]
+
+    if values:
+        deduped = []
+        seen = set()
+        for item in values:
+            if item not in seen:
+                seen.add(item)
+                deduped.append(item)
+        return deduped
+    return ["Plain"] if message_str else []
+
+
 def _row_to_record(row) -> MessageRecord:
     return MessageRecord(
         id=row[0],
@@ -782,38 +840,30 @@ class Database:
 
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("""
-                    SELECT
-                        COUNT(*) AS total,
-                        SUM(CASE WHEN message_type = 'group'
-                            THEN 1 ELSE 0 END),
-                        SUM(CASE WHEN message_type = 'private'
-                            THEN 1 ELSE 0 END),
-                        SUM(CASE WHEN message_type = 'channel'
-                            THEN 1 ELSE 0 END),
-                        MIN(timestamp),
-                        MAX(timestamp),
-                        MIN(created_at),
-                        MAX(created_at)
-                    FROM messages
-                """)
-                row = await cur.fetchone()
-                if row and row[0]:
-                    stats.total_count = row[0]
-                    stats.group_message_count = row[1] or 0
-                    stats.private_message_count = row[2] or 0
-                    stats.channel_message_count = row[3] or 0
-                    stats.oldest_timestamp = row[4]
-                    stats.newest_timestamp = row[5]
-                    stats.first_record_time = row[6]
-                    stats.last_record_time = row[7]
-
                 await cur.execute(
-                    "SELECT platform, COUNT(*) FROM messages "
-                    "GROUP BY platform"
+                    "SELECT message_type, group_id, channel_id, timestamp, created_at, platform FROM messages"
                 )
                 rows = await cur.fetchall()
-                stats.platform_stats = {row[0]: row[1] for row in rows}
+                if rows:
+                    stats.total_count = len(rows)
+                    timestamps = [row[3] for row in rows if row[3] is not None]
+                    created_at_values = [row[4] for row in rows if row[4] is not None]
+                    platform_stats: Dict[str, int] = {}
+                    for message_type, group_id, channel_id, _, _, platform in rows:
+                        bucket = _infer_message_bucket(message_type, group_id, channel_id)
+                        if bucket == "group":
+                            stats.group_message_count += 1
+                        elif bucket == "private":
+                            stats.private_message_count += 1
+                        elif bucket == "channel":
+                            stats.channel_message_count += 1
+                        platform_stats[platform] = platform_stats.get(platform, 0) + 1
+
+                    stats.oldest_timestamp = min(timestamps) if timestamps else None
+                    stats.newest_timestamp = max(timestamps) if timestamps else None
+                    stats.first_record_time = min(created_at_values) if created_at_values else None
+                    stats.last_record_time = max(created_at_values) if created_at_values else None
+                    stats.platform_stats = platform_stats
 
         return stats
 
@@ -821,32 +871,10 @@ class Database:
         """获取消息内容类型统计（文字/图片/文件/视频/语音/文档/音频/压缩包等）"""
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
-                # content_types 存储逗号分隔的组件类型，如 "Plain,Image" 或 "FileDocument"
-                # 使用 FIND_IN_SET 精确匹配逗号分隔值，避免 LIKE '%Image%' 误匹配 FileImage
-                await cur.execute("""
-                    SELECT
-                        COUNT(*) AS total,
-                        SUM(CASE WHEN FIND_IN_SET('Plain', content_types) > 0 THEN 1 ELSE 0 END) AS text_count,
-                        SUM(CASE WHEN FIND_IN_SET('Image', content_types) > 0 THEN 1 ELSE 0 END) AS image_count,
-                        SUM(CASE WHEN FIND_IN_SET('Video', content_types) > 0 THEN 1 ELSE 0 END) AS video_count,
-                        SUM(CASE WHEN FIND_IN_SET('Record', content_types) > 0 THEN 1 ELSE 0 END) AS voice_count,
-                        SUM(CASE WHEN FIND_IN_SET('FileDocument', content_types) > 0 THEN 1 ELSE 0 END) AS document_count,
-                        SUM(CASE WHEN FIND_IN_SET('FileAudio', content_types) > 0 THEN 1 ELSE 0 END) AS audio_count,
-                        SUM(CASE WHEN FIND_IN_SET('FileArchive', content_types) > 0 THEN 1 ELSE 0 END) AS archive_count,
-                        SUM(CASE WHEN FIND_IN_SET('FileCode', content_types) > 0 THEN 1 ELSE 0 END) AS code_count,
-                        SUM(CASE WHEN FIND_IN_SET('FileImage', content_types) > 0 THEN 1 ELSE 0 END) AS file_image_count,
-                        SUM(CASE WHEN FIND_IN_SET('FileVideo', content_types) > 0 THEN 1 ELSE 0 END) AS file_video_count,
-                        SUM(CASE WHEN FIND_IN_SET('File', content_types) > 0 THEN 1 ELSE 0 END) AS other_file_count,
-                        SUM(CASE WHEN FIND_IN_SET('At', content_types) > 0 OR FIND_IN_SET('AtAll', content_types) > 0 THEN 1 ELSE 0 END) AS at_count,
-                        SUM(CASE WHEN FIND_IN_SET('Reply', content_types) > 0 THEN 1 ELSE 0 END) AS reply_count,
-                        SUM(CASE WHEN FIND_IN_SET('Face', content_types) > 0 THEN 1 ELSE 0 END) AS face_count,
-                        SUM(CASE WHEN FIND_IN_SET('Json', content_types) > 0 OR FIND_IN_SET('Xml', content_types) > 0 OR FIND_IN_SET('Card', content_types) > 0 THEN 1 ELSE 0 END) AS rich_count,
-                        SUM(CASE WHEN content_types IS NULL OR content_types = '' THEN 1 ELSE 0 END) AS unknown_count
-                    FROM messages
-                """)
-                row = await cur.fetchone()
+                await cur.execute("SELECT content_types, message_str FROM messages")
+                rows = await cur.fetchall()
 
-        if not row:
+        if not rows:
             return []
 
         labels = {
@@ -873,9 +901,66 @@ class Database:
             "at", "reply", "face", "rich", "unknown",
         ]
 
+        counters = {key: 0 for key in keys}
+        for raw_content_types, message_str in rows:
+            parsed_types = _parse_content_types(raw_content_types, message_str)
+            if not parsed_types:
+                counters["unknown"] += 1
+                continue
+
+            recognized = False
+            type_set = set(parsed_types)
+            if "Plain" in type_set:
+                counters["text"] += 1
+                recognized = True
+            if "Image" in type_set:
+                counters["image"] += 1
+                recognized = True
+            if "Video" in type_set:
+                counters["video"] += 1
+                recognized = True
+            if "Record" in type_set:
+                counters["voice"] += 1
+                recognized = True
+            if "FileDocument" in type_set:
+                counters["document"] += 1
+                recognized = True
+            if "FileAudio" in type_set:
+                counters["audio"] += 1
+                recognized = True
+            if "FileArchive" in type_set:
+                counters["archive"] += 1
+                recognized = True
+            if "FileCode" in type_set:
+                counters["code"] += 1
+                recognized = True
+            if "FileImage" in type_set:
+                counters["file_image"] += 1
+                recognized = True
+            if "FileVideo" in type_set:
+                counters["file_video"] += 1
+                recognized = True
+            if "File" in type_set:
+                counters["other_file"] += 1
+                recognized = True
+            if "At" in type_set or "AtAll" in type_set:
+                counters["at"] += 1
+                recognized = True
+            if "Reply" in type_set:
+                counters["reply"] += 1
+                recognized = True
+            if "Face" in type_set:
+                counters["face"] += 1
+                recognized = True
+            if {"Json", "Xml", "Card"} & type_set:
+                counters["rich"] += 1
+                recognized = True
+            if not recognized:
+                counters["unknown"] += 1
+
         result = []
-        for i, key in enumerate(keys):
-            count = row[i + 1] or 0
+        for key in keys:
+            count = counters[key]
             if count > 0:
                 result.append({
                     "type": key,
@@ -890,28 +975,9 @@ class Database:
         """获取各平台的详细统计（消息数、群聊数、私聊数等）"""
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
-                # 使用 FIND_IN_SET 精确匹配，避免 LIKE '%Image%' 误匹配 FileImage
-                await cur.execute("""
-                    SELECT
-                        platform,
-                        COUNT(*) AS total,
-                        SUM(CASE WHEN message_type = 'group' THEN 1 ELSE 0 END) AS group_count,
-                        SUM(CASE WHEN message_type = 'private' THEN 1 ELSE 0 END) AS private_count,
-                        SUM(CASE WHEN message_type = 'channel' THEN 1 ELSE 0 END) AS channel_count,
-                        SUM(CASE WHEN FIND_IN_SET('Image', content_types) > 0 THEN 1 ELSE 0 END) AS image_count,
-                        SUM(CASE WHEN FIND_IN_SET('Video', content_types) > 0 THEN 1 ELSE 0 END) AS video_count,
-                        SUM(CASE WHEN FIND_IN_SET('Record', content_types) > 0 THEN 1 ELSE 0 END) AS voice_count,
-                        SUM(CASE WHEN FIND_IN_SET('FileDocument', content_types) > 0 THEN 1 ELSE 0 END) AS document_count,
-                        SUM(CASE WHEN FIND_IN_SET('FileAudio', content_types) > 0 THEN 1 ELSE 0 END) AS audio_count,
-                        SUM(CASE WHEN FIND_IN_SET('FileArchive', content_types) > 0 THEN 1 ELSE 0 END) AS archive_count,
-                        SUM(CASE WHEN FIND_IN_SET('FileCode', content_types) > 0 THEN 1 ELSE 0 END) AS code_count,
-                        SUM(CASE WHEN FIND_IN_SET('File', content_types) > 0 THEN 1 ELSE 0 END) AS other_file_count,
-                        MIN(timestamp) AS oldest,
-                        MAX(timestamp) AS newest
-                    FROM messages
-                    GROUP BY platform
-                    ORDER BY total DESC
-                """)
+                await cur.execute(
+                    "SELECT platform, message_type, group_id, channel_id, content_types, message_str, timestamp FROM messages"
+                )
                 rows = await cur.fetchall()
 
         platform_names = {
@@ -936,27 +1002,63 @@ class Database:
             "matrix": "Matrix",
         }
 
-        result = []
-        for row in rows:
-            result.append({
-                "platform": row[0],
-                "platform_name": platform_names.get(row[0], row[0]),
-                "total": row[1],
-                "group_count": row[2] or 0,
-                "private_count": row[3] or 0,
-                "channel_count": row[4] or 0,
-                "image_count": row[5] or 0,
-                "video_count": row[6] or 0,
-                "voice_count": row[7] or 0,
-                "document_count": row[8] or 0,
-                "audio_count": row[9] or 0,
-                "archive_count": row[10] or 0,
-                "code_count": row[11] or 0,
-                "other_file_count": row[12] or 0,
-                "oldest_timestamp": row[13],
-                "newest_timestamp": row[14],
-            })
-        return result
+        grouped: Dict[str, Dict[str, Any]] = {}
+        for platform, message_type, group_id, channel_id, content_types, message_str, timestamp in rows:
+            item = grouped.setdefault(
+                platform,
+                {
+                    "platform": platform,
+                    "platform_name": platform_names.get(platform, platform),
+                    "total": 0,
+                    "group_count": 0,
+                    "private_count": 0,
+                    "channel_count": 0,
+                    "image_count": 0,
+                    "video_count": 0,
+                    "voice_count": 0,
+                    "document_count": 0,
+                    "audio_count": 0,
+                    "archive_count": 0,
+                    "code_count": 0,
+                    "other_file_count": 0,
+                    "oldest_timestamp": None,
+                    "newest_timestamp": None,
+                },
+            )
+            item["total"] += 1
+            bucket = _infer_message_bucket(message_type, group_id, channel_id)
+            if bucket == "group":
+                item["group_count"] += 1
+            elif bucket == "private":
+                item["private_count"] += 1
+            elif bucket == "channel":
+                item["channel_count"] += 1
+
+            parsed_types = set(_parse_content_types(content_types, message_str))
+            if "Image" in parsed_types:
+                item["image_count"] += 1
+            if "Video" in parsed_types:
+                item["video_count"] += 1
+            if "Record" in parsed_types:
+                item["voice_count"] += 1
+            if "FileDocument" in parsed_types:
+                item["document_count"] += 1
+            if "FileAudio" in parsed_types:
+                item["audio_count"] += 1
+            if "FileArchive" in parsed_types:
+                item["archive_count"] += 1
+            if "FileCode" in parsed_types:
+                item["code_count"] += 1
+            if "File" in parsed_types:
+                item["other_file_count"] += 1
+
+            if timestamp is not None:
+                if item["oldest_timestamp"] is None or timestamp < item["oldest_timestamp"]:
+                    item["oldest_timestamp"] = timestamp
+                if item["newest_timestamp"] is None or timestamp > item["newest_timestamp"]:
+                    item["newest_timestamp"] = timestamp
+
+        return sorted(grouped.values(), key=lambda item: item["total"], reverse=True)
 
     async def cleanup_by_age(self, retention_days: int) -> tuple:
         """清理超过保留天数的消息，返回 (删除数量, 被删记录的媒体路径列表)"""
@@ -1070,7 +1172,7 @@ class Database:
         where_clause = " AND ".join(conditions) if conditions else "1=1"
 
         sql = f"""
-            SELECT `timestamp`, `message_type`
+            SELECT `timestamp`, `message_type`, `group_id`, `channel_id`
             FROM messages
             WHERE {where_clause}
         """
@@ -1086,6 +1188,8 @@ class Database:
         for row in rows:
             ts_ms = row[0]
             msg_type = row[1] or ""
+            group_id = row[2]
+            channel_id = row[3]
             dt = _dt.fromtimestamp(ts_ms / 1000)
 
             if interval == "week":
@@ -1105,11 +1209,12 @@ class Database:
                     "channel_count": 0,
                 }
             groups[key]["count"] += 1
-            if msg_type == "group":
+            bucket = _infer_message_bucket(msg_type, group_id, channel_id)
+            if bucket == "group":
                 groups[key]["group_count"] += 1
-            elif msg_type == "private":
+            elif bucket == "private":
                 groups[key]["private_count"] += 1
-            elif msg_type == "channel":
+            elif bucket == "channel":
                 groups[key]["channel_count"] += 1
 
         return list(groups.values())
@@ -1173,8 +1278,8 @@ class Database:
     ) -> List[Dict]:
         """获取群组活跃度排行"""
         conditions = [
-            "message_type IN ('group', 'channel')",
             "group_id IS NOT NULL",
+            "group_id != ''",
         ]
         params: List[Any] = []
         if start_time:
@@ -1189,28 +1294,40 @@ class Database:
 
         where_clause = " AND ".join(conditions)
         sql = f"""
-            SELECT group_id, platform, COUNT(*) AS `count`,
-                   COUNT(DISTINCT sender_id) AS sender_count
+            SELECT group_id, platform, message_type, channel_id, sender_id
             FROM messages
             WHERE {where_clause}
-            GROUP BY group_id, platform
-            ORDER BY `count` DESC
-            LIMIT %s
         """
-        params.append(limit)
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(sql, params)
                 rows = await cur.fetchall()
-        return [
-            {
-                "group_id": row[0],
-                "platform": row[1],
-                "count": row[2],
-                "sender_count": row[3],
-            }
-            for row in rows
-        ]
+        grouped: Dict[tuple, Dict[str, Any]] = {}
+        for group_id, platform, message_type, channel_id, sender_id in rows:
+            bucket = _infer_message_bucket(message_type, group_id, channel_id)
+            if bucket not in {"group", "channel"}:
+                continue
+            key = (group_id, platform)
+            item = grouped.setdefault(
+                key,
+                {"group_id": group_id, "platform": platform, "count": 0, "senders": set()},
+            )
+            item["count"] += 1
+            if sender_id:
+                item["senders"].add(sender_id)
+
+        ranking = []
+        for item in grouped.values():
+            ranking.append(
+                {
+                    "group_id": item["group_id"],
+                    "platform": item["platform"],
+                    "count": item["count"],
+                    "sender_count": len(item["senders"]),
+                }
+            )
+        ranking.sort(key=lambda item: item["count"], reverse=True)
+        return ranking[:limit]
 
     async def get_distinct_platforms(self) -> List[str]:
         """获取所有平台列表"""

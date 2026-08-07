@@ -18,7 +18,7 @@ from astrbot.api.star import Context, Star
 from .fox_toolbox.database import Database
 from .fox_toolbox.db_explorer import DbExplorer
 from .fox_toolbox.api import MessageRecorderAPI
-from .fox_toolbox.models import MessageRecord
+from .fox_toolbox.models import MessageRecord, VALID_MESSAGE_TYPES
 from .fox_toolbox.time_utils import parse_time_range, format_time_range, normalize_timestamp
 from .fox_toolbox.media_downloader import MediaDownloader, MEDIA_TYPE_MAP
 from .fox_toolbox.serializer import (
@@ -522,6 +522,13 @@ class MessageRecorder(Star):
             channel_id = adapter.normalize_channel_id(raw_channel_id)
             message_id = adapter.normalize_message_id(message_obj.message_id)
             message_type = adapter.determine_message_type(message_obj)
+            if message_type not in VALID_MESSAGE_TYPES:
+                if channel_id:
+                    message_type = "channel"
+                elif group_id:
+                    message_type = "group"
+                else:
+                    message_type = "private"
 
             record = MessageRecord(
                 platform=platform,

@@ -399,6 +399,18 @@ class TestGetStats:
         assert stats.private_message_count == 1
         assert stats.channel_message_count == 1
 
+    @pytest.mark.asyncio
+    async def test_stats_infers_legacy_other_messages(self, mysql_db):
+        await mysql_db.save_message(_make_record(message_id="legacy_group", message_type="other", group_id="grp_legacy", channel_id=None))
+        await mysql_db.save_message(_make_record(message_id="legacy_private", message_type="other", group_id=None, channel_id=None))
+        await mysql_db.save_message(_make_record(message_id="legacy_channel", message_type="other", group_id="chan_legacy", channel_id="chan_legacy"))
+
+        stats = await mysql_db.get_stats()
+        assert stats.total_count == 3
+        assert stats.group_message_count == 1
+        assert stats.private_message_count == 1
+        assert stats.channel_message_count == 1
+
 
 class TestCleanup:
     @pytest.mark.asyncio
@@ -446,6 +458,32 @@ class TestTimelineStats:
                 break
         assert found, f"Expected a day with count=2, got {stats}"
 
+    @pytest.mark.asyncio
+    async def test_timeline_infers_legacy_buckets(self, mysql_db):
+        ts = int(time.time() * 1000)
+        await mysql_db.save_message(_make_record(message_id="tg", message_type="other", group_id="grp_x", channel_id=None, timestamp=ts))
+        await mysql_db.save_message(_make_record(message_id="tp", message_type="other", group_id=None, channel_id=None, timestamp=ts))
+        await mysql_db.save_message(_make_record(message_id="tc", message_type="other", group_id="chan_x", channel_id="chan_x", timestamp=ts))
+
+        stats = await mysql_db.get_timeline_stats(interval="day")
+        matched = [item for item in stats if item["count"] == 3]
+        assert matched
+        assert matched[0]["group_count"] == 1
+        assert matched[0]["private_count"] == 1
+        assert matched[0]["channel_count"] == 1
+
+
+class TestContentTypeStats:
+    @pytest.mark.asyncio
+    async def test_content_type_stats_supports_legacy_json_and_empty(self, mysql_db):
+        await mysql_db.save_message(_make_record(message_id="ct_json", content_types='["Plain", "Image"]'))
+        await mysql_db.save_message(_make_record(message_id="ct_empty", content_types=None, message_str="fallback text"))
+
+        stats = await mysql_db.get_content_type_stats()
+        as_map = {item["type"]: item["count"] for item in stats}
+        assert as_map["text"] == 2
+        assert as_map["image"] == 1
+
 
 class TestSenderRanking:
     @pytest.mark.asyncio
@@ -458,6 +496,20 @@ class TestSenderRanking:
         assert len(ranking) == 2
         assert ranking[0]["sender_id"] == "u1"
         assert ranking[0]["count"] == 2
+
+
+class TestGroupRanking:
+    @pytest.mark.asyncio
+    async def test_group_ranking_infers_legacy_other_messages(self, mysql_db):
+        await mysql_db.save_message(_make_record(message_id="gr1", sender_id="u1", message_type="other", group_id="grp_legacy", channel_id=None))
+        await mysql_db.save_message(_make_record(message_id="gr2", sender_id="u2", message_type="other", group_id="grp_legacy", channel_id=None))
+        await mysql_db.save_message(_make_record(message_id="gr3", sender_id="u3", message_type="other", group_id=None, channel_id=None))
+
+        ranking = await mysql_db.get_group_ranking(limit=10)
+        assert len(ranking) == 1
+        assert ranking[0]["group_id"] == "grp_legacy"
+        assert ranking[0]["count"] == 2
+        assert ranking[0]["sender_count"] == 2
 
 
 class TestDistinctValues:

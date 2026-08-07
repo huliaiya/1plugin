@@ -15,6 +15,7 @@
 import io
 import math
 import time
+import unicodedata
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 
@@ -49,6 +50,20 @@ def _to_int(value, default=0):
         except (ValueError, TypeError):
             return default
     return default
+
+
+def _sanitize_label(value, default="未知") -> str:
+    text = str(value or "").strip()
+    if not text:
+        return default
+    cleaned = []
+    for ch in text:
+        category = unicodedata.category(ch)
+        if category.startswith("C") and ch not in "\t\n\r":
+            continue
+        cleaned.append(ch)
+    sanitized = "".join(cleaned).strip()
+    return sanitized or default
 
 
 # ========== 布局常量 ==========
@@ -587,7 +602,7 @@ def _draw_ranking(img, xy, items: List[Dict], name_key: str, count_key: str, col
         if ry + row_h > y1:
             break
             
-        name = str(it.get(name_key) or it.get("sender_id") or it.get("group_id") or "未知")
+        name = _sanitize_label(it.get(name_key) or it.get("sender_id") or it.get("group_id"))
         name = _truncate_middle(draw, name, f_name, inner_w - _PX(140))
         count = _to_int(it.get(count_key, 0))
         count_str = f"{count:,}"
@@ -631,7 +646,8 @@ def _draw_ranking(img, xy, items: List[Dict], name_key: str, count_key: str, col
             img.paste(bar_fill, (x0 + _PX(40), bar_y), bar_fill)
 
         # 数值
-        _draw_text(draw, (x1 - _PX(50), ry + _PX(8)), count_str, f_count, _TEXT_DARK, img)
+        count_w = _text_width(draw, count_str, f_count)
+        _draw_text(draw, (x1 - count_w - _PX(8), ry + _PX(8)), count_str, f_count, _TEXT_DARK, img)
 
 
 _PLATFORM_LABELS = {
@@ -712,7 +728,8 @@ def _draw_platform_donut(img, xy, platform_stats: Dict[str, int]):
             break
             
         color = _CHART_COLORS[idx % len(_CHART_COLORS)]
-        label = _PLATFORM_LABELS.get(plat, plat or "未知")
+        label = _sanitize_label(_PLATFORM_LABELS.get(plat, plat), "未知")
+        label = _truncate(draw, label, f_name, _PX(72))
         pct = val * 100 / total
 
         # 颜色标识
@@ -783,7 +800,7 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
         items.append(("其他", other_count))
 
     # 饼图布局优化
-    pie_d = min(inner_h, inner_w * 0.5)
+    pie_d = min(inner_h - _PX(20), inner_w * 0.44)
     pie_r = pie_d / 2
     cx = x0 + pie_r + _PX(30)
     cy = y0 + inner_h / 2
@@ -809,6 +826,18 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
             start, start + sweep, fill=color
         )
         start += sweep
+
+    donut_inner = pie_r * 0.52
+    draw.ellipse([cx - donut_inner, cy - donut_inner, cx + donut_inner, cy + donut_inner], fill=_BG_WHITE)
+
+    total_str = f"{total:,}"
+    f_total = _get_font(_PX(24), bold=True)
+    f_total_lbl = _get_font(_PX(12))
+    total_w = _text_width(draw, total_str, f_total)
+    _draw_text(draw, (cx - total_w / 2, cy - _PX(18)), total_str, f_total, _TEXT_DARK, img)
+    total_lbl = "总消息"
+    total_lbl_w = _text_width(draw, total_lbl, f_total_lbl)
+    _draw_text(draw, (cx - total_lbl_w / 2, cy + _PX(8)), total_lbl, f_total_lbl, _TEXT_MEDIUM, img)
 
     # 图例区域优化
     legend_x = x0 + pie_d + _PX(50)
@@ -845,8 +874,8 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
         # 颜色标识圆圈
         draw.ellipse([legend_x, ry + _PX(8), legend_x + _PX(14), ry + _PX(22)], fill=color)
         
-        # 类型名称
-        _draw_text(draw, (legend_x + _PX(24), ry + _PX(8)), lbl, f_name, _TEXT_DARK, img)
+        display_lbl = _truncate(draw, _sanitize_label(lbl), f_name, max(legend_w - _PX(140), _PX(70)))
+        _draw_text(draw, (legend_x + _PX(24), ry + _PX(8)), display_lbl, f_name, _TEXT_DARK, img)
 
         # 数值和百分比
         txt = f"{val:,} ({pct:.1f}%)"
@@ -875,8 +904,8 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
         ("频道", "channel_count", _CHART_COLORS[2]),
     ]
 
-    chart_top = y0 + _PX(50)
-    chart_bottom = y1 - _PX(50)
+    chart_top = y0 + _PX(48)
+    chart_bottom = y1 - _PX(62)
     chart_h = chart_bottom - chart_top
 
     def seg_total(p: Dict) -> int:
@@ -924,9 +953,15 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
         
         # 即使total为0也要绘制坐标轴标签
         if total <= 0:
+            zero_y = chart_bottom - _PX(2)
+            draw.line([(cx_bar, zero_y), (cx_bar + bar_w, zero_y)], fill=(203, 213, 225), width=_PX(3))
+            total_str = "0"
+            tw = _text_width(draw, total_str, f_val)
+            _draw_text(draw, (cx_bar + bar_w / 2 - tw / 2, chart_top - _PX(18)), total_str, f_val, _TEXT_MEDIUM, img)
             continue
-            
+
         h_total = chart_h * total / max_total
+        top_y = chart_bottom - h_total
         seg_bottom = chart_bottom
         for idx, (label, key, color) in enumerate(series_defs):
             v = _to_int(p.get(key, 0))
@@ -940,12 +975,13 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
         # 柱顶总量
         total_str = f"{total:,}"
         tw = _text_width(draw, total_str, f_val)
-        _draw_text(draw, (cx_bar + bar_w / 2 - tw / 2, chart_bottom - _PX(20)), total_str, f_val, _TEXT_MEDIUM, img)
+        label_y = max(chart_top - _PX(16), top_y - _PX(18))
+        _draw_text(draw, (cx_bar + bar_w / 2 - tw / 2, label_y), total_str, f_val, _TEXT_MEDIUM, img)
 
     # X轴平台名标签 - 确保所有平台标签都显示
     f_lbl = _get_font(_PX(12))
     for i, p in enumerate(display_platforms):
-        label = _truncate(draw, str(p.get("platform_name") or p.get("platform") or "未知"), f_lbl, int(slot_w - _PX(8)))
+        label = _truncate(draw, _sanitize_label(p.get("platform_name") or p.get("platform")), f_lbl, int(slot_w - _PX(8)))
         lw = _text_width(draw, label, f_lbl)
         lx = x0 + slot_w * i + (slot_w - lw) / 2
         _draw_text(draw, (lx, chart_bottom + _PX(8)), label, f_lbl, _TEXT_MEDIUM, img)
@@ -1021,15 +1057,15 @@ def render_snapshot(
     # 5. 发送者 + 群组排行
     gap = _PX(_CARD_GAP)
     half_w = (_W_FULL - 2 * _PX(_PADDING) - gap) // 2
-    rank_h = _PX(340)
+    rank_h = _PX(390)
     left_xy = (_PX(_PADDING), y, _PX(_PADDING) + half_w, y + rank_h)
     right_xy = (_PX(_PADDING) + half_w + gap, y, _W_FULL - _PX(_PADDING), y + rank_h)
     _draw_glass_card(img, left_xy, title="发送者排行 Top 8", accent=_CHART_COLORS[0])
     _draw_glass_card(img, right_xy, title="群组活跃度排行 Top 8", accent=_CHART_COLORS[1])
 
     for g in group_ranking:
-        gid = str(g.get("group_id") or "")
-        plat = str(g.get("platform") or "")
+        gid = _sanitize_label(g.get("group_id"), "")
+        plat = _sanitize_label(g.get("platform"), "")
         g["display_name"] = f"{gid} ({plat})" if gid and plat else (gid or plat or "未知")
 
     _draw_ranking(
@@ -1068,7 +1104,7 @@ def render_snapshot(
 
     # 8. 底部水印
     draw = ImageDraw.Draw(img)
-    watermark_text = "由狐狸插件 /huli_record snapshot 生成 · 现代简洁风格 v2.2"
+    watermark_text = "由狐狸插件 /huli_record snapshot 生成 · 现代简洁风格 v2.3.1"
     f_watermark = _get_font(_PX(12))
     _draw_text(draw, (_PX(24), y + _PX(12)), watermark_text, f_watermark, _TEXT_MEDIUM, img)
 

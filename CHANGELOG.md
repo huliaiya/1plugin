@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-08-07
+
+### Fixed
+- **修复快照统计卡大量显示 0 的根因**：统计逻辑不再只依赖 `message_type` 原值，历史 `other` / `forum` / 脏数据会结合 `group_id` 与 `channel_id` 自动归类到群聊、私聊、频道，顶部统计卡、时间趋势、平台详情、群组排行恢复正常
+- **修复平台消息详情空白图**：历史 `other` 消息现在会参与堆叠柱状图统计，柱顶总量标签改为显示在柱体上方，0 值平台保留基线提示
+- **修复内容类型分布缺失**：`content_types` 兼容逗号串、JSON 数组、空值回退到纯文本推断，旧数据也能生成内容类型分布图
+- **修复排行文本显示问题**：过滤控制字符并改进数值右对齐，减少昵称乱码和名称/数字错位
+- **修复快照水印版本号过旧**：底部水印同步更新到 `v2.3.1`
+
+### Changed
+- 数据库统计方法改为更稳健的 Python 端聚合，兼容历史数据与混合格式字段
+- 内容类型圆环图增加中心总消息数显示，图例名称增加裁剪处理
+- Plugin Page 前端资源版本号同步升级到 `2.3.1`
+
 ## [2.3.0] - 2026-08-06
 
 ### Added
