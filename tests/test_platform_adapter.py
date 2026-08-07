@@ -84,11 +84,15 @@ class TestPlatformAdapter:
 
     def test_determine_message_type_other(self):
         msg = MockMessageObj(type=MessageType.OTHER_MESSAGE)
-        assert self.adapter.determine_message_type(msg) == "other"
+        assert self.adapter.determine_message_type(msg) == "private"
 
     def test_determine_message_type_fallback(self):
         msg = MockMessageObj()
-        assert self.adapter.determine_message_type(msg) == "other"
+        assert self.adapter.determine_message_type(msg) == "private"
+
+    def test_determine_message_type_fallback_group_context(self):
+        msg = MockMessageObj(type=MessageType.OTHER_MESSAGE, group_id="grp1")
+        assert self.adapter.determine_message_type(msg) == "group"
 
     def test_extract_reply_to_id(self):
         comp = object()
@@ -137,7 +141,11 @@ class TestChannelBasedAdapter:
 
     def test_determine_message_type_other(self):
         msg = MockMessageObj(type=MessageType.OTHER_MESSAGE)
-        assert self.adapter.determine_message_type(msg) == "other"
+        assert self.adapter.determine_message_type(msg) == "private"
+
+    def test_determine_message_type_other_with_group_context(self):
+        msg = MockMessageObj(type=MessageType.OTHER_MESSAGE, group_id="987654")
+        assert self.adapter.determine_message_type(msg) == "channel"
 
     def test_extract_channel_id(self):
         msg = MockMessageObj(type=MessageType.GROUP_MESSAGE, group_id="987654")

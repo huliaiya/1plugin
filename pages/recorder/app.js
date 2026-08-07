@@ -1,5 +1,5 @@
 const bridge = window.AstrBotPluginPage;
-const BUILD_VERSION = '2.3.1';
+const BUILD_VERSION = '2.3.2';
 
 let bridgeReady = false;
 let pluginContext = null;

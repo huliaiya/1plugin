@@ -41,13 +41,19 @@ class PlatformAdapter:
             return ""
         return str(raw_message_id).strip()[:128]
 
+    def _has_group_context(self, message_obj) -> bool:
+        raw_group_id = getattr(message_obj, "group_id", None)
+        return raw_group_id is not None and str(raw_group_id).strip() != ""
+
     def determine_message_type(self, message_obj) -> str:
         msg_type = getattr(message_obj, 'type', None)
         if msg_type == MessageType.GROUP_MESSAGE:
             return "group"
         if msg_type == MessageType.FRIEND_MESSAGE:
             return "private"
-        return "other"
+        if self._has_group_context(message_obj):
+            return "group"
+        return "private"
 
     def extract_media_url(self, component, comp_data: dict) -> Optional[str]:
         from .serializer import extract_media_url
@@ -84,7 +90,9 @@ class ChannelBasedAdapter(PlatformAdapter):
             return "channel"
         if msg_type == MessageType.FRIEND_MESSAGE:
             return "private"
-        return "other"
+        if self._has_group_context(message_obj):
+            return "channel"
+        return "private"
 
     def extract_channel_id(self, message_obj) -> Optional[str]:
         if message_obj.group_id:
