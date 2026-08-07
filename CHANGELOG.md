@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.2] - 2026-08-07
+
+### Changed
+- **快照卡片标题上移**：时间趋势、平台分布、排行、平台详情、内容类型等所有卡片标题整体上移，视觉更靠近卡片顶部
+- **WebUI 配色全面统一为天空蓝**：成功/警告/危险语义色从绿/橙/红切换为天空蓝系（蓝青 #4dd0e1 / 天蓝 #03a9f4 / 深天空蓝 #0288d1），文本色改为深蓝灰，按钮渐变、消息卡片高光、空态文字等残留杂色全部清除
+
+### Fixed
+- 快照时间趋势卡片 Y 轴刻度标签与标题不再重叠（标题上移后已重新校验图例间距）
+
 ## [2.4.1] - 2026-08-07
 
 ### Fixed

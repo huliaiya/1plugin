@@ -1,5 +1,5 @@
 const bridge = window.AstrBotPluginPage;
-const BUILD_VERSION = '2.4.1';
+const BUILD_VERSION = '2.4.2';
 
 let bridgeReady = false;
 let pluginContext = null;
@@ -70,9 +70,9 @@ function showInitError(message) {
     if (existing) existing.remove();
     const div = document.createElement('div');
     div.id = 'initError';
-    div.style.cssText = 'padding:2rem;text-align:center;color:#e74c3c;';
+    div.style.cssText = 'padding:2rem;text-align:center;color:#0288d1;';
     const safeMsg = escapeHtml(message);
-    div.innerHTML = `<h3>⚠️ 初始化失败</h3><p>${safeMsg}</p><p style="color:#999;font-size:0.85rem;">请确保 AstrBot 版本支持 Plugin Pages 功能（v4.23+），并刷新页面重试。</p>`;
+    div.innerHTML = `<h3>⚠️ 初始化失败</h3><p>${safeMsg}</p><p style="color:#375e85;font-size:0.85rem;">请确保 AstrBot 版本支持 Plugin Pages 功能（v4.23+），并刷新页面重试。</p>`;
     main.prepend(div);
   }
 }
@@ -385,7 +385,7 @@ function updateDbStatusCard(dbStatus) {
   valueEl.textContent = running ? `${tableCount}` : '--';
   labelEl.textContent = running ? '数据表数量' : '数据库未连接';
   valueEl.classList.remove('loading');
-  valueEl.style.color = running ? '#2e7d32' : '#d32f2f';
+  valueEl.style.color = running ? '#03a9f4' : '#0288d1';
   valueEl.setAttribute('title', running ? `当前已创建 ${tableCount} 张数据表` : (dbError || '数据库未连接'));
 
   showDbErrorBanner(running, dbError);
@@ -406,7 +406,7 @@ function showDbErrorBanner(running, dbError) {
   }
   banner = document.createElement('div');
   banner.id = 'dbErrorBanner';
-  banner.style.cssText = 'margin-bottom:1rem;padding:0.75rem 1rem;border-radius:8px;background:#fdecea;color:#c0392b;border:1px solid #f5c6cb;font-size:0.9rem;word-break:break-all;';
+  banner.style.cssText = 'margin-bottom:1rem;padding:0.75rem 1rem;border-radius:8px;background:#e1f5fe;color:#0288d1;border:1px solid #b3e5fc;font-size:0.9rem;word-break:break-all;';
   banner.textContent = `数据库连接失败：${msg}`;
   const statsGrid = dashboard.querySelector('.stats-grid');
   if (statsGrid) {
@@ -429,7 +429,7 @@ async function loadDbStatus() {
     valueEl.textContent = '--';
     labelEl.textContent = '数据库状态';
     valueEl.classList.remove('loading');
-    valueEl.style.color = '#d32f2f';
+    valueEl.style.color = '#0288d1';
   }
 }
 
@@ -686,7 +686,7 @@ function updateTimelineChart(points) {
   if (!timelineChart) { showChartEmpty('timelineChart'); return; }
   if (!points?.length) { showChartEmpty('timelineChart'); return; }
 
-  const axisLabelStyle = { color: '#1e293b', fontWeight: 500, fontSize: 13 };
+  const axisLabelStyle = { color: '#0d3459', fontWeight: 500, fontSize: 13 };
   const lineWidth = 4;
   const symbolSize = 7;
 
@@ -709,7 +709,7 @@ function updateTimelineChart(points) {
     yAxis: {
       type: 'value',
       axisLabel: axisLabelStyle,
-      splitLine: { lineStyle: { color: 'rgba(30,41,59,0.12)', width: 1 } },
+      splitLine: { lineStyle: { color: 'rgba(13,52,89,0.12)', width: 1 } },
       axisLine: { lineStyle: { width: 2 } },
     },
     series: [
@@ -837,11 +837,11 @@ function updatePlatformDetailTable(platforms) {
   const tbody = document.getElementById('platformDetailBody');
   if (!tbody) return;
   if (!platforms?.length) {
-    tbody.innerHTML = '<tr><td colspan="13" style="padding:16px;text-align:center;color:#999;">暂无数据</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" style="padding:16px;text-align:center;color:#7096b7;">暂无数据</td></tr>';
     return;
   }
   tbody.innerHTML = platforms.map(p => {
-    const fmt = n => n > 0 ? formatNumber(n) : '<span style="color:#555;">0</span>';
+    const fmt = n => n > 0 ? formatNumber(n) : '<span style="color:#375e85;">0</span>';
     return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
       <td style="padding:8px;">${escapeHtml(p.platform_name || p.platform)}</td>
       <td style="padding:8px;text-align:right;font-weight:600;">${formatNumber(p.total)}</td>

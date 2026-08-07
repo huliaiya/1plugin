@@ -422,9 +422,9 @@ def _draw_glass_card(img: Image.Image, xy, title: Optional[str] = None, accent: 
         draw = ImageDraw.Draw(img)
         f_title = _get_font(_PX(18), bold=True)
         title_color = accent if accent else _TEXT_DARK
-        _draw_text(draw, (x0 + _PX(24), y0 + _PX(20)), title, f_title, title_color, img)
+        _draw_text(draw, (x0 + _PX(24), y0 + _PX(12)), title, f_title, title_color, img)
     
-    return (x0 + _PX(24), y0 + _PX(60) if title else y0 + _PX(24), x1 - _PX(24), y1 - _PX(24))
+    return (x0 + _PX(24), y0 + _PX(52) if title else y0 + _PX(24), x1 - _PX(24), y1 - _PX(24))
 
     # 绘制边框
     border = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
@@ -1087,7 +1087,7 @@ def render_snapshot(
                      title="消息时间趋势", accent=_CHART_COLORS[0])
     _draw_timeline(
         img,
-        (_PX(_PADDING) + _PX(24), y + _PX(60), _W_FULL - _PX(_PADDING) - _PX(24), y + chart_h - _PX(24)),
+        (_PX(_PADDING) + _PX(24), y + _PX(52), _W_FULL - _PX(_PADDING) - _PX(24), y + chart_h - _PX(24)),
         timeline,
     )
     y += chart_h + _PX(30)
@@ -1098,7 +1098,7 @@ def render_snapshot(
                      title="平台分布", accent=_CHART_COLORS[0])
     _draw_platform_donut(
         img,
-        (_PX(_PADDING) + _PX(24), y + _PX(60), _W_FULL - _PX(_PADDING) - _PX(24), y + plat_h - _PX(24)),
+        (_PX(_PADDING) + _PX(24), y + _PX(52), _W_FULL - _PX(_PADDING) - _PX(24), y + plat_h - _PX(24)),
         platform_stats,
     )
     y += plat_h + _PX(30)
@@ -1119,12 +1119,12 @@ def render_snapshot(
 
     _draw_ranking(
         img,
-        (left_xy[0] + _PX(24), left_xy[1] + _PX(60), left_xy[2] - _PX(24), left_xy[3] - _PX(24)),
+        (left_xy[0] + _PX(24), left_xy[1] + _PX(52), left_xy[2] - _PX(24), left_xy[3] - _PX(24)),
         sender_ranking, "sender_name", "count", _CHART_COLORS[0],
     )
     _draw_ranking(
         img,
-        (right_xy[0] + _PX(24), right_xy[1] + _PX(60), right_xy[2] - _PX(24), right_xy[3] - _PX(24)),
+        (right_xy[0] + _PX(24), right_xy[1] + _PX(52), right_xy[2] - _PX(24), right_xy[3] - _PX(24)),
         group_ranking, "display_name", "count", _CHART_COLORS[1],
     )
     y += rank_h + _PX(30)
@@ -1135,7 +1135,7 @@ def render_snapshot(
                      title="平台消息详情", accent=_CHART_COLORS[2])
     _draw_platform_detail(
         img,
-        (_PX(_PADDING) + _PX(24), y + _PX(60), _W_FULL - _PX(_PADDING) - _PX(24), y + pd_h - _PX(24)),
+        (_PX(_PADDING) + _PX(24), y + _PX(52), _W_FULL - _PX(_PADDING) - _PX(24), y + pd_h - _PX(24)),
         platform_detail or [],
     )
     y += pd_h + _PX(30)
@@ -1146,14 +1146,14 @@ def render_snapshot(
                      title="消息内容类型分布", accent=_CHART_COLORS[3])
     _draw_content_types(
         img,
-        (_PX(_PADDING) + _PX(24), y + _PX(60), _W_FULL - _PX(_PADDING) - _PX(24), y + ct_h - _PX(24)),
+        (_PX(_PADDING) + _PX(24), y + _PX(52), _W_FULL - _PX(_PADDING) - _PX(24), y + ct_h - _PX(24)),
         content_types,
     )
     y += ct_h + _PX(30)
 
     # 8. 底部水印
     draw = ImageDraw.Draw(img)
-    watermark_text = "由狐狸插件 /huli_record snapshot 生成 · 天空蓝清新风格 v2.4.1"
+    watermark_text = "由狐狸插件 /huli_record snapshot 生成 · 天空蓝清新风格 v2.4.2"
     f_watermark = _get_font(_PX(13))
     _draw_text(draw, (_PX(24), y + _PX(12)), watermark_text, f_watermark, _TEXT_MEDIUM, img)
 
