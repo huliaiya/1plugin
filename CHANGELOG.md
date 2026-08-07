@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **爱发电查询图片整体美化**：自定义 T2I 模板全面重写（渐变品牌横幅、卡片化内容区、标题/列表/表格/引用块/代码块专项样式）；`/查询订单` 与 `/查询发电`（`/查询赞助`）共用同一渲染模板，仅指令不同
 - 自定义文转图渲染改用 Star 基类 `self.html_render`（官方推荐 API），移除对 `astrbot.core.html_renderer` 内部单例的直接依赖
 - 图片水印兜底版本号默认值同步为 v2.5.1
+- README 致谢新增爱发电官方（AFDian 开放平台）
 - `parse_order` / `parse_sponsors` 输出升级为 markdown 结构（加粗字段、条目标题），图片渲染层次更清晰
 
 ## [2.5.0] - 2026-08-07

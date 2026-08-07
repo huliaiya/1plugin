@@ -872,6 +872,7 @@ ruff format .
 - [astrbot_plugin_message_recorder](https://github.com/leafliber/astrbot_plugin_message_recorder) - 原项目 **消息记录器**，由 [Leafiber](https://github.com/leafliber) 开发，狐狸插件在此基础上进行存储引擎迁移和二次开发
 - [astrbot_plugin_mysql](https://github.com/Chris95743/astrbot_plugin_mysql) - 数据库表浏览 / 只读 SQL 查询的设计参考，由 [Chris95743](https://github.com/Chris95743) 开发，狐狸插件借鉴其安全校验与表浏览思路
 - [astrbot_plugin_afdian](https://github.com/Zhalslar/astrbot_plugin_afdian) - 爱发电对接功能（发电打赏 / Webhook 订单推送 / 订单与赞助查询），复刻自 [Zhalslar](https://github.com/Zhalslar) 开发的同名单体插件，狐狸插件将其集成并适配扁平配置
+- [爱发电 (AFDian)](https://afdian.com) - 创作者服务与打赏平台，本插件的发电打赏、订单推送与赞助查询均基于爱发电开放平台 API 实现，感谢官方提供稳定可靠的服务与开放接口
 - [aiomysql](https://github.com/aio-libs/aiomysql) - 异步 MySQL 驱动库
 - [aiohttp](https://github.com/aio-libs/aiohttp) - 异步 HTTP 客户端，用于多媒体文件下载与爱发电 Webhook 服务
 
