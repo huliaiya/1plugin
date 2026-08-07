@@ -205,3 +205,60 @@ class TestDownloadMediaNonHttp:
             result = await md.download_media("abc123.image", "Image", bot_api=bot_api)
         assert result is not None
         assert result.endswith(".png")
+
+
+class TestPathTraversalProtection:
+    """验证恶意文件名（../ 或绝对路径）不会越界写入。"""
+
+    def _make_md(self, tmp_path):
+        with patch(
+            "astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader.get_astrbot_plugin_data_path",
+            return_value=str(tmp_path),
+        ):
+            return MediaDownloader("test_plugin", max_retries=0)
+
+    async def test_traversal_filename_rejected(self, tmp_path):
+        md = self._make_md(tmp_path)
+        png_bytes = _make_png_bytes()
+        with patch.object(
+            md, "_fetch_via_media_resolver", new_callable=AsyncMock, return_value=png_bytes
+        ):
+            result = await md.download_media(
+                "file:///some/path.png", "File", filename="../../../evil.png"
+            )
+        assert result is None
+        # 确认没有文件被写到媒体目录之外
+        assert not (tmp_path / "evil.png").exists()
+        assert not (tmp_path.parent / "evil.png").exists()
+
+    async def test_absolute_filename_rejected(self, tmp_path):
+        md = self._make_md(tmp_path)
+        png_bytes = _make_png_bytes()
+        with patch.object(
+            md, "_fetch_via_media_resolver", new_callable=AsyncMock, return_value=png_bytes
+        ):
+            result = await md.download_media(
+                "file:///some/path.png", "File", filename="/etc/passwd"
+            )
+        assert result is None
+
+
+class TestSsrRedirectProtection:
+    """验证重定向到不安全地址会被拒绝。"""
+
+    def _make_md(self, tmp_path):
+        with patch(
+            "astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader.get_astrbot_plugin_data_path",
+            return_value=str(tmp_path),
+        ):
+            return MediaDownloader("test_plugin", max_retries=0)
+
+    def test_redirect_to_internal_rejected(self, tmp_path):
+        from astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader import _is_safe_url
+
+        # 对外可信域名
+        assert _is_safe_url("http://example.com/img.png") is True
+        # 重定向目标为内网/元数据地址 → 不安全
+        assert _is_safe_url("http://169.254.169.254/latest/meta-data/") is False
+        assert _is_safe_url("http://127.0.0.1:3306/") is False
+        assert _is_safe_url("http://localhost/") is False

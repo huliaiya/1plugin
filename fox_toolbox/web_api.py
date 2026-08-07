@@ -25,6 +25,26 @@ from .models import QueryFilter, MessageRecord, MessageStats, PLUGIN_DIR_NAME, S
 from .time_utils import parse_time_range, normalize_timestamp
 from . import sys_util
 
+# Quart send_file 参数名兼容：旧版用 attachment_filename，新版本改名 download_name
+try:
+    import inspect as _inspect
+
+    _SEND_FILE_KWARG = (
+        "download_name"
+        if "download_name" in _inspect.signature(send_file).parameters
+        else "attachment_filename"
+    )
+except Exception:  # pragma: no cover
+    _SEND_FILE_KWARG = "attachment_filename"
+
+
+async def _send_attachment(file_path, filename, mimetype):
+    """跨 Quart 版本发送附件下载。"""
+    kwargs = {_SEND_FILE_KWARG: filename}
+    return await send_file(
+        file_path, mimetype=mimetype, as_attachment=True, **kwargs
+    )
+
 MAX_IMPORT_FILE_SIZE = 4 * 1024 * 1024 * 1024
 MAX_EXPORT_FILE_AGE = 3600
 MAX_DOWNLOAD_DATA_SIZE = 50 * 1024 * 1024
@@ -636,7 +656,7 @@ async def register_all_web_apis(context, db: Database):
         filename = f"messages_export_{timestamp}.{ext}"
         mime_types = {"json": "application/json", "csv": "text/csv", "txt": "text/plain", "zip": "application/zip"}
         mimetype = mime_types.get(ext, "application/octet-stream")
-        response = await send_file(file_path, mimetype=mimetype, as_attachment=True, attachment_filename=filename)
+        response = await _send_attachment(file_path, filename, mimetype)
         response.timeout = None
         return response
 
@@ -712,20 +732,28 @@ async def register_all_web_apis(context, db: Database):
             temp_file = temp_dir / f"{task_id}{file_ext}"
 
             # 流式写入磁盘，避免将整个文件加载到内存
-            total_size = 0
-            _read_buf_size = 4 * 1024 * 1024
-            with open(temp_file, "wb") as f:
-                while True:
-                    chunk = uploaded_file.read(_read_buf_size)
-                    if not chunk:
-                        break
-                    total_size += len(chunk)
-                    if total_size > MAX_IMPORT_FILE_SIZE:
-                        f.close()
-                        await asyncio.to_thread(temp_file.unlink, missing_ok=True)
-                        max_gb = MAX_IMPORT_FILE_SIZE // (1024 * 1024 * 1024)
-                        return jsonify({"success": False, "error": f"文件大小超过限制（最大 {max_gb}GB）"})
-                    f.write(chunk)
+            # 同步磁盘 I/O 放入工作线程，避免阻塞事件循环
+            def _write_upload():
+                total = 0
+                _read_buf_size = 4 * 1024 * 1024
+                with open(temp_file, "wb") as f:
+                    while True:
+                        chunk = uploaded_file.read(_read_buf_size)
+                        if not chunk:
+                            break
+                        total += len(chunk)
+                        if total > MAX_IMPORT_FILE_SIZE:
+                            f.close()
+                            temp_file.unlink(missing_ok=True)
+                            return "too_large"
+                        f.write(chunk)
+                return total
+
+            write_result = await asyncio.to_thread(_write_upload)
+            if write_result == "too_large":
+                max_gb = MAX_IMPORT_FILE_SIZE // (1024 * 1024 * 1024)
+                return jsonify({"success": False, "error": f"文件大小超过限制（最大 {max_gb}GB）"})
+            total_size = write_result
 
             mode = request.form.get("mode") or request.args.get("mode", "skip_duplicates")
             _import_tasks[task_id] = {
@@ -818,9 +846,15 @@ async def register_all_web_apis(context, db: Database):
             if not files or "file" not in files:
                 return jsonify({"success": False, "error": "未上传分片"})
             chunk_file = files["file"]
-            chunk_data = chunk_file.read()
+            # 单分片大小校验：拒绝超过声明 chunk_size 的超发 body，防内存/磁盘耗尽
+            expected_size = session.get("chunk_size") or 0
+            chunk_data = await asyncio.to_thread(chunk_file.read)
+            if expected_size and len(chunk_data) > expected_size:
+                return jsonify({"success": False, "error": f"分片大小超过声明值（最大 {expected_size} 字节）"})
+            if len(chunk_data) > MAX_IMPORT_FILE_SIZE:
+                return jsonify({"success": False, "error": "分片文件过大"})
             chunk_path = Path(session["chunks_dir"]) / f"{chunk_index:06d}"
-            chunk_path.write_bytes(chunk_data)
+            await asyncio.to_thread(chunk_path.write_bytes, chunk_data)
             if chunk_index not in session["uploaded_chunks"]:
                 session["uploaded_chunks"].append(chunk_index)
             return jsonify({
@@ -837,6 +871,8 @@ async def register_all_web_apis(context, db: Database):
             return jsonify({"success": False, "error": "上传分片失败"})
 
     async def api_import_complete():
+        session_id = None
+        session = None
         try:
             data = await request.get_json()
             session_id = data.get("session_id")
@@ -856,14 +892,17 @@ async def register_all_web_apis(context, db: Database):
             assembled_file = temp_dir / f"{task_id}{session['file_ext']}"
 
             def _assemble_chunks():
-                with open(assembled_file, "wb") as dst:
-                    for i in range(session["total_chunks"]):
-                        chunk_path = Path(session["chunks_dir"]) / f"{i:06d}"
-                        if chunk_path.exists():
-                            with open(chunk_path, "rb") as src:
-                                shutil.copyfileobj(src, dst)
-                shutil.rmtree(session["chunks_dir"], ignore_errors=True)
-                return assembled_file.stat().st_size
+                try:
+                    with open(assembled_file, "wb") as dst:
+                        for i in range(session["total_chunks"]):
+                            chunk_path = Path(session["chunks_dir"]) / f"{i:06d}"
+                            if chunk_path.exists():
+                                with open(chunk_path, "rb") as src:
+                                    shutil.copyfileobj(src, dst)
+                    return assembled_file.stat().st_size
+                finally:
+                    # 无论成功与否都清理分片目录，避免磁盘残留
+                    shutil.rmtree(session["chunks_dir"], ignore_errors=True)
 
             actual_size = await asyncio.to_thread(_assemble_chunks)
             _chunk_sessions.pop(session_id, None)
@@ -905,6 +944,16 @@ async def register_all_web_apis(context, db: Database):
             })
         except Exception as e:
             logger.error(f"[FoxToolbox Web] 完成分片上传失败: {e}")
+            # 清理分片会话，避免残留占磁盘
+            try:
+                _chunk_sessions.pop(session_id, None)
+                chunks_dir = session.get("chunks_dir")
+                if chunks_dir:
+                    await asyncio.to_thread(
+                        shutil.rmtree, chunks_dir, ignore_errors=True
+                    )
+            except Exception:
+                pass
             return jsonify({"success": False, "error": "完成分片导入失败"})
 
     async def api_import_status():
@@ -1173,14 +1222,59 @@ class _StreamingJsonWriter:
                 pass
             finally:
                 self._f.close()
-            # 回填 total_records 占位符
-            try:
-                with open(self._path, "r+", encoding="utf-8") as f:
-                    content = f.read()
-                    f.seek(0)
-                    f.write(content.replace('__PLACEHOLDER__', str(self._count), 1))
-            except (OSError, ValueError) as e:
-                logger.warning(f"[FoxToolbox Web] 回填导出记录数失败: {e}")
+            # 回填 total_records 占位符（流式，避免将整个导出文件读入内存）
+            self._backfill_count()
+
+    def _backfill_count(self) -> None:
+        placeholder = "__PLACEHOLDER__"
+        try:
+            with open(self._path, "r", encoding="utf-8") as f:
+                prefix_len = self._find_placeholder_offset(f, placeholder)
+                if prefix_len is None:
+                    logger.debug(
+                        f"[FoxToolbox Web] 导出占位符未找到，跳过回填"
+                    )
+                    return
+                # 读前缀 + 占位符 + 剩余，流式重组到临时文件
+                tmp_path = self._path.with_suffix(self._path.suffix + ".tmp")
+                try:
+                    with open(tmp_path, "w", encoding="utf-8") as dst:
+                        f.seek(0)
+                        prefix = f.read(prefix_len)
+                        placeholder_text = f.read(len(placeholder))
+                        dst.write(prefix)
+                        dst.write(
+                            placeholder_text.replace(
+                                placeholder, str(self._count), 1
+                            )
+                        )
+                        while True:
+                            chunk = f.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            dst.write(chunk)
+                    tmp_path.replace(self._path)
+                finally:
+                    try:
+                        if tmp_path.exists():
+                            tmp_path.unlink()
+                    except OSError:
+                        pass
+        except (OSError, ValueError) as e:
+            logger.warning(f"[FoxToolbox Web] 回填导出记录数失败: {e}")
+
+    @staticmethod
+    def _find_placeholder_offset(f, placeholder: str) -> Optional[int]:
+        """定位占位符在文件中的偏移；未找到返回 None。
+
+        占位符位于文件头部的 export_info 段，只需读取前 64KB 查找。
+        """
+        f.seek(0)
+        head = f.read(64 * 1024)
+        idx = head.find(placeholder)
+        if idx == -1:
+            return None
+        return idx
 
 
 def _write_media_zip_from_file(pkg_path: Path, json_path: Path,
@@ -1188,10 +1282,20 @@ def _write_media_zip_from_file(pkg_path: Path, json_path: Path,
                                task: dict) -> int:
     try:
         added = 0
+        resolved_base = media_base.resolve()
         with zipfile.ZipFile(pkg_path, "w", zipfile.ZIP_STORED) as zf:
             zf.write(json_path, "data.json")
             for rel_path, zip_path in media_files.items():
                 abs_path = media_base / rel_path
+                # 防护：rel_path 可能来自导入数据中的 local_path（含 ../ 或绝对路径），
+                # 打包前必须校验在媒体目录内，避免任意文件读取
+                try:
+                    abs_path.resolve().relative_to(resolved_base)
+                except ValueError:
+                    logger.warning(
+                        f"[FoxToolbox Web] 跳过越界媒体路径（防护）: {rel_path}"
+                    )
+                    continue
                 if abs_path.exists() and abs_path.is_file():
                     try:
                         zf.write(abs_path, zip_path)
@@ -1374,6 +1478,15 @@ def _iter_json_records(file_path: str):
             else:
                 yield from ijson.items(f, "item")
     except ImportError:
+        # 兜底：ijson 未安装时退化为 json.load。
+        # 大文件会全量驻留内存，加字节上限保护，避免 OOM 杀死进程。
+        file_size = os.path.getsize(file_path)
+        if file_size > 64 * 1024 * 1024:
+            logger.warning(
+                f"[FoxToolbox Web] ijson 未安装，跳过超过 64MB 的 JSON 导入 "
+                f"(文件 {file_size} 字节)"
+            )
+            return
         with open(file_path, encoding="utf-8") as f:
             data = json.load(f)
             if isinstance(data, dict) and "messages" in data:

@@ -37,6 +37,14 @@ _DANGEROUS_PATTERNS = [
     r"\bCREATE\s+USER\b",
     r"\bRENAME\s+TABLE\b",
     r"\bLOCK\s+(?:TABLES|INSTANCE)\b",
+    # SELECT 相关的高危 / 危险函数
+    r"\bINTO\s+OUTFILE\b",
+    r"\bINTO\s+DUMPFILE\b",
+    r"\bLOAD_FILE\s*\(",
+    r"\bSLEEP\s*\(",
+    r"\bBENCHMARK\s*\(",
+    r"\bINFORMATION_SCHEMA\.CHARACTER",
+    r"\bLOAD\s+DATA\b",
     r"--",
     r"/\*",
     r"\*/",
@@ -108,11 +116,26 @@ class DbExplorer:
         stripped = sql.strip().lstrip("(").strip().upper()
         if not stripped.startswith("SELECT"):
             return sql
-        if re.search(r"\bLIMIT\s+\d+", sql, re.IGNORECASE):
-            def _clamp(m):
-                value = int(m.group(2))
-                return f"{m.group(1)}{min(value, max_rows)}"
-            return re.sub(r"(\bLIMIT\s+)(\d+)", _clamp, sql, flags=re.IGNORECASE)
+        # 在剥除字符串字面量的文本上检测，避免把数据内的 'LIMIT 9999' 误判为已有 LIMIT
+        stripped_sql = self._strip_string_literals(sql)
+        if re.search(r"\bLIMIT\s+\d+", stripped_sql, re.IGNORECASE):
+            # 统一钳制 LIMIT 的 count；两参形式 LIMIT offset, count 也钳制 count
+            def _replace_limit(m):
+                limit_kw = m.group(1)
+                first = int(m.group(2))
+                if m.group(3) is not None:
+                    # LIMIT offset, count —— 钳制 offset 与 count
+                    offset = min(first, max_rows)
+                    count = min(int(m.group(3)), max_rows)
+                    return f"{limit_kw}{offset}, {count}"
+                return f"{limit_kw}{min(first, max_rows)}"
+
+            return re.sub(
+                r"(\bLIMIT\s+)(\d+)(?:\s*,\s*(\d+))?",
+                _replace_limit,
+                sql,
+                flags=re.IGNORECASE,
+            )
         return f"{sql.rstrip(';')} LIMIT {max_rows}"
 
     async def list_tables(self) -> List[Dict[str, Any]]:

@@ -36,6 +36,16 @@ class AfdianConfig:
         except (TypeError, ValueError):
             return 6500
 
+    @property
+    def webhook_token(self) -> str:
+        """Webhook 校验令牌。
+
+        配置后在回调 URL 中以 ``?token=<值>`` 形式携带（如
+        ``https://example.com:6500/?token=xxx``），插件仅处理携带正确
+        令牌的请求，可防止伪造订单推送。留空表示不校验（向后兼容）。
+        """
+        return str(self._cfg.get("afdian_webhook_token", "") or "")
+
     # ---- API 配置 ----
     @property
     def base_url(self) -> str:

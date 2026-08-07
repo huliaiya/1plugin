@@ -229,6 +229,16 @@ class MediaDownloader:
         hash_dir = self._get_hash_dir(media_subdir, content_hash)
         file_path = hash_dir / filename
 
+        # 防护：filename 可能来自平台消息中的 File 组件名（含 ../ 或绝对路径）
+        # 必须在写入前校验最终路径仍在媒体目录内，避免路径穿越写入
+        try:
+            file_path.resolve().relative_to(self.media_base_path.resolve())
+        except ValueError:
+            logger.warning(
+                f"[MediaDownloader] 拒绝越界文件名（路径穿越防护）: {filename}"
+            )
+            return None
+
         if file_path.exists():
             rel_path = file_path.relative_to(self.media_base_path)
             logger.debug(
@@ -327,37 +337,62 @@ class MediaDownloader:
 
         session = await self._get_session()
         try:
-            async with session.get(url) as resp:
-                if resp.status != 200:
-                    logger.debug(
-                        f"[MediaDownloader] aiohttp 下载失败: HTTP {resp.status}, "
-                        f"URL: {url[:80]}"
-                    )
-                    return None, ""
+            current_url = url
+            # 逐跳校验重定向，防止重定向到内网/元数据地址绕过 SSRF 防护
+            for _redirect in range(5):
+                async with session.get(
+                    current_url, allow_redirects=False
+                ) as resp:
+                    if resp.status in (301, 302, 303, 307, 308):
+                        location = resp.headers.get("Location")
+                        if not location:
+                            return None, ""
+                        next_url = str(
+                            resp.url.join(location) if hasattr(resp.url, "join") else location
+                        )
+                        if not _is_safe_url(next_url):
+                            logger.warning(
+                                f"[MediaDownloader] 重定向目标不安全，拒绝 (SSRF防护): "
+                                f"{next_url[:80]}"
+                            )
+                            return None, ""
+                        current_url = next_url
+                        continue
 
-                content_length = resp.headers.get("Content-Length")
-                if content_length and int(content_length) > MAX_DOWNLOAD_SIZE:
-                    logger.warning(
-                        f"[MediaDownloader] 文件过大，拒绝下载: "
-                        f"{int(content_length)} bytes, URL: {url[:80]}"
-                    )
-                    return None, ""
+                    if resp.status != 200:
+                        logger.debug(
+                            f"[MediaDownloader] aiohttp 下载失败: HTTP {resp.status}, "
+                            f"URL: {current_url[:80]}"
+                        )
+                        return None, ""
 
-                content = await resp.content.read(MAX_DOWNLOAD_SIZE + 1)
-                if len(content) > MAX_DOWNLOAD_SIZE:
-                    logger.warning(
-                        f"[MediaDownloader] 下载内容超过大小限制 "
-                        f"({MAX_DOWNLOAD_SIZE} bytes), URL: {url[:80]}"
-                    )
-                    return None, ""
+                    content_length = resp.headers.get("Content-Length")
+                    if content_length and int(content_length) > MAX_DOWNLOAD_SIZE:
+                        logger.warning(
+                            f"[MediaDownloader] 文件过大，拒绝下载: "
+                            f"{int(content_length)} bytes, URL: {current_url[:80]}"
+                        )
+                        return None, ""
 
-                content_type = resp.headers.get("Content-Type", "")
-                if content:
-                    logger.debug(
-                        f"[MediaDownloader] aiohttp 成功: {url[:80]} "
-                        f"({len(content)} bytes)"
-                    )
-                return content, content_type
+                    content = await resp.content.read(MAX_DOWNLOAD_SIZE + 1)
+                    if len(content) > MAX_DOWNLOAD_SIZE:
+                        logger.warning(
+                            f"[MediaDownloader] 下载内容超过大小限制 "
+                            f"({MAX_DOWNLOAD_SIZE} bytes), URL: {current_url[:80]}"
+                        )
+                        return None, ""
+
+                    content_type = resp.headers.get("Content-Type", "")
+                    if content:
+                        logger.debug(
+                            f"[MediaDownloader] aiohttp 成功: {current_url[:80]} "
+                            f"({len(content)} bytes)"
+                        )
+                    return content, content_type
+            logger.warning(
+                f"[MediaDownloader] 重定向次数过多，拒绝下载: {url[:80]}"
+            )
+            return None, ""
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.debug(
                 f"[MediaDownloader] aiohttp 异常: {url[:80]}, "

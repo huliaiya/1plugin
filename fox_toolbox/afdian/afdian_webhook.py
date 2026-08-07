@@ -14,10 +14,11 @@ from astrbot.api import logger
 
 
 class AfdianWebhookServer:
-    def __init__(self, host: str, port: int, db=None):
+    def __init__(self, host: str, port: int, db=None, token: str = ""):
         self.host = host
         self.port = port
         self.db = db
+        self._token = token or ""
         self._order_callback = None
         self.app = web.Application()
         self.runner = None
@@ -31,17 +32,35 @@ class AfdianWebhookServer:
             ]
         )
 
+    def _auth_ok(self, request: web.Request) -> bool:
+        """校验请求携带的 webhook 令牌。
+
+        未配置令牌时返回 True（向后兼容）；配置后要求 URL query 中的
+        ``token`` 与配置值一致。爱发电回调 URL 可携带 query 参数。
+        """
+        if not self._token:
+            return True
+        request_token = request.query.get("token", "")
+        return request_token == self._token
+
     def register_order_callback(self, callback):
         """注册订单回调函数（异步或同步函数均可）。"""
         self._order_callback = callback
 
     async def list_orders(self, request: web.Request):
+        if not self._auth_ok(request):
+            return web.json_response({"ec": 403, "em": "forbidden"}, status=403)
         if not self.db:
             return web.json_response({"ec": -1, "em": "数据库未初始化"})
         orders = await self.db.get_all_orders()
         return web.json_response(orders if orders else [])
 
     async def receive_webhook(self, request: web.Request):
+        if not self._auth_ok(request):
+            logger.warning(
+                f"[Afdian] 收到未通过令牌校验的 Webhook 请求，已拒绝"
+            )
+            return web.json_response({"ec": 403, "em": "forbidden"}, status=403)
         try:
             data = await request.json()
             logger.info(f"[Afdian] 收到爱发电订单通知：{json.dumps(data, ensure_ascii=False)}")

@@ -150,6 +150,45 @@ class TestEnsureLimit:
         sql = explorer._ensure_limit("select * from messages", 100)
         assert sql == "select * from messages LIMIT 100"
 
+    def test_two_param_limit_both_clamped(self, explorer):
+        sql = explorer._ensure_limit(
+            "SELECT * FROM messages LIMIT 999999999, 5000000", 100
+        )
+        assert sql == "SELECT * FROM messages LIMIT 100, 100"
+
+    def test_limit_in_string_literal_still_appended(self, explorer):
+        # 字符串字面量内的 'LIMIT 999' 不应被误判为已有 LIMIT
+        sql = explorer._ensure_limit(
+            "SELECT * FROM messages WHERE message_str = 'LIMIT 999'", 100
+        )
+        assert sql.endswith("LIMIT 100")
+
+    def test_select_into_outfile_flagged(self, explorer):
+        dangerous, reason = explorer.check_dangerous(
+            "SELECT * FROM messages INTO OUTFILE '/tmp/x'"
+        )
+        assert dangerous is True
+
+    def test_load_file_flagged(self, explorer):
+        dangerous, _ = explorer.check_dangerous(
+            "SELECT LOAD_FILE('/etc/passwd')"
+        )
+        assert dangerous is True
+
+    def test_sleep_flagged(self, explorer):
+        dangerous, _ = explorer.check_dangerous(
+            "SELECT SLEEP(5)"
+        )
+        assert dangerous is True
+
+    def test_sleep_in_string_literal_allowed(self, explorer):
+        # 字符串字面量中的 SLEEP 不应被误判
+        dangerous, reason = explorer.check_dangerous(
+            "SELECT message_str FROM messages WHERE message_str = 'SLEEP(5)'"
+        )
+        assert dangerous is False
+        assert reason == ""
+
 
 class TestListTablesCompatibility:
     """list_tables 对 tuple / dict 两种游标行的兼容性（不依赖真实 MySQL）"""
