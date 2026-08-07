@@ -5,7 +5,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E4.16%2C%3C5-blue?style=for-the-badge)](https://github.com/Soulter/astrbot)
 [![Python](https://img.shields.io/badge/Python-3.12+-green?style=for-the-badge)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.3.2-orange?style=for-the-badge)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.4.0-orange?style=for-the-badge)](CHANGELOG.md)
 
 **全平台聊天消息自动记录 | MySQL 5.7 存储 | Web 管理面板 | 全文搜索 | 插件 API**
 
@@ -547,6 +547,11 @@ ruff format .
 ---
 
 ## 📝 更新日志
+
+### v2.4.0（2026-08-07）
+
+- **快照配色切换为浅蓝/天空蓝风格**：背景天空蓝渐变，卡片、图表、玻璃边框、文字统一为天空蓝色系
+- **WebUI 配色统一为天空蓝**：页面背景去除绿/黄/粉杂色，时间趋势图线条统一为天空蓝系渐变
 
 ### v2.3.2（2026-08-07）
 

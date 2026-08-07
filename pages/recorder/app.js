@@ -1,5 +1,5 @@
 const bridge = window.AstrBotPluginPage;
-const BUILD_VERSION = '2.3.2';
+const BUILD_VERSION = '2.4.0';
 
 let bridgeReady = false;
 let pluginContext = null;
@@ -713,10 +713,10 @@ function updateTimelineChart(points) {
       axisLine: { lineStyle: { width: 2 } },
     },
     series: [
-      { name: '总消息', type: 'line', data: points.map(p => p.count || 0), smooth: true, symbolSize, lineStyle: { width: lineWidth, color: '#4fc3f7' }, itemStyle: { color: '#4fc3f7' }, areaStyle: { opacity: 0.35 } },
-      { name: '群聊', type: 'line', data: points.map(p => p.group_count || 0), smooth: true, symbolSize, lineStyle: { width: lineWidth, color: '#66bb6a' }, itemStyle: { color: '#66bb6a' } },
-      { name: '私聊', type: 'line', data: points.map(p => p.private_count || 0), smooth: true, symbolSize, lineStyle: { width: lineWidth, color: '#ffa726' }, itemStyle: { color: '#ffa726' } },
-      { name: '频道', type: 'line', data: points.map(p => p.channel_count || 0), smooth: true, symbolSize, lineStyle: { width: lineWidth, color: '#ef5350' }, itemStyle: { color: '#ef5350' } }
+      { name: '总消息', type: 'line', data: points.map(p => p.count || 0), smooth: true, symbolSize, lineStyle: { width: lineWidth, color: '#0288d1' }, itemStyle: { color: '#0288d1' }, areaStyle: { opacity: 0.35 } },
+      { name: '群聊', type: 'line', data: points.map(p => p.group_count || 0), smooth: true, symbolSize, lineStyle: { width: lineWidth, color: '#4fc3f7' }, itemStyle: { color: '#4fc3f7' } },
+      { name: '私聊', type: 'line', data: points.map(p => p.private_count || 0), smooth: true, symbolSize, lineStyle: { width: lineWidth, color: '#81d4fa' }, itemStyle: { color: '#81d4fa' } },
+      { name: '频道', type: 'line', data: points.map(p => p.channel_count || 0), smooth: true, symbolSize, lineStyle: { width: lineWidth, color: '#4dd0e1' }, itemStyle: { color: '#4dd0e1' } }
     ]
   }, true);
 }
