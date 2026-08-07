@@ -14,6 +14,10 @@ if str(plugin_root) not in sys.path:
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star
+from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+
+from .fox_toolbox.models import PLUGIN_DIR_NAME
+from .fox_toolbox.afdian.star import AfdianFeature
 
 from .fox_toolbox.database import Database
 from .fox_toolbox.db_explorer import DbExplorer
@@ -180,12 +184,14 @@ def _generate_message_summary(chain_data: list) -> str:
     return summary
 
 
-class MessageRecorder(Star):
-    """消息记录器插件主类"""
+class MessageRecorder(Star, AfdianFeature):
+    """消息记录器插件主类（集成爱发电功能）"""
 
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
+        self.data_dir = Path(get_astrbot_plugin_data_path()) / PLUGIN_DIR_NAME
+        self.data_dir.mkdir(parents=True, exist_ok=True)
         self._db: Optional[Database] = None
         self._api: Optional[MessageRecorderAPI] = None
         self._media_downloader: Optional[MediaDownloader] = None
@@ -197,6 +203,7 @@ class MessageRecorder(Star):
         self._initialized: bool = False
         self._init_error: Optional[str] = None
         self._tg_channel_handlers: list = []  # [(platform, handler), ...]
+        self._init_afdian()
 
     async def initialize(self):
         """插件初始化"""
@@ -245,6 +252,9 @@ class MessageRecorder(Star):
             setattr(self.context, "fox_toolbox_db_error", self._init_error)
             await self._register_web_apis()
 
+        # 爱发电 Webhook 独立于消息记录初始化，失败不影响主功能
+        await self.afdian_start()
+
     def _check_initialized(self) -> bool:
         if not self._initialized:
             logger.warning(f"[FoxToolbox] 插件未初始化或初始化失败: {self._init_error}")
@@ -286,6 +296,9 @@ class MessageRecorder(Star):
 
         if self._db:
             await self._db.close()
+
+        # 停止爱发电 Webhook 服务并关闭 API 客户端
+        await self.afdian_stop()
         logger.info("[FoxToolbox] 插件已终止")
 
     def _start_cleanup_task(self):
@@ -931,3 +944,73 @@ class MessageRecorder(Star):
                 snapshot_path.unlink(missing_ok=True)
             except Exception:
                 pass
+
+    # ========== 爱发电对接（复刻自 astrbot_plugin_afdian） ==========
+
+    def _afdian_check(self, event) -> bool:
+        """爱发电功能是否启用且凭据就绪。"""
+        if not self.afdian_cfg.enabled:
+            return False
+        if not self.afdian_cfg.ready():
+            logger.warning("[Afdian] API 凭据未配置（user_id/token 为空）")
+            return False
+        return True
+
+    @filter.command("发电", alias={"赞助"})
+    async def cmd_afdian_create_order(self, event: AstrMessageEvent, price: int | None = None):
+        """发电 [金额] - 生成爱发电支付跳转链接，接受用户打赏"""
+        if not self._afdian_check(event):
+            yield event.plain_result("爱发电功能未启用或 API 凭据未配置，请联系管理员")
+            return
+        url = await self.afdian_create_order(event, price)
+        yield event.plain_result(f"⚡ 点击链接发电打赏（备注为您的用户ID）:\n{url}")
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("爱发电测试")
+    async def cmd_afdian_test(self, event: AstrMessageEvent):
+        """爱发电测试 - 手动触发一次测试通知，验证通知链路"""
+        if not self.afdian_cfg.enabled:
+            yield event.plain_result("爱发电功能未启用，请在插件配置中开启")
+            return
+        await self.on_afdian_new_order(None)
+        yield event.plain_result("已发送测试通知")
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("查询订单")
+    async def cmd_afdian_query_order(self, event: AstrMessageEvent, out_trade_no: str):
+        """查询订单 <订单号> - 查询指定订单的详情信息"""
+        if not self._afdian_check(event):
+            yield event.plain_result("爱发电功能未启用或 API 凭据未配置，请联系管理员")
+            return
+        text = await self.afdian_query_order(event, out_trade_no)
+        try:
+            image = await self.text_to_image(text=text)
+            yield event.image_result(image)
+        except Exception as e:
+            logger.warning(f"[Afdian] 文本转图片失败，降级为纯文本: {e}")
+            yield event.plain_result(text)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("查询发电", alias={"查询赞助"})
+    async def cmd_afdian_query_sponsor(self, event: AstrMessageEvent, sponsor_user_ids: str | None = None):
+        """查询发电 - 查询收到的赞助记录（可指定用户ID）"""
+        if not self._afdian_check(event):
+            yield event.plain_result("爱发电功能未启用或 API 凭据未配置，请联系管理员")
+            return
+        text = await self.afdian_query_sponsor(event, sponsor_user_ids)
+        try:
+            image = await self.text_to_image(text=text)
+            yield event.image_result(image)
+        except Exception as e:
+            logger.warning(f"[Afdian] 文本转图片失败，降级为纯文本: {e}")
+            yield event.plain_result(text)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("开启发电通知", alias={"发电通知", "爱发电通知"})
+    async def cmd_afdian_add_notice_session(self, event: AstrMessageEvent, umo: str | None = None):
+        """开启发电通知 - 在当前会话接收爱发电订单通知"""
+        if not self.afdian_cfg.enabled:
+            yield event.plain_result("爱发电功能未启用，请在插件配置中开启")
+            return
+        msg = await self.afdian_add_notice_session(event, umo)
+        yield event.plain_result(msg)

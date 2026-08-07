@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-08-07
+
+### Added
+- **集成爱发电打赏对接功能**：复刻自 [astrbot_plugin_afdian](https://github.com/Zhalslar/astrbot_plugin_afdian)（作者 [Zhalslar](https://github.com/Zhalslar)），实现发电打赏、Webhook 订单实时推送、订单/赞助查询等能力
+  - 新增指令：`/发电`（别名 `/赞助`）、`/爱发电测试`、`/查询订单`、`/查询发电`（别名 `/查询赞助`）、`/开启发电通知`（别名 `/发电通知`、`/爱发电通知`）
+  - 新增配置：`afdian_enabled`、`afdian_webhook_host`、`afdian_webhook_port`、`afdian_api_base_url`、`afdian_api_user_id`、`afdian_api_token`、`afdian_default_price`、`afdian_default_reply`、`afdian_notice_sessions`
+  - 订单数据以 SQLite 存储于插件数据目录 `afdian/orders.db`，Webhook 服务独立于消息记录功能启动，失败不影响主功能
+  - 存储引擎与主插件统一：订单写入主库 MySQL 的 `afdian_orders` 表（与消息记录同一连接池），MySQL 不可用时自动回退 SQLite 兜底
+
 ## [2.4.3] - 2026-08-07
 
 ### Fixed

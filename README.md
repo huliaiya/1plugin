@@ -5,7 +5,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E4.16%2C%3C5-blue?style=for-the-badge)](https://github.com/Soulter/astrbot)
 [![Python](https://img.shields.io/badge/Python-3.12+-green?style=for-the-badge)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.4.3-orange?style=for-the-badge)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.5.0-orange?style=for-the-badge)](CHANGELOG.md)
 
 **全平台聊天消息自动记录 | MySQL 5.7 存储 | Web 管理面板 | 全文搜索 | 插件 API**
 
@@ -39,6 +39,7 @@
 - 🧹 **自动清理** — 可配置保留天数和最大记录数，自动清理过期数据和孤立媒体文件
 - ⚡ **异步高性能** — 全链路异步（aiomysql + aiohttp），连接池并发控制，不影响消息处理性能
 - 🔒 **智能去重** — 基于 `(platform, message_id)` 和 `(platform, content_hash)` 双唯一索引，同一消息不会重复入库
+- ⚡ **爱发电打赏对接** — 对接爱发电平台，接受用户打赏、实时推送订单，支持生成支付链接、查询订单与赞助记录（复刻自 astrbot_plugin_afdian）
 
 ---
 
@@ -121,6 +122,24 @@ git clone https://github.com/leafliber/astrbot_plugin_fox_toolbox.git
 | `image_save_mode` | `original` | 图片保存模式：`original`（原图）/ `thumbnail`（缩略图） |
 
 > **提示**：首次使用需先在 MySQL 中创建数据库（如 `CREATE DATABASE fox_toolbox CHARACTER SET utf8mb4;`），然后在配置页面填写连接信息。
+
+### 爱发电打赏对接（可选）
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `afdian_enabled` | `false` | 是否启用爱发电打赏对接功能 |
+| `afdian_webhook_host` | `0.0.0.0` | 爱发电 Webhook 监听地址 |
+| `afdian_webhook_port` | `6500` | 爱发电 Webhook 监听端口 |
+| `afdian_api_base_url` | `https://afdian.com/api/open` | 爱发电 API 根地址 |
+| `afdian_api_user_id` | `` | 爱发电用户 ID（开发者后台获取） |
+| `afdian_api_token` | `` | 爱发电 API 密钥（开发者后台获取） |
+| `afdian_default_price` | `5` | 发起赞助时的默认金额（元） |
+| `afdian_default_reply` | `赞助成功，感谢支持！` | 赞助成功后的默认回复语 |
+| `afdian_notice_sessions` | `[]` | 接收订单通知的会话 ID（可用「开启发电通知」指令添加） |
+
+> **Webhook 要求**：爱发电订单通知需要公网可达的回调地址。请放行 `afdian_webhook_port` 对应端口，并在爱发电开发者设置中将回调地址指向该端口（如 `http://公网IP:6500/`）；若无公网 IP，可配置反向代理或内网穿透（frp / ngrok / cloudflared）转发到该端口。未配置公网 Webhook 时，主动查询类指令仍可用，但实时订单通知与赞助成功自动回复不可用。
+>
+> **数据存储**：爱发电订单会写入主插件 MySQL 数据库的 `afdian_orders` 表（与消息记录同一实例、同一库）；MySQL 不可用时自动回退到插件数据目录下的 SQLite 兜底，保证订单不丢失。
 
 ---
 
@@ -215,6 +234,22 @@ Web 面板采用 **Liquid Glass** 液态玻璃设计风格，通过现代 CSS �
 | 具体日期 | YYYY-MM-DD 格式 | `2024-01-15` |
 | 日期范围 | 日期范围，用 `~` 分隔 | `2024-01-01~2024-01-15` |
 | 相对时间 | `-1d`（昨天）、`-7d`（7天前）等 | `-3d` |
+
+---
+
+## ⚡ 爱发电打赏指令
+
+> 需在插件配置中启用 `afdian_enabled` 并填写 `afdian_api_user_id` / `afdian_api_token`。
+
+| 指令 | 说明 | 权限 |
+|------|------|------|
+| `/发电 [金额]` | 生成爱发电支付链接，接受用户打赏（备注记录付款人）；别名 `/赞助` | 所有人 |
+| `/爱发电测试` | 手动触发一次测试通知，验证通知链路是否正常 | 管理员 |
+| `/查询订单 <订单号>` | 查询指定订单的详情信息 | 管理员 |
+| `/查询发电` | 查询默认账号收到的赞助记录；别名 `/查询赞助` | 管理员 |
+| `/开启发电通知` | 在当前会话开启爱发电订单通知；别名 `/发电通知`、`/爱发电通知` | 管理员 |
+
+> **工作流程**：用户在机器人发送 `/发电`，获得支付链接并付款（链接备注中写入用户ID）；爱发电通过 Webhook 推送订单给插件，插件保存订单并通知所有订阅会话，同时针对该付款用户发送赞助成功回复。
 
 ---
 
@@ -825,8 +860,9 @@ ruff format .
 - [AstrBot](https://github.com/Soulter/astrbot) - 强大的多平台聊天机器人框架，本插件基于其插件体系开发
 - [astrbot_plugin_message_recorder](https://github.com/leafliber/astrbot_plugin_message_recorder) - 原项目 **消息记录器**，由 [Leafiber](https://github.com/leafliber) 开发，狐狸插件在此基础上进行存储引擎迁移和二次开发
 - [astrbot_plugin_mysql](https://github.com/Chris95743/astrbot_plugin_mysql) - 数据库表浏览 / 只读 SQL 查询的设计参考，由 [Chris95743](https://github.com/Chris95743) 开发，狐狸插件借鉴其安全校验与表浏览思路
+- [astrbot_plugin_afdian](https://github.com/Zhalslar/astrbot_plugin_afdian) - 爱发电对接功能（发电打赏 / Webhook 订单推送 / 订单与赞助查询），复刻自 [Zhalslar](https://github.com/Zhalslar) 开发的同名单体插件，狐狸插件将其集成并适配扁平配置
 - [aiomysql](https://github.com/aio-libs/aiomysql) - 异步 MySQL 驱动库
-- [aiohttp](https://github.com/aio-libs/aiohttp) - 异步 HTTP 客户端，用于多媒体文件下载
+- [aiohttp](https://github.com/aio-libs/aiohttp) - 异步 HTTP 客户端，用于多媒体文件下载与爱发电 Webhook 服务
 
 ---
 

@@ -77,5 +77,64 @@
     "default": "original",
     "hint": "original: 保存原图（体积大，画质高）；thumbnail: 保存缩略图（压缩后的小图，节省空间）",
     "options": ["original", "thumbnail"]
+  },
+  "afdian_enabled": {
+    "type": "bool",
+    "description": "是否启用爱发电打赏对接功能",
+    "default": false,
+    "hint": "开启后插件会启动爱发电 Webhook 服务并开放「发电」「查询订单」等指令"
+  },
+  "afdian_webhook_host": {
+    "type": "string",
+    "description": "爱发电 Webhook 监听地址",
+    "default": "0.0.0.0",
+    "hint": "默认 0.0.0.0 表示监听所有，一般保持默认"
+  },
+  "afdian_webhook_port": {
+    "type": "int",
+    "description": "爱发电 Webhook 监听端口",
+    "default": 6500,
+    "hint": "需在防火墙 / 安全组放行；如无公网地址请配置反向代理或内网穿透转发到该端口"
+  },
+  "afdian_api_base_url": {
+    "type": "string",
+    "description": "爱发电 API 根地址",
+    "default": "https://afdian.com/api/open",
+    "hint": "一般保持默认，修改会影响 API 请求与支付链接"
+  },
+  "afdian_api_user_id": {
+    "type": "string",
+    "description": "爱发电用户 ID (user_id)",
+    "default": "",
+    "hint": "爱发电 APP「个人」→「右上角」→「开发者」中查看"
+  },
+  "afdian_api_token": {
+    "type": "string",
+    "description": "爱发电 API 密钥 (api_token)",
+    "default": "",
+    "hint": "爱发电 APP「个人」→「右上角」→「开发者」中查看"
+  },
+  "afdian_default_price": {
+    "type": "int",
+    "description": "发起赞助时的默认金额",
+    "default": 5,
+    "hint": "单位：元；用户发电未指定金额时使用此值",
+    "slider": {
+      "min": 0,
+      "max": 100,
+      "step": 5
+    }
+  },
+  "afdian_default_reply": {
+    "type": "string",
+    "description": "赞助成功后的默认回复语",
+    "default": "赞助成功，感谢支持！",
+    "hint": "需要消息平台支持主动回复"
+  },
+  "afdian_notice_sessions": {
+    "type": "list",
+    "description": "接收订单通知的会话ID",
+    "default": [],
+    "hint": "可不填，在会话中用「开启发电通知」指令开启通知"
   }
 }
