@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.5.1] - 2026-08-07
 
 ### Fixed
+- **修复爱发电 Webhook 与轮询并存时的重复通知竞态**：`OrderDB.save_order_if_new` 使用 `INSERT IGNORE` / `INSERT OR IGNORE` 原子判重（替代"先查再存"），Webhook `handle_order`、轮询、历史同步统一走该路径，杜绝 TOCTOU 竞态导致的同一订单重复通知
+- **修复 MySQL 5.7 建表失败**：`afdian_orders` 的 `idx_remark` 对 `VARCHAR(512)` utf8mb4 建全列索引超过 MySQL 5.7 的 767 字节索引上限（512×4=2048），改为前缀索引 `remark(191)`
+- **修复轮询积压漏单**：`afdian_poll_once` 由只拉第一页改为循环分页拉取，遇到已入库订单即停，避免突发大量订单时漏掉新订单
 - **修复爱发电 Webhook 与轮询并存时的重复通知**：`handle_order` 在保存订单前先查库判重，同一订单仅由先到达的通道处理并触发一次回调，避免重复通知
 - **修复轮询启动与历史全量同步的竞态**：`afdian_poll_loop` 启动时先等待历史同步任务完成，避免历史订单被误判为新订单触发通知
 - **修复待确认发电订单长期残留**：新增待确认订单超时清理，超时未支付记录按 `afdian_poll_timeout` 自动回收
@@ -15,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **爱发电查询图片整体美化**：自定义 T2I 模板全面重写（渐变品牌横幅、卡片化内容区、标题/列表/表格/引用块/代码块专项样式）；`/查询订单` 与 `/查询发电`（`/查询赞助`）共用同一渲染模板，仅指令不同
+- 自定义文转图渲染改用 Star 基类 `self.html_render`（官方推荐 API），移除对 `astrbot.core.html_renderer` 内部单例的直接依赖
+- 图片水印兜底版本号默认值同步为 v2.5.1
 - `parse_order` / `parse_sponsors` 输出升级为 markdown 结构（加粗字段、条目标题），图片渲染层次更清晰
 
 ## [2.5.0] - 2026-08-07

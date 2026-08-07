@@ -62,16 +62,14 @@ class AfdianWebhookServer:
     async def handle_order(self, order: dict):
         out_trade_no = order.get("out_trade_no")
         if self.db:
-            # 与无公网轮询共用一套去重：仅当订单尚未入库时才保存并触发回调，
-            # 避免 Webhook 与轮询并存时对同一订单重复通知
-            if out_trade_no:
-                exists = await self.db.get_order_by_id(out_trade_no)
-                if exists:
-                    logger.info(
-                        f"[Afdian] 订单已存在，跳过重复处理：{out_trade_no}"
-                    )
-                    return
-            await self.db.save_order(order)
+            # 原子判重：仅当订单原本不存在时才保存并触发回调，
+            # 消除"先查再存"竞态，Webhook 与轮询并存时不会重复通知
+            is_new = await self.db.save_order_if_new(order)
+            if not is_new:
+                logger.info(
+                    f"[Afdian] 订单已存在，跳过重复处理：{out_trade_no}"
+                )
+                return
             logger.info(f"[Afdian] 订单保存成功：{out_trade_no}")
 
         if self._order_callback:

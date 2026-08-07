@@ -45,7 +45,7 @@ class OrderDB:
             create_time BIGINT DEFAULT 0,
             KEY idx_user_id (user_id),
             KEY idx_create_time (create_time),
-            KEY idx_remark (remark)
+            KEY idx_remark (remark(191))
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """
 
@@ -130,6 +130,56 @@ class OrderDB:
             await asyncio.to_thread(self._save_sqlite, order)
         else:
             logger.error("[Afdian] 无可用存储后端，订单未保存")
+
+    async def save_order_if_new(self, order) -> bool:
+        """原子地保存订单，仅当订单原本不存在时返回 True。
+
+        使用 INSERT IGNORE / INSERT OR IGNORE 避免并发下"先查再存"
+        的 TOCTOU 竞态（Webhook 与轮询可能同时处理同一订单）。
+        """
+        if self._mysql_ready and self._pool:
+            return await self._save_mysql_if_new(order)
+        if self._sqlite_path:
+            return await asyncio.to_thread(self._save_sqlite_if_new, order)
+        return False
+
+    async def _save_mysql_if_new(self, order) -> bool:
+        fields = self._build_fields(order)
+        sql = """
+            INSERT IGNORE INTO afdian_orders (
+                out_trade_no, user_id, user_name, user_private_id, plan_id,
+                plan_title, month, total_amount, show_amount, status,
+                product_type, discount, remark, redeem_id, sku_detail,
+                address_person, address_phone, address_address, create_time
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+        """
+        try:
+            async with self._pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(sql, tuple(fields.values()))
+                    await conn.commit()
+                    return cur.rowcount > 0
+        except Exception as e:
+            logger.warning(f"[Afdian] MySQL 保存订单失败，尝试 SQLite 兜底: {e}")
+            if self._sqlite_path:
+                return await asyncio.to_thread(self._save_sqlite_if_new, order)
+            return False
+
+    def _save_sqlite_if_new(self, order) -> bool:
+        fields = self._build_fields(order)
+        columns = ", ".join(fields.keys())
+        placeholders = ", ".join("?" * len(fields))
+        with sqlite3.connect(self._sqlite_path) as conn:
+            cur = conn.execute(
+                f"INSERT OR IGNORE INTO afdian_orders "
+                f"({columns}) VALUES ({placeholders})",
+                tuple(fields.values()),
+            )
+            conn.commit()
+            return cur.rowcount > 0
 
     async def _save_mysql(self, order) -> None:
         fields = self._build_fields(order)

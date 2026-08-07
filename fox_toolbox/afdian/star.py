@@ -54,7 +54,7 @@ class AfdianFeature:
         if getattr(self, "_afdian_brand", None):
             return self._afdian_brand
         name = "狐狸插件"
-        version = "2.5.0"
+        version = "2.5.1"
         try:
             meta_path = (
                 Path(__file__).resolve().parent.parent.parent / "metadata.yaml"
@@ -84,12 +84,10 @@ class AfdianFeature:
 
         优先使用自定义模板（网络渲染），失败时回退到 AstrBot 默认模板。
         """
-        from astrbot.core import html_renderer
-
         name, version = self.afdian_brand
         try:
             tmpl = self._afdian_t2i_template()
-            return await html_renderer.render_custom_template(
+            return await self.html_render(
                 tmpl,
                 {"text": text, "plugin_name": name, "version": f"v{version}"},
                 return_url=True,
@@ -126,11 +124,8 @@ class AfdianFeature:
                 out_trade_no = order.get("out_trade_no")
                 if not out_trade_no:
                     continue
-                exists = await self.afdian_db.get_order_by_id(out_trade_no)
-                if exists:
-                    continue
-                await self.afdian_db.save_order(order)
-                added += 1
+                if await self.afdian_db.save_order_if_new(order):
+                    added += 1
             page += 1
             if len(orders) < 100:
                 break
@@ -341,24 +336,33 @@ class AfdianFeature:
             self.afdian_pending_orders.pop(sid, None)
             logger.info(f"[Afdian] 订单等待支付超时，移除待确认记录 {sid}")
 
-    async def afdian_poll_once(self):
+    async def afdian_poll_once(self, max_pages: int = 10):
         """执行一次轮询检测：拉取最近订单并处理新增订单。
 
+        循环拉取订单页，遇到已存在订单即停止（订单按创建时间倒序，
+        已存在说明该页之后更早的订单均已处理过），避免漏掉积压新单。
         仅处理本地库中不存在的订单，避免 Webhook 与轮询重复通知。
         """
-        orders = await self.afdian_client.query_order(page=1, per_page=100)
-        if not orders:
-            return
-        for order in orders:
-            out_trade_no = order.get("out_trade_no")
-            if not out_trade_no:
-                continue
-            exists = await self.afdian_db.get_order_by_id(out_trade_no)
-            if exists:
-                continue
-            logger.info(f"[Afdian] 轮询发现新订单：{out_trade_no}")
-            await self.afdian_db.save_order(order)
-            await self.on_afdian_new_order(order)
+        for page in range(1, max_pages + 1):
+            orders = await self.afdian_client.query_order(page=page, per_page=100)
+            if not orders:
+                return
+            found_known = False
+            for order in orders:
+                out_trade_no = order.get("out_trade_no")
+                if not out_trade_no:
+                    continue
+                is_new = await self.afdian_db.save_order_if_new(order)
+                if not is_new:
+                    found_known = True
+                    continue
+                logger.info(f"[Afdian] 轮询发现新订单：{out_trade_no}")
+                await self.on_afdian_new_order(order)
+            # 本页已出现已入库订单：后续页只会更早，停止拉取
+            if found_known:
+                return
+            if len(orders) < 100:
+                return
 
     async def afdian_query_order(self, event, out_trade_no: str):
         """查询订单 <订单号> —— 查询指定订单详情。"""
