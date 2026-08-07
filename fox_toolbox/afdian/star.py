@@ -6,6 +6,7 @@ main.py 中的主 Star 类继承使用。
 """
 
 import asyncio
+import time
 from pathlib import Path
 
 from astrbot.api import logger
@@ -45,6 +46,7 @@ class AfdianFeature:
         self.afdian_bots = []
         self.afdian_started = False
         self.afdian_sync_task: asyncio.Task | None = None
+        self.afdian_poll_task: asyncio.Task | None = None
 
     @property
     def afdian_brand(self) -> tuple:
@@ -149,9 +151,14 @@ class AfdianFeature:
             logger.warning(f"[Afdian] 绑定 MySQL 失败，使用 SQLite 兜底: {e}")
 
     async def afdian_start(self):
-        """启动爱发电 Webhook 服务（功能开关关闭或端口被占用时静默跳过）。"""
+        """启动爱发电服务（功能开关关闭时静默跳过）。
+
+        - 尝试启动 Webhook 服务（有公网时由爱发电平台主动推送）
+        - 启动/重载时后台拉取历史订单入库（去重，只存新增）
+        - 若配置启用轮询，启动无公网轮询检测作为补充/替代
+        """
         if not self.afdian_cfg.enabled:
-            logger.info("[Afdian] 爱发电功能未启用，跳过 Webhook 启动")
+            logger.info("[Afdian] 爱发电功能未启用，跳过服务启动")
             return
         # 优先绑定主库 MySQL，失败时回退 SQLite（已在 OrderDB 内兜底）
         await self._afdian_bind_mysql()
@@ -169,8 +176,19 @@ class AfdianFeature:
                 self.afdian_sync_history_orders()
             )
 
+        # 无公网轮询兜底（与 Webhook 可同时运行，订单按 out_trade_no 排重）
+        if self.afdian_cfg.use_polling:
+            await self.afdian_ensure_polling()
+
     async def afdian_stop(self):
         """停止爱发电 Webhook 服务并关闭 API 客户端。"""
+        if self.afdian_poll_task and not self.afdian_poll_task.done():
+            self.afdian_poll_task.cancel()
+            try:
+                await self.afdian_poll_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self.afdian_poll_task = None
         if self.afdian_sync_task and not self.afdian_sync_task.done():
             self.afdian_sync_task.cancel()
             try:
@@ -205,9 +223,10 @@ class AfdianFeature:
 
         # 通过 remark（记录为付款用户ID）识别特定用户订单，发送自动回复
         if order:
-            sender_id = order.get("remark") or ""
-            if sender_id in self.afdian_pending_orders:
-                umo = self.afdian_pending_orders.pop(sender_id)
+            sender_id = str(order.get("remark") or "")
+            info = self.afdian_pending_orders.pop(sender_id, None)
+            if info:
+                umo = info.get("umo")
                 try:
                     await self.context.send_message(
                         umo, MessageChain().message(self.afdian_cfg.default_reply)
@@ -230,8 +249,11 @@ class AfdianFeature:
 
     async def afdian_create_order(self, event, price=None):
         """发电 <金额> —— 生成支付跳转链接。"""
-        sender_id = event.get_sender_id()
-        self.afdian_pending_orders[sender_id] = event.unified_msg_origin
+        sender_id = str(event.get_sender_id())
+        self.afdian_pending_orders[sender_id] = {
+            "umo": event.unified_msg_origin,
+            "created_at": time.time(),
+        }
 
         # 记录 aiocqhttp bot 用于兜底私聊
         try:
@@ -253,7 +275,70 @@ class AfdianFeature:
         url = self.afdian_client.generate_payment_url(
             price=price, remark=str(sender_id)
         )
+
+        # 无公网环境：优先用轮询检测新订单
+        started = False
+        if self.afdian_cfg.use_polling:
+            started = await self.afdian_ensure_polling()
+
+        if started:
+            tip = f"请在 {self.afdian_cfg.poll_timeout // 60} 分钟内完成支付"
+            return f"{url}\n{tip}"
         return url
+
+    # ---- 无公网轮询 ----
+
+    async def afdian_ensure_polling(self) -> bool:
+        """确保轮询检测任务运行（无公网时替代 Webhook 推送）。
+
+        调用前需为对应用户登记 pending_orders 记录。
+        """
+        if self.afdian_poll_task is None or self.afdian_poll_task.done():
+            try:
+                self.afdian_poll_task = asyncio.create_task(
+                    self.afdian_poll_loop()
+                )
+                logger.info("[Afdian] 启动无公网轮询检测任务")
+            except Exception as e:
+                logger.warning(f"[Afdian] 启动轮询任务失败: {e}")
+                return False
+        return True
+
+    async def afdian_poll_loop(self):
+        """无公网轮询循环：定时拉取订单，发现新订单时走与 Webhook 相同的处理逻辑。
+
+        每轮拉取最新若干订单，与本地库比对（按 out_trade_no 排重），
+        新订单调用 `_afdian_handle_new_order`（通知订阅会话 + 备注匹配自动回复，
+        与 Webhook 回调逻辑一致）。
+        """
+        interval = self.afdian_cfg.poll_interval
+        while True:
+            if not self.afdian_cfg.enabled:
+                break
+            try:
+                await self.afdian_poll_once()
+            except Exception as e:
+                logger.warning(f"[Afdian] 轮询检测失败: {e}")
+            await asyncio.sleep(interval)
+
+    async def afdian_poll_once(self):
+        """执行一次轮询检测：拉取最近订单并处理新增订单。
+
+        仅处理本地库中不存在的订单，避免 Webhook 与轮询重复通知。
+        """
+        orders = await self.afdian_client.query_order(page=1, per_page=100)
+        if not orders:
+            return
+        for order in orders:
+            out_trade_no = order.get("out_trade_no")
+            if not out_trade_no:
+                continue
+            exists = await self.afdian_db.get_order_by_id(out_trade_no)
+            if exists:
+                continue
+            logger.info(f"[Afdian] 轮询发现新订单：{out_trade_no}")
+            await self.afdian_db.save_order(order)
+            await self.on_afdian_new_order(order)
 
     async def afdian_query_order(self, event, out_trade_no: str):
         """查询订单 <订单号> —— 查询指定订单详情。"""

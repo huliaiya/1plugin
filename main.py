@@ -962,8 +962,9 @@ class MessageRecorder(Star, AfdianFeature):
         if not self._afdian_check(event):
             yield event.plain_result("爱发电功能未启用或 API 凭据未配置，请联系管理员")
             return
-        url = await self.afdian_create_order(event, price)
-        yield event.plain_result(f"⚡ 点击链接发电打赏（备注为您的用户ID）:\n{url}")
+        urlret = await self.afdian_create_order(event, price)
+        price_str = f"¥{price:.2f}" if price is not None else f"¥{self.afdian_cfg.default_price:.2f}"
+        yield event.plain_result(f"⚡ 发电打赏 {price_str}（备注为您的用户ID）:\n{urlret}")
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("爱发电测试")

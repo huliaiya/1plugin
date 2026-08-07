@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 存储引擎与主插件统一：订单写入主库 MySQL 的 `afdian_orders` 表（与消息记录同一连接池），MySQL 不可用时自动回退 SQLite 兜底
   - 启动/重载时自动分页拉取爱发电平台全部历史订单入库（按交易号去重，只存新增），Webhook 上线前订单不丢失
   - `/查询订单`、`/查询发电` 结果图片顶部水印改为插件名 + 插件版本（自定义 T2I 模板，替代默认框架水印）
+  - 无公网机器支持轮询模式：新增 `afdian_use_polling` / `afdian_poll_interval` / `afdian_poll_timeout` 配置，用户发电后提示限时完成支付，插件定时（默认每 5 秒）拉取订单检测新订单，备注匹配与自动回复逻辑与 Webhook 完全一致，无需公网回调
 
 ## [2.4.3] - 2026-08-07
 

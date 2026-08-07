@@ -67,6 +67,28 @@ class AfdianConfig:
             self._cfg.get("afdian_default_reply", "赞助成功，感谢支持！")
         )
 
+    # ---- 无公网轮询 ----
+    @property
+    def use_polling(self) -> bool:
+        """无公网环境是否启用订单轮询检测（代替 Webhook 推送）。"""
+        return bool(self._cfg.get("afdian_use_polling", True))
+
+    @property
+    def poll_interval(self) -> int:
+        """订单轮询间隔（秒）。"""
+        try:
+            return max(1, int(self._cfg.get("afdian_poll_interval", 5)))
+        except (TypeError, ValueError):
+            return 5
+
+    @property
+    def poll_timeout(self) -> int:
+        """订单轮询窗口长度（秒），发电后等待支付的最长时间。"""
+        try:
+            return max(10, int(self._cfg.get("afdian_poll_timeout", 300)))
+        except (TypeError, ValueError):
+            return 300
+
     # ---- 通知会话 ----
     @property
     def notice_sessions(self) -> list:

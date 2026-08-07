@@ -96,6 +96,24 @@
     "default": 6500,
     "hint": "需在防火墙 / 安全组放行；如无公网地址请配置反向代理或内网穿透转发到该端口"
   },
+  "afdian_use_polling": {
+    "type": "bool",
+    "description": "是否启用无公网轮询检测（无公网机器可选，替代 Webhook 推送）",
+    "default": true,
+    "hint": "无公网环境可关闭 Webhook，开启此项：用户点击发电后每 5 秒拉取一次订单，发现新订单即处理并提醒请在设定时间内完成支付"
+  },
+  "afdian_poll_interval": {
+    "type": "int",
+    "description": "订单轮询间隔（秒）",
+    "default": 5,
+    "hint": "无公网轮询模式下每间隔多少秒拉取一次订单，最小 1 秒"
+  },
+  "afdian_poll_timeout": {
+    "type": "int",
+    "description": "发电后等待支付的完成时限（秒）",
+    "default": 300,
+    "hint": "生成支付链接后要求用户在该时限内完成支付，超时提醒作废；默认 300 秒（5 分钟）"
+  },
   "afdian_api_base_url": {
     "type": "string",
     "description": "爱发电 API 根地址",
