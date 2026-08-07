@@ -953,6 +953,15 @@ class MessageRecorder(Star, AfdianFeature):
             yield event.plain_result("暂无消息记录，无法生成快照")
             return
 
+        redis_status = {}
+        redis_cache = getattr(self._db, "redis_cache", None)
+        if redis_cache is not None:
+            try:
+                redis_status = await redis_cache.status()
+                redis_status["configured"] = True
+            except Exception:
+                redis_status = {"configured": True, "enabled": False, "available": False}
+
         try:
             png_data = await asyncio.to_thread(
                 render_snapshot,
@@ -964,6 +973,7 @@ class MessageRecorder(Star, AfdianFeature):
                 content_types,
                 stats.platform_stats or {},
                 platform_detail,
+                redis_status=redis_status,
             )
         except Exception as e:
             logger.error(f"[FoxToolbox] 快照渲染失败: {e}", exc_info=True)

@@ -53,6 +53,39 @@
         </div>
       </div>
 
+      <div class="redis-card" id="redisCard">
+        <div class="redis-card-header">
+          <span class="redis-title">🗄️ Redis 缓存</span>
+          <span class="redis-status-badge" id="redisBadge">检测中...</span>
+        </div>
+        <div class="redis-card-body">
+          <div class="redis-detail">
+            <span class="redis-k">状态</span>
+            <span class="redis-v" id="redisAvailable">-</span>
+          </div>
+          <div class="redis-detail">
+            <span class="redis-k">连接</span>
+            <span class="redis-v" id="redisEndpoint">-</span>
+          </div>
+          <div class="redis-detail">
+            <span class="redis-k">库编号</span>
+            <span class="redis-v" id="redisDb">-</span>
+          </div>
+          <div class="redis-detail">
+            <span class="redis-k">缓存 TTL</span>
+            <span class="redis-v" id="redisTtl">-</span>
+          </div>
+          <div class="redis-detail">
+            <span class="redis-k">统计缓存</span>
+            <span class="redis-v" id="redisStatsKey">-</span>
+          </div>
+          <div class="redis-detail">
+            <span class="redis-k">最近消息缓存</span>
+            <span class="redis-v" id="redisRecentKey">-</span>
+          </div>
+        </div>
+      </div>
+
       <div class="charts-grid">
         <div class="chart-container">
           <div class="chart-title">消息时间趋势</div>

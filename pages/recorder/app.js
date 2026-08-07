@@ -391,6 +391,62 @@ function updateDbStatusCard(dbStatus) {
   showDbErrorBanner(running, dbError);
 }
 
+function updateRedisCard(redisStatus) {
+  const badge = document.getElementById('redisBadge');
+  if (!badge) return;
+
+  const setVal = (id, text) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text == null || text === '' ? '-' : String(text);
+  };
+
+  const clearBadge = () => {
+    badge.classList.remove('online', 'degraded', 'offline');
+  };
+
+  if (!redisStatus || !redisStatus.configured) {
+    clearBadge();
+    badge.textContent = '未启用';
+    setVal('redisAvailable', '未配置');
+    setVal('redisEndpoint', '-');
+    setVal('redisDb', '-');
+    setVal('redisTtl', '-');
+    setVal('redisStatsKey', '-');
+    setVal('redisRecentKey', '-');
+    return;
+  }
+
+  const endpoint = `${redisStatus.host || '-'}:${redisStatus.port || '-'}`;
+  setVal('redisEndpoint', endpoint);
+  setVal('redisDb', redisStatus.db != null ? `db${redisStatus.db}` : '-');
+  setVal('redisTtl', redisStatus.ttl != null ? `${redisStatus.ttl}s` : '-');
+
+  if (redisStatus.available) {
+    clearBadge();
+    badge.textContent = '运行中';
+    badge.classList.add('online');
+    setVal('redisAvailable', '正常连接');
+    const statsKey = redisStatus.keys && redisStatus.keys.stats != null ? `${redisStatus.keys.stats} 条` : '空';
+    const recentKey = redisStatus.keys && redisStatus.keys.recent_messages != null ? `${redisStatus.keys.recent_messages} 条` : '空';
+    setVal('redisStatsKey', statsKey);
+    setVal('redisRecentKey', recentKey);
+  } else if (redisStatus.enabled) {
+    clearBadge();
+    badge.textContent = '已降级';
+    badge.classList.add('degraded');
+    setVal('redisAvailable', '连接失败，已降级');
+    setVal('redisStatsKey', '-');
+    setVal('redisRecentKey', '-');
+  } else {
+    clearBadge();
+    badge.textContent = '未启用';
+    badge.classList.add('degraded');
+    setVal('redisAvailable', '已配置但未启用');
+    setVal('redisStatsKey', '-');
+    setVal('redisRecentKey', '-');
+  }
+}
+
 function showDbErrorBanner(running, dbError) {
   const dashboard = document.getElementById('view-dashboard');
   let banner = document.getElementById('dbErrorBanner');
@@ -504,6 +560,7 @@ async function loadDashboardData(force = false) {
           dataCache.dbStatus = statsData.db_status;
         }
         updateDbStatusCard(dataCache.dbStatus || statsData.db_status);
+        updateRedisCard(statsData.redis_status);
         if (!dataCache.dbStatus) {
           loadDbStatus().catch(() => {});
         }

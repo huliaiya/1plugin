@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.2] - 2026-08-08
+
+### Added
+- **WebUI 仪表盘新增 Redis 缓存状态大卡片**：显示运行状态（未启用 / 运行中 / 已降级）、连接地址、库编号、缓存 TTL、统计缓存与最近消息缓存条目数
+- **快照新增 Redis 缓存状态卡**：`/huli_record snapshot` 快照在统计卡片下方展示 Redis 状态摘要
+- `RedisCache.status()`：新增状态摘要方法，供 WebUI 与快照读取缓存健康信息
+
+### Changed
+- 版本号 bump 至 2.6.2
+
 ## [2.6.1] - 2026-08-08
 
 ### Added

@@ -84,7 +84,48 @@ async def _build_db_status_payload(db: Optional[Database], error: str = "") -> D
     }
 
 
-def _serialize_stats_payload(stats, db_status: Dict[str, Any], stats_error: str = "") -> Dict[str, Any]:
+async def _build_redis_status_payload(db: Optional[Database]) -> Dict[str, Any]:
+    """构造 Redis 缓存状态数据（未启用/降级时给出明确标识）。"""
+    redis_cache = getattr(db, "redis_cache", None) if db else None
+    if redis_cache is None:
+        return {
+            "enabled": False,
+            "available": False,
+            "configured": False,
+            "host": None,
+            "port": None,
+            "db": None,
+            "ttl": None,
+            "keys": {"stats": None, "recent_messages": None},
+        }
+    try:
+        if not redis_cache.enabled:
+            return {
+                "enabled": False,
+                "available": False,
+                "configured": True,
+                "host": redis_cache._host,
+                "port": redis_cache._port,
+                "db": redis_cache._db,
+                "ttl": redis_cache._ttl,
+                "keys": {"stats": None, "recent_messages": None},
+            }
+        return {"configured": True, **await redis_cache.status()}
+    except Exception as e:
+        logger.debug(f"[FoxToolbox Web] 读取 Redis 状态失败: {e}")
+        return {
+            "enabled": True,
+            "available": False,
+            "configured": True,
+            "host": getattr(redis_cache, "_host", None),
+            "port": getattr(redis_cache, "_port", None),
+            "db": getattr(redis_cache, "_db", None),
+            "ttl": getattr(redis_cache, "_ttl", None),
+            "keys": {"stats": None, "recent_messages": None},
+        }
+
+
+def _serialize_stats_payload(stats, db_status: Dict[str, Any], stats_error: str = "", redis_status: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     time_range = {}
     if stats.oldest_timestamp:
         time_range["start"] = _format_timestamp(stats.oldest_timestamp)
@@ -101,6 +142,7 @@ def _serialize_stats_payload(stats, db_status: Dict[str, Any], stats_error: str 
         "newest_timestamp": stats.newest_timestamp,
         "time_range": time_range,
         "db_status": db_status,
+        "redis_status": redis_status or {},
         "schema_version": SCHEMA_VERSION,
     }
     if stats_error:
@@ -352,22 +394,23 @@ async def register_all_web_apis(context, db: Database):
 
     async def api_stats():
         db_status = await _build_db_status_payload(db, db_error)
+        redis_status = await _build_redis_status_payload(db)
         if not db:
             return jsonify({
                 "success": True,
-                "data": _serialize_stats_payload(MessageStats(), db_status, "数据库未初始化"),
+                "data": _serialize_stats_payload(MessageStats(), db_status, "数据库未初始化", redis_status),
             })
         try:
             stats = await db.get_stats()
             return jsonify({
                 "success": True,
-                "data": _serialize_stats_payload(stats, db_status),
+                "data": _serialize_stats_payload(stats, db_status, "", redis_status),
             })
         except Exception as e:
             logger.error(f"[FoxToolbox Web] 获取统计失败: {e}", exc_info=True)
             return jsonify({
                 "success": True,
-                "data": _serialize_stats_payload(MessageStats(), db_status, "获取统计数据失败"),
+                "data": _serialize_stats_payload(MessageStats(), db_status, "获取统计数据失败", redis_status),
             })
 
     async def api_plugin_status():

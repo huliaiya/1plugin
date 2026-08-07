@@ -357,6 +357,97 @@ body::after {
 }
 
 /* ============================================================
+   Redis 状态大卡片
+   ============================================================ */
+.redis-card {
+  position: relative;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  box-shadow: var(--glass-shadow);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  animation: cardAppear 0.4s ease both;
+  overflow: hidden;
+}
+
+.redis-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: var(--glass-border-glow), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.redis-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border-color-subtle);
+}
+
+.redis-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-on-glass);
+}
+
+.redis-status-badge {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  color: #fff;
+  background: #90a4ae;
+}
+
+.redis-status-badge.online {
+  background: #26a69a;
+}
+
+.redis-status-badge.degraded {
+  background: #ffa726;
+}
+
+.redis-status-badge.offline {
+  background: #ef5350;
+}
+
+.redis-card-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem 1.5rem;
+}
+
+.redis-detail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px dashed var(--border-color-subtle);
+}
+
+.redis-k {
+  font-size: 0.85rem;
+  color: var(--text-subtle, #7096b7);
+  white-space: nowrap;
+}
+
+.redis-v {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-on-glass);
+  text-align: right;
+  word-break: break-all;
+}
+
+/* ============================================================
    统计卡片
    ============================================================ */
 .stats-grid {

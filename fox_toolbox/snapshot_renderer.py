@@ -509,6 +509,64 @@ def _draw_stat_cards(img, y, stats: MessageStats, db_table_count: int):
     return y + 2 * card_h + gap + _PX(20)
 
 
+def _draw_redis_card(img, y, redis_status: Optional[Dict] = None) -> int:
+    """绘制 Redis 缓存状态卡片（单行横向布局）。"""
+    card_h = _PX(96)
+    x0 = _PX(_PADDING)
+    x1 = _W_FULL - _PX(_PADDING)
+    draw = ImageDraw.Draw(img)
+
+    status = redis_status or {}
+    configured = bool(status.get("configured"))
+    available = bool(status.get("available"))
+    enabled = bool(status.get("enabled"))
+
+    if not configured:
+        title = "Redis 缓存"
+        state_text = "未启用"
+        accent = (176, 190, 197)
+    elif available:
+        title = "Redis 缓存"
+        state_text = "运行中"
+        accent = (38, 166, 154)
+    else:
+        title = "Redis 缓存"
+        state_text = "已降级（SQLite/无缓存）" if enabled else "已配置未启用"
+        accent = (255, 167, 38) if enabled else (176, 190, 197)
+
+    _draw_glass_card(img, (x0, y, x1, y + card_h), title=title, accent=accent)
+
+    # 状态徽标（右侧）
+    f_state = _get_font(_PX(20), bold=True)
+    sw = _text_width(draw, state_text, f_state)
+    sx = x1 - sw - _PX(24)
+    sy = y + (card_h - _PX(24)) // 2
+    _draw_text(draw, (sx, sy), state_text, f_state, accent, img)
+
+    # 连接信息（左侧）
+    f_val = _get_font(_PX(18), bold=True)
+    endpoint = f"{status.get('host') or '-'}:{status.get('port') or '-'}"
+    parts = [
+        ("连接", endpoint),
+        ("库", f"db{status.get('db')}" if status.get("db") is not None else "-"),
+        ("TTL", f"{status.get('ttl')}s" if status.get("ttl") is not None else "-"),
+    ]
+    if available:
+        keys = status.get("keys") or {}
+        stats_n = keys.get("stats")
+        recent_n = keys.get("recent_messages")
+        parts.append(("统计缓存", "-" if stats_n is None else f"{stats_n} 条"))
+        parts.append(("最近消息", "-" if recent_n is None else f"{recent_n} 条"))
+
+    cx = x0 + _PX(24)
+    cy = y + _PX(18)
+    for k, v in parts:
+        _draw_text(draw, (cx, cy), f"{k}: {v}", f_val, _TEXT_DARK, img)
+        cy += _PX(34)
+
+    return y + card_h + _PX(12)
+
+
 def _draw_timeline(img, xy, timeline: List[Dict]):
     """绘制时间趋势图。"""
     x0, y0, x1, y1 = xy
@@ -1048,6 +1106,7 @@ def render_snapshot(
     platform_stats: Optional[Dict[str, int]] = None,
     platform_detail: Optional[List[Dict]] = None,
     generated_at: Optional[float] = None,
+    redis_status: Optional[Dict] = None,
 ) -> bytes:
     """渲染简洁现代的仪表盘快照 PNG。
 
@@ -1061,6 +1120,7 @@ def render_snapshot(
         platform_stats: 平台分布统计 {platform: count}，默认取 stats.platform_stats
         platform_detail: 平台消息详情统计 [{"platform","platform_name","total","group_count","private_count","channel_count",...}]，默认取数据库查询结果
         generated_at: 生成时间戳，默认当前
+        redis_status: Redis 缓存状态摘要（未启用时为空 dict），默认 None
     """
     if generated_at is None:
         generated_at = time.time()
@@ -1080,6 +1140,10 @@ def render_snapshot(
     # 2. 绘制统计卡片
     y = _draw_stat_cards(img, y, stats, db_table_count)
     y += _PX(30)
+
+    # 2.5 绘制 Redis 缓存状态卡片
+    y = _draw_redis_card(img, y, redis_status)
+    y += _PX(10)
 
     # 3. 时间趋势卡片
     chart_h = _PX(240)

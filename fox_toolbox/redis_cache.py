@@ -46,6 +46,40 @@ class RedisCache:
     def available(self) -> bool:
         return self._available
 
+    @property
+    def enabled(self) -> bool:
+        """是否处于启用状态（已尝试建立缓存连接）。"""
+        return self._checked
+
+    async def status(self) -> Dict[str, Any]:
+        """返回 Redis 缓存状态摘要，供 WebUI 卡片与快照展示。"""
+        info: Dict[str, Any] = {
+            "enabled": self._checked,
+            "available": self._available,
+            "host": self._host,
+            "port": self._port,
+            "db": self._db,
+            "ttl": self._ttl,
+            "keys": {"stats": None, "recent_messages": None},
+        }
+        if self._available and self._client is not None:
+            try:
+                stats_key_type = await self._client.type(STATS_KEY)
+                info["keys"]["stats"] = (
+                    1
+                    if stats_key_type == "string"
+                    else int(await self._client.strlen(STATS_KEY) or 0)
+                )
+            except Exception:
+                pass
+            try:
+                info["keys"]["recent_messages"] = (
+                    await self._client.llen(RECENT_MESSAGES_KEY) or 0
+                )
+            except Exception:
+                pass
+        return info
+
     async def connect(self) -> bool:
         """建立连接并做连通性检测；失败则进入降级模式。"""
         if self._checked:
