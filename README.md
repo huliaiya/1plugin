@@ -894,6 +894,12 @@ ruff format .
 - [Redis](https://redis.io) - 高性能内存数据库，本插件可选的统计与最近消息缓存功能构建其上
 - [aiomysql](https://github.com/aio-libs/aiomysql) - 异步 MySQL 驱动库
 - [aiohttp](https://github.com/aio-libs/aiohttp) - 异步 HTTP 客户端，用于多媒体文件下载与爱发电 Webhook 服务
+- [Python](https://www.python.org) - 本插件的主体开发语言，基于其异步生态（asyncio / aiohttp / aiomysql）构建
+- [JavaScript](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript) - Web 管理面板的前端逻辑实现，负责面板交互与数据请求
+- [CSS](https://developer.mozilla.org/zh-CN/docs/Web/CSS) - Web 管理面板的 Liquid Glass 液态玻璃视觉样式
+- [HTML](https://developer.mozilla.org/zh-CN/docs/Web/HTML) - Web 管理面板页面结构，以及爱发电查询图片的 T2I 模板
+- [Shell](https://www.shellscript.sh) - 部署辅助脚本（`scripts/fix_deploy.sh`）的实现语言，用于一键同步插件代码到 AstrBot 服务器
+- [GitHub](https://github.com) - 全球最大的开源协作平台，本插件的源码托管与版本管理均基于其服务，感谢官方提供稳定可靠的代码托管与协作支持
 
 ---
 
