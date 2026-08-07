@@ -101,9 +101,21 @@ class OrderDB:
             )
             conn.commit()
 
+    def _pool_is_closed(self) -> bool:
+        """检测 aiomysql 连接池是否已被关闭。"""
+        if not self._pool:
+            return True
+        # aiomysql.Pool 关闭后 _closing/_closed 为 True
+        if getattr(self._pool, "_closing", False) or getattr(self._pool, "_closed", False):
+            return True
+        return False
+
     async def bind_mysql_pool(self, pool) -> bool:
         """绑定主插件的 MySQL 连接池，并确保 afdian_orders 表存在。"""
         if pool is None:
+            return False
+        if getattr(pool, "_closing", False) or getattr(pool, "_closed", False):
+            logger.warning("[Afdian] MySQL 连接池已关闭，回退 SQLite 存储")
             return False
         self._pool = pool
         try:
@@ -120,6 +132,14 @@ class OrderDB:
                 f"[Afdian] 绑定 MySQL 连接池失败，回退 SQLite 存储: {e}"
             )
             return False
+
+    def _degrade_to_sqlite(self, reason: str) -> None:
+        """MySQL 保存失败时永久降级到 SQLite，避免后续每次保存都重复尝试已失效的池。"""
+        if not self._mysql_ready:
+            return
+        self._mysql_ready = False
+        self._pool = None
+        logger.warning(f"[Afdian] MySQL 保存订单失败，永久降级 SQLite 存储: {reason}")
 
     # ---- 写入 ----
 
@@ -163,7 +183,7 @@ class OrderDB:
                     await conn.commit()
                     return cur.rowcount > 0
         except Exception as e:
-            logger.warning(f"[Afdian] MySQL 保存订单失败，尝试 SQLite 兜底: {e}")
+            self._degrade_to_sqlite(str(e))
             if self._sqlite_path:
                 return await asyncio.to_thread(self._save_sqlite_if_new, order)
             return False
@@ -200,7 +220,7 @@ class OrderDB:
                     await cur.execute(sql, tuple(fields.values()))
                     await conn.commit()
         except Exception as e:
-            logger.warning(f"[Afdian] MySQL 保存订单失败，尝试 SQLite 兜底: {e}")
+            self._degrade_to_sqlite(str(e))
             if self._sqlite_path:
                 await asyncio.to_thread(self._save_sqlite, order)
 
@@ -242,14 +262,14 @@ class OrderDB:
     # ---- 查询 ----
 
     async def get_all_orders(self) -> list:
-        if self._mysql_ready and self._pool:
+        if self._mysql_ready and self._pool and not self._pool_is_closed():
             return await self._query_mysql("SELECT * FROM afdian_orders ORDER BY create_time DESC")
         if self._sqlite_path:
             return await asyncio.to_thread(self._query_sqlite, "SELECT * FROM afdian_orders ORDER BY create_time DESC")
         return []
 
     async def get_order_by_id(self, out_trade_no: str):
-        if self._mysql_ready and self._pool:
+        if self._mysql_ready and self._pool and not self._pool_is_closed():
             rows = await self._query_mysql(
                 "SELECT * FROM afdian_orders WHERE out_trade_no = %s",
                 (out_trade_no,),
@@ -265,7 +285,7 @@ class OrderDB:
         return None
 
     async def get_orders_by_user(self, user_id: str) -> list:
-        if self._mysql_ready and self._pool:
+        if self._mysql_ready and self._pool and not self._pool_is_closed():
             return await self._query_mysql(
                 "SELECT * FROM afdian_orders WHERE user_id = %s ORDER BY create_time DESC",
                 (user_id,),
@@ -279,7 +299,7 @@ class OrderDB:
         return []
 
     async def get_orders_by_status(self, status: int) -> list:
-        if self._mysql_ready and self._pool:
+        if self._mysql_ready and self._pool and not self._pool_is_closed():
             return await self._query_mysql(
                 "SELECT * FROM afdian_orders WHERE status = %s ORDER BY create_time DESC",
                 (status,),
@@ -303,7 +323,7 @@ class OrderDB:
                     columns = [d[0] for d in cur.description]
                     return [dict(zip(columns, row)) for row in rows]
         except Exception as e:
-            logger.warning(f"[Afdian] MySQL 查询失败: {e}")
+            self._degrade_to_sqlite(str(e))
             return []
 
     def _query_sqlite(self, sql: str, params: tuple = ()) -> list:

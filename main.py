@@ -329,13 +329,14 @@ class MessageRecorder(Star, AfdianFeature):
                 pass
         self._tg_channel_handlers.clear()
 
+        # 先停止爱发电轮询/同步/Webhook，避免其在连接池关闭后继续访问
+        await self.afdian_stop()
+
         if self._db:
             await self._db.close()
 
         await self._close_redis_cache()
 
-        # 停止爱发电 Webhook 服务并关闭 API 客户端
-        await self.afdian_stop()
         logger.info("[FoxToolbox] 插件已终止")
 
     def _start_cleanup_task(self):
