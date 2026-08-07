@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1] - 2026-08-07
+
+### Fixed
+- **修复快照时间趋势卡片文字超出边框**：Y 轴刻度标签原来绘制在图表区左侧（x0 左边），当数据量级较大时（如 1,000 以上）会越过玻璃卡片边框。现在先计算 Y 轴标签最大宽度并为图表主体预留空间，刻度标签右对齐落在卡片边框内侧
+
+### Changed
+- 快照水印版本号同步升级到 `v2.4.1`
+
 ## [2.4.0] - 2026-08-07
 
 ### Changed

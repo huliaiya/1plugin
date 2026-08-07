@@ -531,7 +531,6 @@ def _draw_timeline(img, xy, timeline: List[Dict]):
     ]
 
     n = len(timeline)
-    step_x = inner_w / max(n - 1, 1) if n > 1 else inner_w
 
     # 计算数据点
     series_points = []
@@ -547,25 +546,35 @@ def _draw_timeline(img, xy, timeline: List[Dict]):
     
     max_c = max(max_c, 1)
 
+    # 计算Y轴标签最大宽度，为标签预留空间，避免超出卡片边框
+    f_axis = _get_font(_PX(13))
+    axis_w = 0
+    for g in range(5):
+        value = int(max_c * (1 - g / 4))
+        label = f"{value:,}"
+        axis_w = max(axis_w, _text_width(draw, label, f_axis))
+    plot_x0 = x0 + axis_w + _PX(12)
+    inner_w = x1 - plot_x0
+    step_x = inner_w / max(n - 1, 1) if n > 1 else inner_w
+
     # 绘制网格线
     for g in range(5):
         gy = y0 + _PX(8) + g * (inner_h - _PX(16)) / 4
         alpha = 30 if g == 0 or g == 4 else 15
-        draw.line([(x0, gy), (x1, gy)], fill=(0, 0, 0, alpha), width=_PX(1))
+        draw.line([(plot_x0, gy), (x1, gy)], fill=(0, 0, 0, alpha), width=_PX(1))
 
-    # 绘制Y轴标签
-    f_axis = _get_font(_PX(13))
+    # 绘制Y轴标签（右对齐到绘图区左侧，落在卡片边框内侧）
     for g in range(5):
         gy = y0 + _PX(8) + g * (inner_h - _PX(16)) / 4
         value = int(max_c * (1 - g / 4))
         label = f"{value:,}"
         tw = _text_width(draw, label, f_axis)
-        _draw_text(draw, (x0 - tw - _PX(8), gy - _PX(6)), label, f_axis, _TEXT_MEDIUM, img)
+        _draw_text(draw, (plot_x0 - tw - _PX(6), gy - _PX(6)), label, f_axis, _TEXT_MEDIUM, img)
 
     def to_points(vals):
         pts = []
         for i, v in enumerate(vals):
-            px = x0 + (i * step_x if n > 1 else inner_w / 2)
+            px = plot_x0 + (i * step_x if n > 1 else inner_w / 2)
             py = y1 - _PX(8) - (v / max_c) * (inner_h - _PX(16))
             pts.append((px, py))
         return pts
@@ -586,7 +595,7 @@ def _draw_timeline(img, xy, timeline: List[Dict]):
 
     # 绘制图例
     f_legend = _get_font(_PX(13), bold=True)
-    lx = x0 + _PX(16)
+    lx = plot_x0 + _PX(16)
     ly = y0 - _PX(20)
     
     for label, key, color in series_defs:
@@ -605,9 +614,9 @@ def _draw_timeline(img, xy, timeline: List[Dict]):
         if 0 <= i < n:
             label = str(timeline[i].get("date", ""))[-5:]
             tw = _text_width(draw, label, f_lbl)
-            px = x0 + (i * step_x if n > 1 else inner_w / 2)
+            px = plot_x0 + (i * step_x if n > 1 else inner_w / 2)
             lpx = px - tw / 2
-            lpx = max(x0, min(lpx, x1 - tw))
+            lpx = max(plot_x0, min(lpx, x1 - tw))
             _draw_text(draw, (lpx, y1 - _PX(6)), label, f_lbl, _TEXT_MEDIUM, img)
 
 
@@ -1144,7 +1153,7 @@ def render_snapshot(
 
     # 8. 底部水印
     draw = ImageDraw.Draw(img)
-    watermark_text = "由狐狸插件 /huli_record snapshot 生成 · 天空蓝清新风格 v2.4.0"
+    watermark_text = "由狐狸插件 /huli_record snapshot 生成 · 天空蓝清新风格 v2.4.1"
     f_watermark = _get_font(_PX(13))
     _draw_text(draw, (_PX(24), y + _PX(12)), watermark_text, f_watermark, _TEXT_MEDIUM, img)
 
