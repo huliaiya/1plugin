@@ -20,6 +20,7 @@ from .fox_toolbox.models import PLUGIN_DIR_NAME
 from .fox_toolbox.afdian.star import AfdianFeature
 
 from .fox_toolbox.database import Database
+from .fox_toolbox.redis_cache import RedisCache
 from .fox_toolbox.db_explorer import DbExplorer
 from .fox_toolbox.api import MessageRecorderAPI
 from .fox_toolbox.models import MessageRecord, VALID_MESSAGE_TYPES
@@ -193,6 +194,7 @@ class MessageRecorder(Star, AfdianFeature):
         self.data_dir = Path(get_astrbot_plugin_data_path()) / PLUGIN_DIR_NAME
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self._db: Optional[Database] = None
+        self._redis_cache: Optional[RedisCache] = None
         self._api: Optional[MessageRecorderAPI] = None
         self._media_downloader: Optional[MediaDownloader] = None
         self._cleanup_task: Optional[asyncio.Task] = None
@@ -220,7 +222,8 @@ class MessageRecorder(Star, AfdianFeature):
                 f"{mysql_config['host']}:{mysql_config['port']}/"
                 f"{mysql_config['database']} (user={mysql_config['user']})"
             )
-            self._db = Database("astrbot_plugin_fox_toolbox", mysql_config)
+            redis_cache = await self._init_redis_cache()
+            self._db = Database("astrbot_plugin_fox_toolbox", mysql_config, redis_cache=redis_cache)
             await self._db.init()
 
             if self.config.get("save_media_files", False):
@@ -244,9 +247,16 @@ class MessageRecorder(Star, AfdianFeature):
         except Exception as e:
             self._initialized = False
             self._init_error = str(e)
+            # init 失败时若连接池已部分创建，需显式关闭避免泄漏
+            if self._db is not None:
+                try:
+                    await self._db.close()
+                except Exception:
+                    pass
             self._db = None
             self._api = None
             self._media_downloader = None
+            await self._close_redis_cache()
             logger.error(f"[FoxToolbox] 初始化失败: {e}")
             # 数据库不可用时仍需注册页面/状态 API，保证 WebUI 可打开并显示错误原因
             setattr(self.context, "fox_toolbox_db_error", self._init_error)
@@ -254,6 +264,31 @@ class MessageRecorder(Star, AfdianFeature):
 
         # 爱发电 Webhook 独立于消息记录初始化，失败不影响主功能
         await self.afdian_start()
+
+    async def _init_redis_cache(self) -> Optional[RedisCache]:
+        """根据配置初始化 Redis 缓存；未启用或连接失败时返回可用的降级实例。"""
+        if not self.config.get("redis_enabled", False):
+            return None
+        redis_cache = RedisCache(
+            host=self.config.get("redis_host", "127.0.0.1"),
+            port=int(self.config.get("redis_port", 6379)),
+            password=self.config.get("redis_password", "") or None,
+            db=int(self.config.get("redis_db", 0)),
+            ttl=int(self.config.get("redis_cache_ttl", 300)),
+        )
+        available = await redis_cache.connect()
+        if not available:
+            logger.warning(
+                "[FoxToolbox] Redis 未就绪，插件将继续以无缓存模式运行"
+            )
+        self._redis_cache = redis_cache
+        return redis_cache
+
+    async def _close_redis_cache(self) -> None:
+        """关闭 Redis 缓存连接（幂等）。"""
+        if self._redis_cache is not None:
+            await self._redis_cache.close()
+            self._redis_cache = None
 
     def _check_initialized(self) -> bool:
         if not self._initialized:
@@ -296,6 +331,8 @@ class MessageRecorder(Star, AfdianFeature):
 
         if self._db:
             await self._db.close()
+
+        await self._close_redis_cache()
 
         # 停止爱发电 Webhook 服务并关闭 API 客户端
         await self.afdian_stop()
@@ -483,7 +520,8 @@ class MessageRecorder(Star, AfdianFeature):
                 record.message_chain = json.dumps(chain_data, ensure_ascii=False)
                 record.content_types = ",".join(content_types)
 
-            record_id = await self._db.save_message(record)
+            async with self._save_semaphore:
+                record_id = await self._db.save_message(record)
 
             if record_id != -1:
                 content_preview = (

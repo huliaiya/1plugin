@@ -4,13 +4,17 @@ import asyncio
 import aiomysql
 import json
 import time
-from typing import Optional, List, Dict, Any, AsyncGenerator
+from dataclasses import asdict
+from typing import Optional, List, Dict, Any, AsyncGenerator, TYPE_CHECKING
 
 from astrbot.api import logger
 
 from .models import MessageRecord, QueryFilter, MessageStats, SCHEMA_VERSION, DEPRECATED_TABLES
 from .time_utils import parse_time_range
 from .serializer import compute_content_hash, extract_media_paths
+
+if TYPE_CHECKING:  # pragma: no cover
+    from .redis_cache import RedisCache
 
 
 _SELECT_COLUMNS = """
@@ -104,9 +108,15 @@ def _row_to_record(row) -> MessageRecord:
 class Database:
     """MySQL 数据库管理类（兼容 MySQL 5.7）"""
 
-    def __init__(self, plugin_name: str, mysql_config: dict):
+    def __init__(
+        self,
+        plugin_name: str,
+        mysql_config: dict,
+        redis_cache: Optional["RedisCache"] = None,
+    ):
         self.plugin_name = plugin_name
         self.mysql_config = mysql_config
+        self.redis_cache = redis_cache
         self._pool: Optional[aiomysql.Pool] = None
         self._write_lock = asyncio.Lock()
         self._fts_available_cache: Optional[bool] = None
@@ -379,6 +389,9 @@ class Database:
                 f"platform={record.platform}, "
                 f"message_id={record.message_id or record.content_hash}"
             )
+        else:
+            record.id = record_id  # 回填 id，供缓存载荷使用
+            await self._cache_recent_message(record)
 
         return record_id
 
@@ -401,6 +414,7 @@ class Database:
 
         saved = 0
         skipped = 0
+        cached_records: List[MessageRecord] = []
         async with self._write_lock:
             async with self._pool.acquire() as conn:
                 try:
@@ -435,6 +449,11 @@ class Database:
                             await cur.execute(insert_sql, params)
                             if cur.rowcount > 0:
                                 saved += 1
+                                try:
+                                    record.id = cur.lastrowid
+                                except Exception:
+                                    record.id = None
+                                cached_records.append(record)
                             else:
                                 skipped += 1
                         await conn.commit()
@@ -443,10 +462,48 @@ class Database:
                     logger.error(f"[FoxToolbox] 批量保存消息失败: {e}")
                     raise
 
+        if cached_records:
+            await self._cache_recent_messages(cached_records)
+
         logger.debug(
             f"[FoxToolbox] 批量保存完成: {saved} 成功, {skipped} 跳过"
         )
         return saved, skipped
+
+    async def _cache_recent_message(self, record: MessageRecord) -> None:
+        """将单条新消息推入 Redis 最近消息缓存（失败无副作用）。"""
+        if self.redis_cache is None:
+            return
+        try:
+            await self.redis_cache.push_recent_message(self._record_cache_payload(record))
+        except Exception as e:
+            logger.debug(f"[FoxToolbox] 推送最近消息缓存失败: {e}")
+
+    async def _cache_recent_messages(self, records: List[MessageRecord]) -> None:
+        """将批量新消息推入 Redis 最近消息缓存（倒序逐条推送保持顺序）。"""
+        if self.redis_cache is None or not records:
+            return
+        try:
+            for record in reversed(records[-20:]):
+                await self.redis_cache.push_recent_message(
+                    self._record_cache_payload(record)
+                )
+        except Exception as e:
+            logger.debug(f"[FoxToolbox] 批量推送最近消息缓存失败: {e}")
+
+    @staticmethod
+    def _record_cache_payload(record: MessageRecord) -> dict:
+        """构造精简的最近消息缓存载荷。"""
+        return {
+            "id": record.id,
+            "platform": record.platform,
+            "sender_id": record.sender_id,
+            "sender_name": record.sender_name,
+            "message_type": record.message_type,
+            "message_str": record.message_str,
+            "timestamp": record.timestamp,
+            "created_at": record.created_at,
+        }
 
     def _build_where_clause(
         self, query_filter: QueryFilter, use_fts: bool = False
@@ -537,14 +594,18 @@ class Database:
                 params.append(safe_int(query_filter.end_time))
 
         if query_filter.keyword:
-            if use_fts:
+            keyword_str = safe_str(query_filter.keyword)
+            # MySQL FULLTEXT 布尔模式保留字符，含这些字符会触发 1064 语法错误，
+            # 自动降级到 LIKE 匹配（同样安全，参数化）
+            _fts_reserved = set("+-<>()~*\"@")
+            if use_fts and not (set(keyword_str) & _fts_reserved):
                 conditions.append(
                     "MATCH(message_str) AGAINST(%s IN BOOLEAN MODE)"
                 )
-                params.append(query_filter.keyword)
+                params.append(keyword_str)
             else:
                 escaped = (
-                    safe_str(query_filter.keyword)
+                    keyword_str
                     .replace("\\", "\\\\")
                     .replace("%", "\\%")
                     .replace("_", "\\_")
@@ -835,35 +896,64 @@ class Database:
         return count
 
     async def get_stats(self) -> MessageStats:
-        """获取消息统计信息"""
+        """获取消息统计信息（Redis 缓存优先，TTL 内直接返回缓存）"""
+        if self.redis_cache is not None:
+            cached = await self.redis_cache.get_stats()
+            if cached is not None:
+                try:
+                    stats = MessageStats(**cached)
+                    logger.debug("[FoxToolbox] 命中统计缓存")
+                    return stats
+                except (TypeError, ValueError):
+                    logger.debug("[FoxToolbox] 统计缓存数据损坏，回源数据库")
+
         stats = MessageStats()
 
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute(
-                    "SELECT message_type, group_id, channel_id, timestamp, created_at, platform FROM messages"
-                )
-                rows = await cur.fetchall()
-                if rows:
-                    stats.total_count = len(rows)
-                    timestamps = [row[3] for row in rows if row[3] is not None]
-                    created_at_values = [row[4] for row in rows if row[4] is not None]
-                    platform_stats: Dict[str, int] = {}
-                    for message_type, group_id, channel_id, _, _, platform in rows:
-                        bucket = _infer_message_bucket(message_type, group_id, channel_id)
-                        if bucket == "group":
-                            stats.group_message_count += 1
-                        elif bucket == "private":
-                            stats.private_message_count += 1
-                        elif bucket == "channel":
-                            stats.channel_message_count += 1
-                        platform_stats[platform] = platform_stats.get(platform, 0) + 1
+                # 聚合统计在 MySQL 端完成，避免将整表拉入 Python 内存
+                await cur.execute("SELECT COUNT(*) FROM messages")
+                total_row = await cur.fetchone()
+                stats.total_count = int(total_row[0]) if total_row else 0
 
-                    stats.oldest_timestamp = min(timestamps) if timestamps else None
-                    stats.newest_timestamp = max(timestamps) if timestamps else None
-                    stats.first_record_time = min(created_at_values) if created_at_values else None
-                    stats.last_record_time = max(created_at_values) if created_at_values else None
-                    stats.platform_stats = platform_stats
+                # 按 (platform, message_type, group_id, channel_id) 分组统计，
+                # 用于平台分布与消息类型桶计数
+                await cur.execute("""
+                    SELECT platform, message_type, group_id, channel_id, COUNT(*)
+                    FROM messages
+                    GROUP BY platform, message_type, group_id, channel_id
+                """)
+                group_rows = await cur.fetchall()
+                platform_stats: Dict[str, int] = {}
+                for platform, message_type, group_id, channel_id, count in group_rows:
+                    bucket = _infer_message_bucket(message_type, group_id, channel_id)
+                    if bucket == "group":
+                        stats.group_message_count += int(count)
+                    elif bucket == "private":
+                        stats.private_message_count += int(count)
+                    elif bucket == "channel":
+                        stats.channel_message_count += int(count)
+                    platform_stats[platform] = platform_stats.get(platform, 0) + int(count)
+                stats.platform_stats = platform_stats
+
+                # 时间范围
+                await cur.execute("""
+                    SELECT MIN(timestamp), MAX(timestamp),
+                           MIN(created_at), MAX(created_at)
+                    FROM messages
+                """)
+                time_row = await cur.fetchone()
+                if time_row:
+                    stats.oldest_timestamp = time_row[0]
+                    stats.newest_timestamp = time_row[1]
+                    stats.first_record_time = time_row[2]
+                    stats.last_record_time = time_row[3]
+
+        if self.redis_cache is not None:
+            try:
+                await self.redis_cache.set_stats(asdict(stats))
+            except Exception as e:
+                logger.debug(f"[FoxToolbox] 写入统计缓存失败: {e}")
 
         return stats
 
@@ -1069,31 +1159,43 @@ class Database:
         )
         try:
             media_paths: List[str] = []
+            rowcount = 0
             async with self._write_lock:
                 async with self._pool.acquire() as conn:
                     try:
                         async with conn.cursor() as cur:
-                            await cur.execute(
-                                "SELECT message_chain FROM messages "
-                                "WHERE timestamp < %s "
-                                "AND message_chain IS NOT NULL",
-                                (cutoff_time,),
-                            )
+                            # keyset 分页：基于自增主键分页，避免 buffered 游标
+                            # 一次性把整表结果载入内存
+                            last_id = 0
                             while True:
-                                rows = await cur.fetchmany(500)
-                                if not rows:
+                                await cur.execute(
+                                    "SELECT id, message_chain FROM messages "
+                                    "WHERE id > %s AND timestamp < %s "
+                                    "AND message_chain IS NOT NULL "
+                                    "ORDER BY id ASC LIMIT 500",
+                                    (last_id, cutoff_time),
+                                )
+                                batch_rows = await cur.fetchall()
+                                if not batch_rows:
                                     break
-                                for row in rows:
+                                for row in batch_rows:
                                     media_paths.extend(
-                                        extract_media_paths(row[0])
+                                        extract_media_paths(row[1])
                                     )
+                                last_id = batch_rows[-1][0]
 
-                            await cur.execute(
-                                "DELETE FROM messages WHERE timestamp < %s",
-                                (cutoff_time,),
-                            )
-                            await conn.commit()
-                            rowcount = cur.rowcount
+                            # 分批删除，避免单条大事务长锁行
+                            while True:
+                                await cur.execute(
+                                    "DELETE FROM messages WHERE timestamp < %s "
+                                    "LIMIT 1000",
+                                    (cutoff_time,),
+                                )
+                                deleted = cur.rowcount
+                                if deleted <= 0:
+                                    break
+                                rowcount += deleted
+                                await conn.commit()
                     except Exception:
                         await conn.rollback()
                         raise
@@ -1118,10 +1220,11 @@ class Database:
                             return 0, []
                         delete_count = current_count - max_records
 
+                        # 收集待删记录的媒体路径（keyset 分页）
                         await cur.execute(
-                            "SELECT message_chain FROM messages "
+                            "SELECT id, message_chain FROM messages "
                             "WHERE message_chain IS NOT NULL "
-                            "ORDER BY timestamp ASC LIMIT %s",
+                            "ORDER BY id ASC LIMIT %s",
                             (delete_count,),
                         )
                         while True:
@@ -1130,16 +1233,25 @@ class Database:
                                 break
                             for row in rows:
                                 media_paths.extend(
-                                    extract_media_paths(row[0])
+                                    extract_media_paths(row[1])
                                 )
 
-                        await cur.execute(
-                            "DELETE FROM messages "
-                            "ORDER BY timestamp ASC LIMIT %s",
-                            (delete_count,),
-                        )
-                        await conn.commit()
-                        rowcount = cur.rowcount
+                        # 分批删除最旧记录（按 id 升序），避免单条大事务
+                        rowcount = 0
+                        remaining = delete_count
+                        while remaining > 0:
+                            batch_limit = min(1000, remaining)
+                            await cur.execute(
+                                "DELETE FROM messages "
+                                "ORDER BY id ASC LIMIT %s",
+                                (batch_limit,),
+                            )
+                            deleted = cur.rowcount
+                            if deleted <= 0:
+                                break
+                            rowcount += deleted
+                            remaining -= deleted
+                            await conn.commit()
                 except Exception:
                     await conn.rollback()
                     raise

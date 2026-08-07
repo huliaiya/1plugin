@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-08-07
+
+### Added
+- **新增 Redis 缓存（可选）**：新增 `fox_toolbox/redis_cache.py` 封装 `redis.asyncio`，为 WebUI 高频查询缓存消息统计（`get_stats`，按 `redis_cache_ttl` TTL 刷新）与最近消息列表
+- 消息落库后自动推送最近消息缓存（单条与批量保存均覆盖，保留最近 200 条），统计接口首次查询后写缓存、TTL 内直接命中
+- 新增配置项：`redis_enabled` / `redis_host` / `redis_port` / `redis_password` / `redis_db` / `redis_cache_ttl`（已同步 `_conf_schema.json` 与 README 配置说明）
+- 依赖缺失、连接失败或运行中异常均自动降级为无缓存模式，绝不影响消息记录等主功能
+
+### Fixed
+- **修复媒体下载路径穿越写入**（`media_downloader.py`）：下载文件落盘前校验路径归属媒体目录，拒绝 `../` 或绝对路径等越界文件名
+- **修复 SSRF 重定向绕过**（`media_downloader.py`）：下载请求改为逐跳校验重定向目标，封禁内网/链路本地地址，最多跟随 5 跳
+- **修复导出任意文件读取**（`web_api.py`）：打包媒体附件前校验目标路径归属媒体目录，拒绝越界文件被导出
+- **修复导入内存耗尽**（`web_api.py`）：无 ijson 回退到 `json.load` 时限制单条记录 64MB 上限，异常记录跳过并记录
+- **修复统计接口整表扫描**（`database.py` `get_stats`）：改为 MySQL 端 `COUNT(*)` + `GROUP BY` 聚合，不再整表拉入 Python 内存
+- **修复全文检索布尔模式 1064 错误**（`database.py`）：关键词含 `+-<>()~*"@` 保留字符时自动降级 LIKE 匹配
+- **修复导出回填大文件 OOM**：占位符回填改为临时文件流式重组，避免整文件读入内存
+- **修复 Redis 缓存记录 id 恒为 None**：落库后回填 `record.id`（`lastrowid`），保证缓存项可追溯
+- **修复上传/分片同步 IO 阻塞事件循环**：导入写入与分片落盘改为 `asyncio.to_thread` 异步化
+- **修复分片组装失败残留**：`_assemble_chunks` 异常时清理临时目录与会话，`api_import_complete` 防止 `NameError`
+- **修复 db_explorer LIMIT 钳制绕过**：两参形式 `LIMIT offset, count` 的 offset 与 count 均钳制；新增危险函数拦截（`INTO OUTFILE` / `LOAD_FILE` / `SLEEP` / `BENCHMARK` / `LOAD DATA`）
+- **修复初始化失败泄漏连接池**：`main.py` 初始化异常时正确关闭数据库连接池
+- **爱发电 Webhook 新增可选 token 校验**：配置 `afdian_webhook_token` 后仅接受 URL query 携带正确 token 的回调，未配置保持原行为向后兼容
+- **修复清理任务大事务与内存无界**：`cleanup_by_age` / `cleanup_by_limit` 改为 keyset 分页收集 + 分批 DELETE
+- **修复 Telegram 频道消息并发写库**：保存操作统一受信号量约束，避免并发线程竞争
+- **兼容新旧 Quart**：附件下载按版本自动选用 `download_name` / `attachment_filename` 参数
+
+### Changed
+- 版本号 bump 至 2.6.0
+- README 功能特色、配置说明与致谢新增 Redis（官方 / redis-py）
+
 ## [2.5.1] - 2026-08-07
 
 ### Fixed

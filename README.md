@@ -39,6 +39,7 @@
 - 🧹 **自动清理** — 可配置保留天数和最大记录数，自动清理过期数据和孤立媒体文件
 - ⚡ **异步高性能** — 全链路异步（aiomysql + aiohttp），连接池并发控制，不影响消息处理性能
 - 🔒 **智能去重** — 基于 `(platform, message_id)` 和 `(platform, content_hash)` 双唯一索引，同一消息不会重复入库
+- ⚡ **Redis 缓存** — 可选接入 Redis 缓存消息统计与最近消息，减轻 WebUI 高频查询对数据库的压力；未配置或连接失败时自动降级为无缓存模式，不影响任何功能
 - ⚡ **爱发电打赏对接** — 对接爱发电平台，接受用户打赏、实时推送订单，支持生成支付链接、查询订单与赞助记录；无公网机器可启用订单轮询检测，替代 Webhook 推送（复刻自 astrbot_plugin_afdian）
 
 ---
@@ -130,6 +131,7 @@ git clone https://github.com/leafliber/astrbot_plugin_fox_toolbox.git
 | `afdian_enabled` | `false` | 是否启用爱发电打赏对接功能 |
 | `afdian_webhook_host` | `0.0.0.0` | 爱发电 Webhook 监听地址 |
 | `afdian_webhook_port` | `6500` | 爱发电 Webhook 监听端口 |
+| `afdian_webhook_token` | `` | 爱发电 Webhook 回调校验令牌（可选）：填写后回调请求需在 URL 携带 `?token=<值>` 才会被接受；留空保持向后兼容、不做校验 |
 | `afdian_use_polling` | `true` | 是否启用无公网订单轮询检测（无公网机器替代 Webhook 推送） |
 | `afdian_poll_interval` | `5` | 订单轮询间隔（秒），最小 1 秒 |
 | `afdian_poll_timeout` | `300` | 发电后等待支付的完成时限（秒），默认 5 分钟 |
@@ -145,6 +147,21 @@ git clone https://github.com/leafliber/astrbot_plugin_fox_toolbox.git
 > **无公网替代方案**：完全没有公网地址的机器可启用 `afdian_use_polling`（默认开启）。用户点击发电后，插件每 `afdian_poll_interval` 秒（默认 5 秒）拉取一次订单，并在 `afdian_poll_timeout` 秒（默认 300 秒 / 5 分钟）内发现新订单即处理（备注匹配用户并自动回复），无需公网回调；此模式同样可用全部查询指令。
 >
 > **数据存储**：爱发电订单会写入主插件 MySQL 数据库的 `afdian_orders` 表（与消息记录同一实例、同一库）；MySQL 不可用时自动回退到插件数据目录下的 SQLite 兜底，保证订单不丢失。
+
+### Redis 缓存（可选）
+
+通过 Redis 缓存消息统计与最近消息，可显著降低 WebUI 首页加载时对数据库的查询压力。未启用、未安装依赖或连接失败时，插件自动以无缓存模式运行，不影响任何功能。
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `redis_enabled` | `false` | 是否启用 Redis 缓存 |
+| `redis_host` | `127.0.0.1` | Redis 服务器地址 |
+| `redis_port` | `6379` | Redis 服务端口 |
+| `redis_password` | `` | Redis 认证密码（未设置则留空） |
+| `redis_db` | `0` | Redis 数据库编号（建议使用独立编号） |
+| `redis_cache_ttl` | `300` | 统计缓存有效期（秒）；消息落库后会即时更新最近消息缓存，统计缓存按此 TTL 刷新 |
+
+> **依赖安装**：使用 Redis 缓存需安装 `redis` 包。在 AstrBot 容器内执行 `pip install redis` 或在插件依赖中声明；未安装时插件会打印提示并自动降级为无缓存模式。
 
 ---
 
@@ -873,6 +890,8 @@ ruff format .
 - [astrbot_plugin_mysql](https://github.com/Chris95743/astrbot_plugin_mysql) - 数据库表浏览 / 只读 SQL 查询的设计参考，由 [Chris95743](https://github.com/Chris95743) 开发，狐狸插件借鉴其安全校验与表浏览思路
 - [astrbot_plugin_afdian](https://github.com/Zhalslar/astrbot_plugin_afdian) - 爱发电对接功能（发电打赏 / Webhook 订单推送 / 订单与赞助查询），复刻自 [Zhalslar](https://github.com/Zhalslar) 开发的同名单体插件，狐狸插件将其集成并适配扁平配置
 - [爱发电 (AFDian)](https://afdian.com) - 创作者服务与打赏平台，本插件的发电打赏、订单推送与赞助查询均基于爱发电开放平台 API 实现，感谢官方提供稳定可靠的服务与开放接口
+- [redis-py](https://github.com/redis/redis-py) - Python 异步 Redis 客户端库，本插件的消息统计与最近消息缓存基于其 `redis.asyncio` 接口实现
+- [Redis](https://redis.io) - 高性能内存数据库，本插件可选的统计与最近消息缓存功能构建其上
 - [aiomysql](https://github.com/aio-libs/aiomysql) - 异步 MySQL 驱动库
 - [aiohttp](https://github.com/aio-libs/aiohttp) - 异步 HTTP 客户端，用于多媒体文件下载与爱发电 Webhook 服务
 

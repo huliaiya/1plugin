@@ -36,6 +36,7 @@ class AfdianFeature:
             host=self.afdian_cfg.webhook_host,
             port=self.afdian_cfg.webhook_port,
             db=self.afdian_db,
+            token=self.afdian_cfg.webhook_token,
         )
         self.afdian_client = AfdianAPIClient(
             user_id=self.afdian_cfg.user_id,
@@ -54,7 +55,7 @@ class AfdianFeature:
         if getattr(self, "_afdian_brand", None):
             return self._afdian_brand
         name = "狐狸插件"
-        version = "2.5.1"
+        version = "2.6.0"
         try:
             meta_path = (
                 Path(__file__).resolve().parent.parent.parent / "metadata.yaml"
