@@ -762,27 +762,43 @@ class MessageRecorder(Star):
             return
         yield event.plain_result(self._fmt_msgs(msgs, f"🔍 找到 {len(msgs)} 条包含 '{keyword}' 的消息:"))
 
-    @huli_record.command("help")
-    async def cmd_help(self, event: AstrMessageEvent):
-        if not self._check_commands_enabled(event):
-            return
-        yield event.plain_result("""📖 消息记录器帮助
+    def _build_help_text(self) -> str:
+        """构建完整的可用指令帮助文本。"""
+        return """🦊 狐狸插件 可用指令
 
 📊 统计与管理:
 /huli_record stats - 查看统计信息
 /huli_record snapshot - 生成 WebUI 仪表盘快照图
 /huli_record cleanup - 手动清理过期消息
+/huli_record tables - 查看数据库中的业务表列表
 
+📅 按时间查询:
 /huli_record today [limit] - 查看今天的消息
 /huli_record yesterday [limit] - 查看昨天的消息
-/huli_record history [time_range] [limit] - 按时间查询
+/huli_record history [time_range] [limit] - 按时间查询 (day/week/month/all)
 
+🔍 消息检索:
 /huli_record query [sender_id] [limit] - 按发送者查询消息
 /huli_record search <keyword> [limit] - 全文搜索消息
 
-/huli_record tables - 查看数据库中的业务表列表
+🆘 帮助:
+/huli_record help - 查看本帮助
+/hulihelp 或 /狐狸菜单 - 查看本帮助
 
-选项: limit 默认 10，最大 50""")
+选项: limit 默认 10，最大 50"""
+
+    @huli_record.command("help")
+    async def cmd_help(self, event: AstrMessageEvent):
+        if not self._check_commands_enabled(event):
+            return
+        yield event.plain_result(self._build_help_text())
+
+    @filter.command("hulihelp", alias={"狐狸菜单", "狐狸help", "狐狸帮助"})
+    async def cmd_hulihelp(self, event: AstrMessageEvent):
+        """狐狸插件帮助菜单（顶层命令，支持 /hulihelp 或 /狐狸菜单）"""
+        if not self._check_commands_enabled(event):
+            return
+        yield event.plain_result(self._build_help_text())
 
     @huli_record.command("today")
     async def cmd_today(self, event: AstrMessageEvent, limit: int = 20):

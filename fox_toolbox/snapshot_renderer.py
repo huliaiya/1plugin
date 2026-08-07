@@ -141,9 +141,39 @@ _FONT_FALLBACK = [
     "C:/Windows/Fonts/msyh.ttc",
 ]
 
+_FONT_SEARCH_DIRS = [
+    "/usr/share/fonts",
+    "/usr/local/share/fonts",
+    "~/fonts",
+    "~/Library/Fonts",
+    "/System/Library/Fonts",
+    "C:/Windows/Fonts",
+]
+
 _font_cache: Dict[Tuple[str, int], ImageFont.FreeTypeFont] = {}
 _emoji_font: Optional[ImageFont.FreeTypeFont] = None
 _emoji_font_inited = False
+
+
+def _search_font_path(name_keywords: List[str]) -> Optional[str]:
+    """在常见字体目录中递归搜索匹配关键字的字体文件。"""
+    seen: set = set()
+    for base in _FONT_SEARCH_DIRS:
+        base_path = Path(base).expanduser()
+        if not base_path.is_dir():
+            continue
+        try:
+            files = sorted(base_path.rglob("*.tt*"))
+        except Exception:
+            continue
+        for f in files:
+            if str(f) in seen:
+                continue
+            seen.add(str(f))
+            name = f.name.lower()
+            if all(k in name for k in name_keywords):
+                return str(f)
+    return None
 
 
 def _resolve_font(bold: bool) -> Optional[str]:
@@ -153,7 +183,13 @@ def _resolve_font(bold: bool) -> Optional[str]:
     for c in _FONT_FALLBACK:
         if Path(c).exists():
             return c
-    return None
+    # 动态搜索：优先 CJK 中文字体，其次任意可用字体
+    if bold:
+        found = _search_font_path(["bold", "cjk"]) or _search_font_path(["cjk"])
+        if found:
+            return found
+    found = _search_font_path(["cjk"]) or _search_font_path(["wqy"]) or _search_font_path(["noto"])
+    return found
 
 
 def _get_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
@@ -183,11 +219,14 @@ def _get_emoji_font() -> Optional[ImageFont.FreeTypeFont]:
     if _emoji_font_inited:
         return _emoji_font
     _emoji_font_inited = True
-    if not Path(_EMOJI_FONT).exists():
+    path = _EMOJI_FONT
+    if not Path(path).exists():
+        path = _search_font_path(["emoji"]) or _search_font_path(["color"])
+    if not path or not Path(path).exists():
         _emoji_font = None
         return None
     try:
-        _emoji_font = ImageFont.truetype(_EMOJI_FONT, 109)
+        _emoji_font = ImageFont.truetype(path, 109)
     except Exception:
         _emoji_font = None
     return _emoji_font

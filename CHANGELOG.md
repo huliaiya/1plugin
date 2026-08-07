@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.3.2] - 2026-08-07
 
 ### Fixed
+- **修复快照中文全部显示为问号/方块的根因**：当系统缺失中文字体时，`ImageFont.load_default()` 无法渲染中文。现在渲染器会在常见字体目录中自动搜索 CJK / emoji 字体，无需人工安装
+- **新增 `hulihelp` / `狐狸菜单` 顶层命令**：发送 `/hulihelp` 或 `/狐狸菜单` 即可查看全部可用指令
 - **继续修复快照可读性**：提升时间趋势、排行、平台详情、图例和水印的小字号字体，聊天压缩后更易读
 - **修复消息类型推断散落在主流程的问题**：适配器层直接对未知 `MessageType` 按上下文回退到群聊、私聊、频道，减少统计口径漂移
 - **修复 Web 面板排行时间按钮重复**：移除两个语义重复的时间范围按钮，避免界面行为混乱
@@ -15,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - 快照水印版本号同步升级到 `v2.3.2`
 - Plugin Page 前端资源版本号同步升级到 `2.3.2`
+- 更新 `RENDERER_FIX_SUMMARY.md` 版本记录到 `v2.3.2`
 
 ## [2.3.1] - 2026-08-07
 

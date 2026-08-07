@@ -5,6 +5,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E4.16%2C%3C5-blue?style=for-the-badge)](https://github.com/Soulter/astrbot)
 [![Python](https://img.shields.io/badge/Python-3.12+-green?style=for-the-badge)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-2.3.2-orange?style=for-the-badge)](CHANGELOG.md)
 
 **全平台聊天消息自动记录 | MySQL 5.7 存储 | Web 管理面板 | 全文搜索 | 插件 API**
 
@@ -549,6 +550,8 @@ ruff format .
 
 ### v2.3.2（2026-08-07）
 
+- **修复快照中文全部显示为问号/方块的根因**：系统缺失中文字体时，快照会全部显示为问号；现在渲染器会自动搜索系统字体目录中的 CJK / emoji 字体
+- **新增 `/hulihelp` / `/狐狸菜单` 命令**：输入即可查看全部可用指令
 - 继续优化快照可读性：提高时间趋势、排行榜、平台详情、图例与水印的小字号字体，长图压缩后更清晰
 - 将未知消息类型的回退判断前移到平台适配器层，减少不同入口产生的统计口径漂移
 - 移除 Web 面板重复的排行时间范围按钮，时间筛选行为更直接
