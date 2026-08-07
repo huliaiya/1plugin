@@ -5,7 +5,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E4.16%2C%3C5-blue?style=for-the-badge)](https://github.com/Soulter/astrbot)
 [![Python](https://img.shields.io/badge/Python-3.12+-green?style=for-the-badge)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.4.2-orange?style=for-the-badge)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.4.3-orange?style=for-the-badge)](CHANGELOG.md)
 
 **全平台聊天消息自动记录 | MySQL 5.7 存储 | Web 管理面板 | 全文搜索 | 插件 API**
 
@@ -547,6 +547,11 @@ ruff format .
 ---
 
 ## 📝 更新日志
+
+### v2.4.3（2026-08-07）
+
+- **修复 WebUI 平台分布图 QQ 显示为紫色**：平台分布饼图显式指定天空蓝色板，与快照配色一致
+- **快照整体文字清晰度提升**：各卡片小字号文字统一增大，压缩后更易读
 
 ### v2.4.2（2026-08-07）
 

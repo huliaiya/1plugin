@@ -494,7 +494,7 @@ def _draw_stat_cards(img, y, stats: MessageStats, db_table_count: int):
         card_content = _draw_glass_card(img, (cx, cy, cx + card_w, cy + card_h), accent=color)
         
         f_val = _get_font(_PX(32), bold=True)
-        f_lbl = _get_font(_PX(13))
+        f_lbl = _get_font(_PX(15))
         val_str = f"{values[idx]:,}" if isinstance(values[idx], int) else str(values[idx])
         
         # 数值文字（居中）
@@ -547,7 +547,7 @@ def _draw_timeline(img, xy, timeline: List[Dict]):
     max_c = max(max_c, 1)
 
     # 计算Y轴标签最大宽度，为标签预留空间，避免超出卡片边框
-    f_axis = _get_font(_PX(13))
+    f_axis = _get_font(_PX(15))
     axis_w = 0
     for g in range(5):
         value = int(max_c * (1 - g / 4))
@@ -594,7 +594,7 @@ def _draw_timeline(img, xy, timeline: List[Dict]):
                        fill=_BG_WHITE, outline=color, width=_PX(2))
 
     # 绘制图例
-    f_legend = _get_font(_PX(13), bold=True)
+    f_legend = _get_font(_PX(15), bold=True)
     lx = plot_x0 + _PX(16)
     ly = y0 - _PX(20)
     
@@ -607,7 +607,7 @@ def _draw_timeline(img, xy, timeline: List[Dict]):
         lx += _PX(36) + lw + _PX(16)
 
     # 绘制X轴标签
-    f_lbl = _get_font(_PX(13))
+    f_lbl = _get_font(_PX(15))
     label_indices = list(range(n)) if n <= 8 else [0, n // 4, n // 2, 3 * n // 4, n - 1]
     
     for i in label_indices:
@@ -880,7 +880,7 @@ def _draw_content_types(img, xy, content_types: List[Dict]):
 
     total_str = f"{total:,}"
     f_total = _get_font(_PX(24), bold=True)
-    f_total_lbl = _get_font(_PX(12))
+    f_total_lbl = _get_font(_PX(15))
     total_w = _text_width(draw, total_str, f_total)
     _draw_text(draw, (cx - total_w / 2, cy - _PX(18)), total_str, f_total, _TEXT_DARK, img)
     total_lbl = "总消息"
@@ -976,7 +976,7 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
 
     # 绘制图例
     legend_y = y0 + _PX(15)
-    f_legend = _get_font(_PX(12), bold=True)
+    f_legend = _get_font(_PX(14), bold=True)
     
     for idx, (label, key, color) in enumerate(series_defs):
         legend_x_pos = x0 + _PX(20) + idx * _PX(100)
@@ -989,13 +989,13 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
         _draw_text(draw, (legend_x_pos + _PX(12), legend_y - _PX(1)), label, f_legend, _TEXT_MEDIUM, img)
 
     # 绘制峰值标注
-    peak_font = _get_font(_PX(13), bold=True)
+    peak_font = _get_font(_PX(14), bold=True)
     peak_text = f"峰值 {max_total:,}"
     _draw_text(draw, (x1 - _text_width(draw, peak_text, peak_font) - _PX(20), y0 + _PX(15)), 
               peak_text, peak_font, _TEXT_MEDIUM, img)
 
     # 绘制柱状图
-    f_val = _get_font(_PX(13), bold=True)
+    f_val = _get_font(_PX(14), bold=True)
     for i, p in enumerate(display_platforms):
         cx_bar = x0 + slot_w * i + (slot_w - bar_w) / 2
         total = seg_total(p)
@@ -1028,7 +1028,7 @@ def _draw_platform_detail(img, xy, platforms: List[Dict]):
         _draw_text(draw, (cx_bar + bar_w / 2 - tw / 2, label_y), total_str, f_val, _TEXT_MEDIUM, img)
 
     # X轴平台名标签 - 确保所有平台标签都显示
-    f_lbl = _get_font(_PX(13))
+    f_lbl = _get_font(_PX(14))
     for i, p in enumerate(display_platforms):
         label = _truncate(draw, _sanitize_label(p.get("platform_name") or p.get("platform")), f_lbl, int(slot_w - _PX(8)))
         lw = _text_width(draw, label, f_lbl)
@@ -1153,8 +1153,8 @@ def render_snapshot(
 
     # 8. 底部水印
     draw = ImageDraw.Draw(img)
-    watermark_text = "由狐狸插件 /huli_record snapshot 生成 · 天空蓝清新风格 v2.4.2"
-    f_watermark = _get_font(_PX(13))
+    watermark_text = "由狐狸插件 /huli_record snapshot 生成 · 天空蓝清新风格 v2.4.3"
+    f_watermark = _get_font(_PX(14))
     _draw_text(draw, (_PX(24), y + _PX(12)), watermark_text, f_watermark, _TEXT_MEDIUM, img)
 
     # 9. 最终处理

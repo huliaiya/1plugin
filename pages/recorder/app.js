@@ -1,5 +1,5 @@
 const bridge = window.AstrBotPluginPage;
-const BUILD_VERSION = '2.4.2';
+const BUILD_VERSION = '2.4.3';
 
 let bridgeReady = false;
 let pluginContext = null;
@@ -733,6 +733,7 @@ function updatePlatformChart(platformStats) {
   const mobile = window.innerWidth <= 768;
   platformChart.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    color: ['#29b6f6', '#03a9f4', '#0288d1', '#4fc3f7', '#81d4fa', '#4dd0e1', '#64b5f6', '#90caf9'],
     legend: mobile
       ? { orient: 'horizontal', type: 'scroll', bottom: 0, left: 'center',
           itemWidth: 10, itemHeight: 10, itemGap: 8, pageIconSize: 9,

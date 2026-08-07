@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.3] - 2026-08-07
+
+### Fixed
+- **修复 WebUI 平台分布图 QQ 显示为紫色**：平台分布饼图此前未指定颜色，使用了 ECharts 默认调色板（首个颜色为蓝紫 #5470c6）。现已显式指定天空蓝色板，与快照配色完全一致
+
+### Changed
+- **快照整体文字清晰度提升**：统计卡标签、时间趋势轴刻度与图例、内容类型中心标签、平台详情图例/峰值/柱顶数值/X 轴标签、水印等小字号文字统一增大，压缩后的聊天快照更易读
+
 ## [2.4.2] - 2026-08-07
 
 ### Changed
