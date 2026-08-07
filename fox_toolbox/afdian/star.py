@@ -6,6 +6,7 @@ main.py 中的主 Star 类继承使用。
 """
 
 import asyncio
+from pathlib import Path
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
@@ -43,6 +44,97 @@ class AfdianFeature:
         self.afdian_pending_orders: dict = {}
         self.afdian_bots = []
         self.afdian_started = False
+        self.afdian_sync_task: asyncio.Task | None = None
+
+    @property
+    def afdian_brand(self) -> tuple:
+        """插件名与版本（用于图片水印），从 metadata.yaml 读取。"""
+        if getattr(self, "_afdian_brand", None):
+            return self._afdian_brand
+        name = "狐狸插件"
+        version = "2.5.0"
+        try:
+            meta_path = (
+                Path(__file__).resolve().parent.parent.parent / "metadata.yaml"
+            )
+            if meta_path.exists():
+                for line in meta_path.read_text(encoding="utf-8").splitlines():
+                    if line.startswith("display_name:"):
+                        name = line.split(":", 1)[1].strip().strip('"\'')
+                    elif line.startswith("version:"):
+                        version = line.split(":", 1)[1].strip().strip('"\'')
+        except Exception as e:
+            logger.warning(f"[Afdian] 读取插件元数据失败，使用默认品牌信息: {e}")
+        self._afdian_brand = (name, version)
+        return self._afdian_brand
+
+    def _afdian_t2i_template(self) -> str:
+        """读取自定义文转图模板（顶部水印为插件名+版本）。"""
+        tmpl_path = Path(__file__).resolve().parent / "t2i_template.html"
+        try:
+            return tmpl_path.read_text(encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"[Afdian] 读取自定义 T2I 模板失败: {e}")
+            raise
+
+    async def afdian_render_image(self, text: str) -> str:
+        """使用自定义模板渲染文本为图片，顶部显示插件名+版本。
+
+        优先使用自定义模板（网络渲染），失败时回退到 AstrBot 默认模板。
+        """
+        from astrbot.core import html_renderer
+
+        name, version = self.afdian_brand
+        try:
+            tmpl = self._afdian_t2i_template()
+            return await html_renderer.render_custom_template(
+                tmpl,
+                {"text": text, "plugin_name": name, "version": f"v{version}"},
+                return_url=True,
+            )
+        except Exception as e:
+            logger.warning(f"[Afdian] 自定义模板渲染失败，回退默认模板: {e}")
+            return await self.text_to_image(text=text)
+
+    async def afdian_sync_history_orders(self, max_pages: int = 100):
+        """启动时拉取全部历史订单入库（按 out_trade_no 去重，只存新增）。
+
+        分页拉取爱发电 API 的历史订单，逐条保存到订单库。
+        """
+        if not self.afdian_cfg.enabled or not self.afdian_cfg.ready():
+            if self.afdian_cfg.enabled and not self.afdian_cfg.ready():
+                logger.warning("[Afdian] API 凭据未配置，跳过历史订单同步")
+            return
+        logger.info("[Afdian] 开始拉取历史订单...")
+        page = 1
+        added = 0
+        total = 0
+        while page <= max_pages:
+            try:
+                orders = await self.afdian_client.query_order(
+                    page=page, per_page=100
+                )
+            except Exception as e:
+                logger.warning(f"[Afdian] 拉取历史订单失败 page={page}: {e}")
+                break
+            if not orders:
+                break
+            total += len(orders)
+            for order in orders:
+                out_trade_no = order.get("out_trade_no")
+                if not out_trade_no:
+                    continue
+                exists = await self.afdian_db.get_order_by_id(out_trade_no)
+                if exists:
+                    continue
+                await self.afdian_db.save_order(order)
+                added += 1
+            page += 1
+            if len(orders) < 100:
+                break
+        logger.info(
+            f"[Afdian] 历史订单同步完成：共 {total} 条，新增 {added} 条"
+        )
 
     async def _afdian_bind_mysql(self):
         """尝试将爱发电订单存储绑定到主插件的 MySQL 连接池（同库）。"""
@@ -71,8 +163,21 @@ class AfdianFeature:
             logger.error(f"[Afdian] 启动 Webhook 服务失败: {e}")
             self.afdian_started = False
 
+        # 启动/重载时后台拉取历史订单入库（去重，只存新增）
+        if self.afdian_sync_task is None or self.afdian_sync_task.done():
+            self.afdian_sync_task = asyncio.create_task(
+                self.afdian_sync_history_orders()
+            )
+
     async def afdian_stop(self):
         """停止爱发电 Webhook 服务并关闭 API 客户端。"""
+        if self.afdian_sync_task and not self.afdian_sync_task.done():
+            self.afdian_sync_task.cancel()
+            try:
+                await self.afdian_sync_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self.afdian_sync_task = None
         try:
             if self.afdian_server:
                 await self.afdian_server.stop()

@@ -984,7 +984,7 @@ class MessageRecorder(Star, AfdianFeature):
             return
         text = await self.afdian_query_order(event, out_trade_no)
         try:
-            image = await self.text_to_image(text=text)
+            image = await self.afdian_render_image(text=text)
             yield event.image_result(image)
         except Exception as e:
             logger.warning(f"[Afdian] 文本转图片失败，降级为纯文本: {e}")
@@ -999,7 +999,7 @@ class MessageRecorder(Star, AfdianFeature):
             return
         text = await self.afdian_query_sponsor(event, sponsor_user_ids)
         try:
-            image = await self.text_to_image(text=text)
+            image = await self.afdian_render_image(text=text)
             yield event.image_result(image)
         except Exception as e:
             logger.warning(f"[Afdian] 文本转图片失败，降级为纯文本: {e}")
