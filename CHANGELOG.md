@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **修复清理任务大事务与内存无界**：`cleanup_by_age` / `cleanup_by_limit` 改为 keyset 分页收集 + 分批 DELETE
 - **修复 Telegram 频道消息并发写库**：保存操作统一受信号量约束，避免并发线程竞争
 - **修复爱发电 MySQL 连接池关闭后持续告警**：`OrderDB` 检测到池已关闭/acquire 失败时永久降级 SQLite（解除池引用），不再每轮轮询重复尝试 MySQL 并刷屏 `Cannot acquire connection after closing pool`；`terminate` 先停爱发电轮询/同步/Webhook 再关闭连接池
+- **新增 `/同步历史订单` 命令**：通过爱发电 API 主动分页拉取全部历史订单入库（按交易号去重），随时可手动补拉，不依赖 Webhook
 - **兼容新旧 Quart**：附件下载按版本自动选用 `download_name` / `attachment_filename` 参数
 
 ### Changed

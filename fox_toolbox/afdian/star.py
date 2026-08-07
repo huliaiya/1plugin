@@ -101,11 +101,12 @@ class AfdianFeature:
         """启动时拉取全部历史订单入库（按 out_trade_no 去重，只存新增）。
 
         分页拉取爱发电 API 的历史订单，逐条保存到订单库。
+        :return: (拉取总数, 新增数) 便于调用方反馈
         """
         if not self.afdian_cfg.enabled or not self.afdian_cfg.ready():
             if self.afdian_cfg.enabled and not self.afdian_cfg.ready():
                 logger.warning("[Afdian] API 凭据未配置，跳过历史订单同步")
-            return
+            return 0, 0
         logger.info("[Afdian] 开始拉取历史订单...")
         page = 1
         added = 0
@@ -133,6 +134,7 @@ class AfdianFeature:
         logger.info(
             f"[Afdian] 历史订单同步完成：共 {total} 条，新增 {added} 条"
         )
+        return total, added
 
     async def _afdian_bind_mysql(self):
         """尝试将爱发电订单存储绑定到主插件的 MySQL 连接池（同库）。"""

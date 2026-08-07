@@ -1022,6 +1022,23 @@ class MessageRecorder(Star, AfdianFeature):
         yield event.plain_result("已发送测试通知")
 
     @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("同步历史订单")
+    async def cmd_afdian_sync_orders(self, event: AstrMessageEvent):
+        """同步历史订单 - 通过爱发电 API 主动拉取全部历史订单入库"""
+        if not self._afdian_check(event):
+            yield event.plain_result("爱发电功能未启用或 API 凭据未配置，请联系管理员")
+            return
+        yield event.plain_result("正在通过爱发电 API 同步历史订单，请稍候...")
+        try:
+            total, added = await self.afdian_sync_history_orders()
+            yield event.plain_result(
+                f"历史订单同步完成：共拉取 {total} 条，新增 {added} 条"
+            )
+        except Exception as e:
+            logger.warning(f"[Afdian] 手动同步历史订单失败: {e}")
+            yield event.plain_result(f"同步失败：{e}")
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("查询订单")
     async def cmd_afdian_query_order(self, event: AstrMessageEvent, out_trade_no: str):
         """查询订单 <订单号> - 查询指定订单的详情信息"""
