@@ -5,7 +5,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E4.16%2C%3C5-blue?style=for-the-badge)](https://github.com/Soulter/astrbot)
 [![Python](https://img.shields.io/badge/Python-3.12+-green?style=for-the-badge)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.6.5-orange?style=for-the-badge)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.6.6-orange?style=for-the-badge)](CHANGELOG.md)
 
 **全平台聊天消息自动记录 | MySQL 5.7 存储 | Web 管理面板 | 全文搜索 | 插件 API**
 
@@ -268,6 +268,7 @@ Web 面板采用 **Liquid Glass** 液态玻璃设计风格，通过现代 CSS �
 |------|------|------|
 | `/发电 [金额]` | 生成爱发电支付链接，接受用户打赏（备注记录付款人）；别名 `/赞助`。启用轮询时提示请在设定时间内（默认 5 分钟）完成支付 | 所有人 |
 | `/爱发电测试` | 手动触发一次测试通知，验证通知链路是否正常 | 管理员 |
+| `/发电模拟` | 模拟一笔新订单，走完整「自动检测 → 入库 → 推送到已设置的推送群」链路（不请求真实接口）；别名 `/模拟发电`、`/模拟发电订单`、`/爱发电模拟` | 管理员 |
 | `/查询订单 <订单号>` | 查询指定订单的详情信息 | 管理员 |
 | `/同步历史订单` | 通过爱发电 API 主动分页拉取全部历史订单入库（按交易号去重），随时可手动补拉 | 管理员 |
 | `/查询发电` | 查询默认账号收到的赞助记录；别名 `/查询赞助` | 管理员 |

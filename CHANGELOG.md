@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.6] - 2026-08-08
+
+### Added
+- **新增 `/发电模拟` 测试指令**（别名 `/模拟发电`、`/模拟发电订单`、`/爱发电模拟`）：模拟一笔新订单并走完整检测链路——构造模拟订单 → 注入 mock API 客户端走 `afdian_poll_once`（拉单 → `save_order_if_new` 按交易号去重入库 → `on_afdian_new_order` 推送到所有已设置的通知会话/推送群，并按备注匹配向付款用户回复）；不发起任何真实网络请求，用于验证「用户发电 → 自动检测 → 订单成功 → 推送到推送群」全链路
+
+### Changed
+- 版本号 bump 至 2.6.6
+
 ## [2.6.5] - 2026-08-08
 
 ### Changed

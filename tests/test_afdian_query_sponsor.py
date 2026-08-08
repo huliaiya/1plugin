@@ -15,6 +15,7 @@ import pytest
 from astrbot_plugin_fox_toolbox.fox_toolbox.afdian.afdian_api import AfdianAPIClient
 from astrbot_plugin_fox_toolbox.fox_toolbox.afdian.star import (
     AfdianFeature,
+    _MockAfdianClient,
     _db_order_to_dict,
 )
 
@@ -184,3 +185,123 @@ async def test_poll_loop_stops_when_pending_cleared():
     feature.afdian_poll_window_end = 0  # 窗口立即过期
     await feature.afdian_poll_loop()
     assert feature.afdian_poll_task is None
+
+
+# ---- 发电模拟 ----
+
+class _FakeDb:
+    def __init__(self):
+        self.saved = []
+
+    async def save_order_if_new(self, order) -> bool:
+        if order["out_trade_no"] in [s["out_trade_no"] for s in self.saved]:
+            return False
+        self.saved.append(order)
+        return True
+
+    async def get_all_orders(self):
+        return list(self.saved)
+
+
+class _FakeContext:
+    def __init__(self):
+        self.sent = []
+
+    async def send_message(self, umo, chain):
+        self.sent.append((umo, chain))
+
+
+class _FakeEvent:
+    def __init__(self, sender_id="99901", platform="test"):
+        self._sender_id = sender_id
+        self._platform = platform
+        self.unified_msg_origin = f"grp_{sender_id}"
+        self.bot = None
+
+    def get_sender_id(self):
+        return self._sender_id
+
+    def get_platform_name(self):
+        return self._platform
+
+
+def _make_simple_feature(config=None):
+    cfg = SimpleNamespace(
+        enabled=True,
+        use_polling=True,
+        poll_interval=1,
+        poll_timeout=300,
+        default_price=5,
+        default_reply="感谢支持！",
+        notice_sessions=["群1", "群2"],
+    )
+    if config:
+        for k, v in config.items():
+            setattr(cfg, k, v)
+    feature = AfdianFeature.__new__(AfdianFeature)
+    feature.afdian_cfg = cfg
+    feature.afdian_client = _MockAfdianClient({})
+    feature.afdian_db = _FakeDb()
+    feature.afdian_sync_task = None
+    feature.afdian_poll_task = None
+    feature.afdian_pending_orders = {}
+    feature.afdian_bots = []
+    feature.context = _FakeContext()
+    return feature
+
+
+@pytest.mark.asyncio
+async def test_simulate_creates_order_and_saves_to_db():
+    """发电模拟：构造订单、入库并触发推送。"""
+    feature = _make_simple_feature()
+    event = _FakeEvent()
+    msg = await feature.afdian_simulate_new_order(event)
+    assert "已检测并入库" in msg
+    assert len(feature.afdian_db.saved) == 1
+    assert feature.afdian_db.saved[0]["out_trade_no"].startswith("TEST")
+    assert feature.afdian_db.saved[0]["remark"] == "99901"
+
+
+@pytest.mark.asyncio
+async def test_simulate_pushes_to_notice_sessions():
+    """模拟订单会推送到所有已设置的通知会话。"""
+    feature = _make_simple_feature()
+    event = _FakeEvent()
+    await feature.afdian_simulate_new_order(event)
+    # on_afdian_new_order 向通知会话发送订单内容
+    sent = feature.context.sent
+    assert len(sent) >= 2
+    umos = {u for u, _ in sent}
+    assert "群1" in umos and "群2" in umos
+
+
+@pytest.mark.asyncio
+async def test_simulate_reply_to_payer_via_remark():
+    """模拟订单按备注匹配 pending，向付款用户发送默认回复。"""
+    feature = _make_simple_feature()
+    event = _FakeEvent()
+    await feature.afdian_simulate_new_order(event)
+    # pending 记录被弹出，付款用户 umo 收到默认回复
+    sent = feature.context.sent
+    umos = {u for u, _ in sent}
+    assert "grp_99901" in umos
+
+
+@pytest.mark.asyncio
+async def test_simulate_without_notice_sessions_warns():
+    """未设置通知会话时给出提示，仍完成入库。"""
+    feature = _make_simple_feature({"notice_sessions": []})
+    event = _FakeEvent()
+    msg = await feature.afdian_simulate_new_order(event)
+    assert "未设置通知会话" in msg
+    assert len(feature.afdian_db.saved) == 1
+
+
+@pytest.mark.asyncio
+async def test_mock_client_returns_single_order_then_empty():
+    """mock 客户端第一页返回订单、后续页为空（保证轮询只处理一页）。"""
+    client = _MockAfdianClient({"out_trade_no": "TEST1"})
+    r1 = await client.query_order(page=1)
+    r2 = await client.query_order(page=2)
+    assert len(r1) == 1
+    assert r2 == []

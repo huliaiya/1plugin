@@ -1032,6 +1032,20 @@ class MessageRecorder(Star, AfdianFeature):
         yield event.plain_result("已发送测试通知")
 
     @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("发电模拟", alias={"模拟发电", "模拟发电订单", "爱发电模拟"})
+    async def cmd_afdian_simulate(self, event: AstrMessageEvent):
+        """发电模拟 - 模拟一笔新订单，走完整检测+入库+推送到推送群链路"""
+        if not self._afdian_check(event):
+            yield event.plain_result("爱发电功能未启用或 API 凭据未配置，请联系管理员")
+            return
+        try:
+            msg = await self.afdian_simulate_new_order(event)
+            yield event.plain_result(msg)
+        except Exception as e:
+            logger.warning(f"[Afdian] 发电模拟失败: {e}")
+            yield event.plain_result(f"发电模拟失败：{e}")
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("同步历史订单")
     async def cmd_afdian_sync_orders(self, event: AstrMessageEvent):
         """同步历史订单 - 通过爱发电 API 主动拉取全部历史订单入库"""

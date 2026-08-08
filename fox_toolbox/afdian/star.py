@@ -20,6 +20,26 @@ from .order_db import OrderDB
 from .utils import parse_order, parse_sponsors
 
 
+class _MockAfdianClient:
+    """测试用模拟客户端：替代真实 API，仅返回一份预设模拟订单。
+
+    用于的「发电模拟」命令走真实的 `afdian_poll_once` 检测链路
+    （拉单 → save_order_if_new 入库 → on_afdian_new_order 推送），
+    不发起任何真实网络请求。
+    """
+
+    def __init__(self, order: dict):
+        self._order = order
+
+    async def query_order(self, page: int = 1, out_trade_no: str = "", per_page: int = 100) -> list:
+        if page > 1:
+            return []
+        return [self._order]
+
+    async def query_sponsor(self, *args, **kwargs) -> dict:
+        return {}
+
+
 def _db_order_to_dict(row: dict) -> dict:
     """把 OrderDB 行记录还原为 parse_order 可用的订单字典。"""
     order = dict(row)
@@ -73,7 +93,7 @@ class AfdianFeature:
         if getattr(self, "_afdian_brand", None):
             return self._afdian_brand
         name = "狐狸插件"
-        version = "2.6.5"
+        version = "2.6.6"
         try:
             meta_path = (
                 Path(__file__).resolve().parent.parent.parent / "metadata.yaml"
@@ -422,6 +442,70 @@ class AfdianFeature:
         if orders:
             return "\n\n".join(parse_order(_db_order_to_dict(o)) for o in orders)
         return "未找到赞助记录"
+
+    async def afdian_simulate_new_order(self, event) -> str:
+        """模拟一笔新订单并走完整检测/推送链路（测试用）。
+
+        构造一笔模拟订单，注入 mock API 客户端后调用 `afdian_poll_once`：
+        query_order 拉单 → save_order_if_new 入库 → on_afdian_new_order
+        推送到所有已设置的通知会话（推送群），并匹配备注向付款人回复。
+        返回文本描述模拟结果（订单号、入库状态、推送会话数）。
+        """
+        sender_id = str(event.get_sender_id())
+        now = int(time.time())
+        order = {
+            "out_trade_no": f"TEST{now}",
+            "user_id": f"sim_{sender_id}",
+            "user_name": f"模拟用户({sender_id})",
+            "user_private_id": "",
+            "plan_id": "0",
+            "plan_title": "模拟赞助订单",
+            "month": 1,
+            "total_amount": self.afdian_cfg.default_price,
+            "show_amount": self.afdian_cfg.default_price,
+            "status": 2,
+            "product_type": 0,
+            "discount": "0.00",
+            "remark": sender_id,
+            "redeem_id": "",
+            "sku_detail": [{"name": "测试商品", "count": 1, "sku_id": "SKU_TEST"}],
+            "address_person": "",
+            "address_phone": "",
+            "address_address": "",
+            "create_time": now,
+        }
+        # 登记待确认订单，模拟用户已发起发电
+        self.afdian_pending_orders[sender_id] = {
+            "umo": event.unified_msg_origin,
+            "created_at": time.time(),
+        }
+        # 记录 aiocqhttp bot 用于兜底私聊
+        try:
+            if event.get_platform_name() == "aiocqhttp":
+                bot = getattr(event, "bot", None)
+                if bot:
+                    self.afdian_bots.clear()
+                    self.afdian_bots.append(bot)
+        except Exception:
+            pass
+
+        original_client = self.afdian_client
+        self.afdian_client = _MockAfdianClient(order)
+        try:
+            await self.afdian_poll_once()
+        finally:
+            self.afdian_client = original_client
+
+        sessions = self.afdian_cfg.notice_sessions
+        if not sessions:
+            return (
+                f"模拟订单 {order['out_trade_no']} 已生成并入库，"
+                "但当前未设置通知会话，请先使用「开启发电通知」添加推送群"
+            )
+        return (
+            f"模拟订单 {order['out_trade_no']} 已检测并入库，"
+            f"已推送到 {len(sessions)} 个通知会话：{', '.join(sessions)}"
+        )
 
     async def afdian_add_notice_session(self, event, umo=None):
         """开启发电通知 —— 在当前会话接收爱发电订单通知。"""
