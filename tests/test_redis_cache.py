@@ -130,28 +130,76 @@ class TestRedisCacheStats:
         assert cache.available is False
         assert await cache.get_stats() is None
         await cache.set_stats({"total_count": 1})  # 不应抛异常
+        assert await cache.apply_stats_deltas([{"count": 1}]) is False
 
 
-class TestRedisCacheRecentMessages:
+class TestRedisCacheApplyStatsDeltas:
     @pytest.mark.asyncio
-    async def test_push_and_read(self):
+    async def test_delta_updates_and_slides_ttl(self):
         _install_fake_aioredis()
         try:
             cache = RedisCache(ttl=60)
             await cache.connect()
-            await cache.push_recent_message({"id": 1, "platform": "telegram"})
-            await cache.push_recent_message({"id": 2, "platform": "qq"})
-            items = await cache.get_recent_messages(limit=5)
-            assert items == [{"id": 2, "platform": "qq"}, {"id": 1, "platform": "telegram"}]
+            await cache.set_stats(
+                {
+                    "total_count": 100,
+                    "group_message_count": 70,
+                    "private_message_count": 20,
+                    "channel_message_count": 10,
+                    "platform_stats": {"telegram": 60, "qq": 40},
+                    "oldest_timestamp": 1000,
+                    "newest_timestamp": 9000,
+                    "first_record_time": 1000,
+                    "last_record_time": 9000,
+                }
+            )
+            ok = await cache.apply_stats_deltas(
+                [
+                    {
+                        "count": 1,
+                        "platform": "telegram",
+                        "bucket": "group",
+                        "timestamp": 9500,
+                        "created_at": 9500,
+                    },
+                    {
+                        "count": 1,
+                        "platform": "qq",
+                        "bucket": "private",
+                        "timestamp": 9501,
+                        "created_at": 9501,
+                    },
+                ]
+            )
+            assert ok is True
+            stats = await cache.get_stats()
+            assert stats["total_count"] == 102
+            assert stats["group_message_count"] == 71
+            assert stats["private_message_count"] == 21
+            assert stats["channel_message_count"] == 10
+            assert stats["platform_stats"] == {"telegram": 61, "qq": 41}
+            assert stats["newest_timestamp"] == 9501
+            assert stats["last_record_time"] == 9501
+            assert stats["oldest_timestamp"] == 1000
+            assert stats["first_record_time"] == 1000
         finally:
             _uninstall_fake_aioredis()
 
     @pytest.mark.asyncio
-    async def test_push_and_read_noop_when_disabled(self):
-        cache = RedisCache(ttl=60)
-        assert cache.available is False
-        await cache.push_recent_message({"id": 1})
-        assert await cache.get_recent_messages() == []
+    async def test_apply_returns_false_when_cache_missing(self):
+        _install_fake_aioredis()
+        try:
+            cache = RedisCache(ttl=60)
+            await cache.connect()
+            assert await cache.get_stats() is None
+            assert await cache.apply_stats_deltas([{"count": 1, "platform": "qq"}]) is False
+        finally:
+            _uninstall_fake_aioredis()
+
+    @pytest.mark.asyncio
+    async def test_apply_noop_when_disabled(self):
+        cache = RedisCache(ttl=60)  # 未连接
+        assert await cache.apply_stats_deltas([{"count": 1}]) is False
 
 
 class TestRecordCachePayload:

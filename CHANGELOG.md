@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.5] - 2026-08-08
+
+### Changed
+- **Redis 统计缓存实时更新**：保存消息成功后立即将新消息原子增量合并进 Redis 统计缓存（`total_count`、平台分布、group/private/channel 桶、时间区间），TTL 滑动续期，`get_stats` 命中缓存即可返回最新数据，无需等待 TTL 过期回源。Redis 不可用或缓存缺失（TTL 过期、从未回源）时自动回源数据库重建兜底，不阻塞消息保存主流程
+- 版本号 bump 至 2.7.5
+
 ## [2.7.4] - 2026-08-08
 
 ### Security

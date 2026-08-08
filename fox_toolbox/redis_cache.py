@@ -41,6 +41,7 @@ class RedisCache:
         self._client: Optional[Any] = None
         self._available: bool = False
         self._checked: bool = False
+        self._delta_lock = asyncio.Lock()
 
     @property
     def available(self) -> bool:
@@ -156,6 +157,70 @@ class RedisCache:
             )
         except Exception as e:
             logger.debug(f"[FoxToolbox] 写入统计缓存失败: {e}")
+
+    async def apply_stats_deltas(self, deltas: List[dict]) -> bool:
+        """原子增量更新统计缓存。
+
+        将多条消息增量合并到缓存中的统计值并滑动续期 TTL；缓存不存在
+        或 Redis 不可用时返回 False，由调用方回源数据库重建。增量累计在
+        锁内完成，避免并发保存造成计数丢失。
+
+        :param deltas: 每条消息一个增量 dict，字段：
+            count(增量条数，默认 1)、platform、bucket(group/private/channel)、
+            timestamp、created_at(毫秒时间戳，用于推进区间)
+        :return: 是否成功写入（False 表示缓存缺失，需回源重建）
+        """
+        if not self._available or self._client is None or not deltas:
+            return False
+        try:
+            async with self._delta_lock:
+                raw = await self._client.get(STATS_KEY)
+                if not raw:
+                    return False
+                stats = json.loads(raw)
+                stats.setdefault("platform_stats", {})
+                for delta in deltas:
+                    count = int(delta.get("count", 1) or 0)
+                    if count <= 0:
+                        continue
+                    stats["total_count"] = stats.get("total_count", 0) + count
+                    platform = delta.get("platform")
+                    if platform:
+                        stats["platform_stats"][platform] = (
+                            stats["platform_stats"].get(platform, 0) + count
+                        )
+                    bucket = delta.get("bucket")
+                    if bucket == "group":
+                        stats["group_message_count"] = (
+                            stats.get("group_message_count", 0) + count
+                        )
+                    elif bucket == "private":
+                        stats["private_message_count"] = (
+                            stats.get("private_message_count", 0) + count
+                        )
+                    elif bucket == "channel":
+                        stats["channel_message_count"] = (
+                            stats.get("channel_message_count", 0) + count
+                        )
+                    timestamp = delta.get("timestamp")
+                    if timestamp is not None:
+                        if stats.get("newest_timestamp") is None or timestamp > stats["newest_timestamp"]:
+                            stats["newest_timestamp"] = timestamp
+                        if stats.get("oldest_timestamp") is None or timestamp < stats["oldest_timestamp"]:
+                            stats["oldest_timestamp"] = timestamp
+                    created_at = delta.get("created_at")
+                    if created_at is not None:
+                        if stats.get("last_record_time") is None or created_at > stats["last_record_time"]:
+                            stats["last_record_time"] = created_at
+                        if stats.get("first_record_time") is None or created_at < stats["first_record_time"]:
+                            stats["first_record_time"] = created_at
+                await self._client.set(
+                    STATS_KEY, json.dumps(stats, ensure_ascii=False), ex=self._ttl
+                )
+                return True
+        except Exception as e:
+            logger.debug(f"[FoxToolbox] 增量更新统计缓存失败: {e}")
+            return False
 
     async def push_recent_message(self, record: dict) -> None:
         """将新消息推入最近消息列表（保留最近 RECENT_MESSAGES_CAP 条）。"""

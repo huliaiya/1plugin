@@ -392,6 +392,7 @@ class Database:
         else:
             record.id = record_id  # 回填 id，供缓存载荷使用
             await self._cache_recent_message(record)
+            await self._apply_stats_deltas([record])
 
         return record_id
 
@@ -464,6 +465,7 @@ class Database:
 
         if cached_records:
             await self._cache_recent_messages(cached_records)
+            await self._apply_stats_deltas(cached_records)
 
         logger.debug(
             f"[FoxToolbox] 批量保存完成: {saved} 成功, {skipped} 跳过"
@@ -478,6 +480,36 @@ class Database:
             await self.redis_cache.push_recent_message(self._record_cache_payload(record))
         except Exception as e:
             logger.debug(f"[FoxToolbox] 推送最近消息缓存失败: {e}")
+
+    @staticmethod
+    def _stats_delta_from_record(record: MessageRecord) -> dict:
+        """构造消息对应的统计增量。"""
+        return {
+            "count": 1,
+            "platform": record.platform,
+            "bucket": _infer_message_bucket(
+                record.message_type, record.group_id, record.channel_id
+            ),
+            "timestamp": record.timestamp,
+            "created_at": record.created_at,
+        }
+
+    async def _apply_stats_deltas(self, records: List[MessageRecord]) -> None:
+        """将新消息增量合并进 Redis 统计缓存（实时更新，TTL 滑动续期）。
+
+        缓存不存在（如 TTL 过期或从未回源）时触发一次回源数据库重建，
+        此时数据库已含最新消息，重建结果即正确；Redis 不可用则跳过。
+        失败无副作用，不阻塞消息保存主流程。
+        """
+        if self.redis_cache is None or not records:
+            return
+        try:
+            deltas = [self._stats_delta_from_record(r) for r in records]
+            updated = await self.redis_cache.apply_stats_deltas(deltas)
+            if not updated and self.redis_cache.available:
+                await self.get_stats()  # 缓存缺失，回源重建并回填缓存
+        except Exception as e:
+            logger.debug(f"[FoxToolbox] 增量更新统计缓存失败: {e}")
 
     async def _cache_recent_messages(self, records: List[MessageRecord]) -> None:
         """将批量新消息推入 Redis 最近消息缓存（倒序逐条推送保持顺序）。"""

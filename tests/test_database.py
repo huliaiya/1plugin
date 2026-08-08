@@ -409,6 +409,68 @@ class TestGetStats:
         assert stats.private_message_count == 1
         assert stats.channel_message_count == 1
 
+    @pytest.mark.asyncio
+    async def test_save_trigger_realtime_stats_update(self, mysql_db):
+        from astrbot_plugin_fox_toolbox.fox_toolbox.database import _infer_message_bucket
+
+        applied = []
+        missed = []
+
+        class _FakeRedis:
+            available = True
+
+            async def apply_stats_deltas(self, deltas):
+                applied.extend(deltas)
+                return True
+
+            async def get_stats(self):
+                return None
+
+            async def set_stats(self, stats):
+                return None
+
+        mysql_db.redis_cache = _FakeRedis()
+        try:
+            record = _make_record(message_id="realtime_1", message_type="group")
+            rid = await mysql_db.save_message(record)
+            assert rid > 0
+            assert len(applied) == 1
+            delta = applied[0]
+            assert delta["count"] == 1
+            assert delta["platform"] == "telegram"
+            assert delta["bucket"] == "group"
+            assert delta["timestamp"] == record.timestamp
+
+            # 批量保存同样触发增量
+            applied.clear()
+            batch = [
+                _make_record(message_id=f"batch_{i}", message_type="private", group_id=None)
+                for i in range(3)
+            ]
+            saved, skipped = await mysql_db.save_messages_batch(batch)
+            assert saved == 3 and skipped == 0
+            assert len(applied) == 3
+            assert all(d["bucket"] == "private" for d in applied)
+
+            # 缓存缺失时回源重建
+            missed_flag = []
+
+            class _FakeRedisMiss(_FakeRedis):
+                async def apply_stats_deltas(self, deltas):
+                    missed.append("rebuild")
+                    return False
+
+                async def get_stats(self):
+                    missed_flag.append("rebuilt")
+                    return None
+
+            mysql_db.redis_cache = _FakeRedisMiss()
+            applied.clear()
+            await mysql_db.save_message(_make_record(message_id="realtime_2"))
+            assert missed_flag  # 触发了回源重建
+        finally:
+            mysql_db.redis_cache = None
+
 
 class TestCleanup:
     @pytest.mark.asyncio
