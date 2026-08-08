@@ -228,12 +228,21 @@ def _format_message_for_export(msg: MessageRecord, include_chain: bool = True, i
     return result
 
 
-def _safe_int(val, default=0):
-    """安全地将值转换为 int，失败时返回默认值"""
+def _safe_int(val, default=0, min_val=None, max_val=None):
+    """安全地将值转换为 int，失败时返回默认值。
+
+    :param min_val: 可选最小值钳制（如 limit 不允许负数）
+    :param max_val: 可选最大值钳制
+    """
     try:
-        return int(val)
+        result = int(val)
     except (TypeError, ValueError):
-        return default
+        result = default
+    if min_val is not None:
+        result = max(min_val, result)
+    if max_val is not None:
+        result = min(max_val, result)
+    return result
 
 
 def _build_query_filter(args: Dict[str, Any]) -> QueryFilter:
@@ -350,21 +359,23 @@ async def _safe_remove_file(file_path: str, max_retries: int = 3, delay: float =
 
 async def _cleanup_temp_dir() -> None:
     temp_dir = _get_plugin_data_dir() / "temp"
-    if not temp_dir.exists():
-        return
+    export_dir = _get_plugin_data_dir() / "exports"
 
     def _do_cleanup():
         cleaned = 0
-        for item in temp_dir.iterdir():
-            try:
-                if item.is_file():
-                    item.unlink()
-                    cleaned += 1
-                elif item.is_dir():
-                    shutil.rmtree(item, ignore_errors=True)
-                    cleaned += 1
-            except Exception as e:
-                logger.warning(f"[FoxToolbox Web] 清理临时文件失败: {item}, {e}")
+        for dir_path in (temp_dir, export_dir):
+            if not dir_path.exists():
+                continue
+            for item in dir_path.iterdir():
+                try:
+                    if item.is_file():
+                        item.unlink()
+                        cleaned += 1
+                    elif item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                        cleaned += 1
+                except Exception as e:
+                    logger.warning(f"[FoxToolbox Web] 清理临时文件失败: {item}, {e}")
         if cleaned > 0:
             logger.info(f"[FoxToolbox Web] 清理了 {cleaned} 个残留临时文件/目录")
 
@@ -461,7 +472,7 @@ async def register_all_web_apis(context, db: Database):
         if not db:
             return jsonify({"success": False, "error": "数据库未初始化"})
         try:
-            limit = min(_safe_int(request.args.get("limit"), 20), MAX_STATS_LIMIT)
+            limit = _safe_int(request.args.get("limit"), 20, min_val=0, max_val=MAX_STATS_LIMIT)
             time_range = request.args.get("time")
             platform = request.args.get("platform")
             group_id = request.args.get("group_id")
@@ -481,7 +492,7 @@ async def register_all_web_apis(context, db: Database):
         if not db:
             return jsonify({"success": False, "error": "数据库未初始化"})
         try:
-            limit = min(_safe_int(request.args.get("limit"), 20), MAX_STATS_LIMIT)
+            limit = _safe_int(request.args.get("limit"), 20, min_val=0, max_val=MAX_STATS_LIMIT)
             time_range = request.args.get("time")
             platform = request.args.get("platform")
             start_time, end_time = None, None
@@ -1016,7 +1027,7 @@ async def register_all_web_apis(context, db: Database):
         try:
             platform = request.args.get("platform")
             group_id = request.args.get("group_id")
-            limit = min(_safe_int(request.args.get("limit"), 50), MAX_STATS_LIMIT)
+            limit = _safe_int(request.args.get("limit"), 50, min_val=0, max_val=MAX_STATS_LIMIT)
             senders = await db.get_distinct_senders(platform=platform, group_id=group_id, limit=limit)
             return jsonify({"success": True, "data": {"senders": senders}})
         except Exception as e:
@@ -1028,7 +1039,7 @@ async def register_all_web_apis(context, db: Database):
             return jsonify({"success": False, "error": "数据库未初始化"})
         try:
             platform = request.args.get("platform")
-            limit = min(_safe_int(request.args.get("limit"), 50), MAX_STATS_LIMIT)
+            limit = _safe_int(request.args.get("limit"), 50, min_val=0, max_val=MAX_STATS_LIMIT)
             groups = await db.get_distinct_groups(platform=platform, limit=limit)
             return jsonify({"success": True, "data": {"groups": groups}})
         except Exception as e:
@@ -1092,8 +1103,8 @@ async def register_all_web_apis(context, db: Database):
         table_name = request.args.get("table", "")
         if not table_name:
             return jsonify({"success": False, "error": "缺少表名参数"})
-        limit = _safe_int(request.args.get("limit"), 50)
-        offset = _safe_int(request.args.get("offset"), 0)
+        limit = _safe_int(request.args.get("limit"), 50, min_val=0)
+        offset = _safe_int(request.args.get("offset"), 0, min_val=0)
         try:
             data = await explorer.get_table_data(table_name, limit=limit, offset=offset)
             return jsonify({"success": True, "data": data})
@@ -1858,11 +1869,21 @@ async def cleanup_expired_tasks():
                 created_at = task.get("created_at", 0)
                 if completed_at and current_time - completed_at > MAX_EXPORT_FILE_AGE:
                     expired_imports.append(task_id)
+                    file_path = task.get("file_path")
+                    if file_path and os.path.exists(file_path):
+                        await _safe_remove_file(file_path)
                 elif not completed_at and current_time - created_at > STALE_TASK_MAX_AGE:
                     expired_imports.append(task_id)
+                    file_path = task.get("file_path")
+                    if file_path and os.path.exists(file_path):
+                        await _safe_remove_file(file_path)
                     logger.warning(f"[FoxToolbox Web] 清理崩溃的导入任务: {task_id}")
             for task_id in expired_imports:
                 _import_tasks.pop(task_id, None)
+            if expired_imports:
+                logger.info(
+                    f"[FoxToolbox Web] 已清理 {len(expired_imports)} 个过期导入任务"
+                )
         except asyncio.CancelledError:
             break
         except Exception as e:

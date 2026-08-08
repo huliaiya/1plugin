@@ -68,6 +68,18 @@ class TestParseRelativeTime:
         assert parse_relative_time("1w") is None
         assert parse_relative_time("") is None
 
+    def test_plus_sign_future(self):
+        # +1d 表示未来1天（从现在往后推）
+        result = parse_relative_time("+1d")
+        assert result is not None
+        start, end = result
+        assert start < end
+
+    def test_extreme_value_no_overflow(self):
+        # 极端天数不触发 OverflowError，视为无法解析
+        assert parse_relative_time("999999999999d") is None
+        assert parse_relative_time("-999999999999h") is None
+
 
 class TestParseDate:
     def test_iso_date(self):
@@ -92,6 +104,13 @@ class TestParseDate:
     def test_invalid_date(self):
         assert parse_date("not a date") is None
         assert parse_date("") is None
+
+    def test_impossible_calendar_date(self):
+        # 格式合法但月/日越界的输入不应抛异常，返回 None
+        assert parse_date("2024-13-40") is None
+        assert parse_date("2024-02-30") is None
+        assert parse_date("2024-00-10") is None
+        assert parse_date("2024-01-32 25:99") is None
 
 
 class TestParseDateRange:

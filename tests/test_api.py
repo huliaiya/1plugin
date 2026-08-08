@@ -216,3 +216,29 @@ class TestMessageRecorderAPIMedia:
     def test_get_schema_version(self, db_and_api):
         _, api = db_and_api
         assert api.get_schema_version() == SCHEMA_VERSION
+
+
+class TestSafeInt:
+    """验证 web_api._safe_int 的默认值、异常与范围钳制。"""
+
+    def _make_safe_int(self):
+        from astrbot_plugin_fox_toolbox.fox_toolbox.web_api import _safe_int
+
+        return _safe_int
+
+    def test_normal_and_default(self):
+        safe_int = self._make_safe_int()
+        assert safe_int("5", 20) == 5
+        assert safe_int("abc", 20) == 20
+        assert safe_int(None, 20) == 20
+
+    def test_limit_clamped_to_non_negative(self):
+        safe_int = self._make_safe_int()
+        # 负数 limit 被钳制为 0，避免生成 LIMIT -1 触发 SQL 报错
+        assert safe_int("-1", 20, min_val=0, max_val=200) == 0
+        assert safe_int("-999", 20, min_val=0, max_val=200) == 0
+
+    def test_limit_clamped_to_max(self):
+        safe_int = self._make_safe_int()
+        assert safe_int("99999", 20, min_val=0, max_val=200) == 200
+        assert safe_int("300", 20, min_val=0, max_val=200) == 200

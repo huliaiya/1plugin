@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.4] - 2026-08-08
+
+### Security
+- **修复媒体下载任意文件读取漏洞**：`media_downloader` 通过 AstrBot `MediaResolver` 读取媒体时，`file:///` 与绝对本地路径此前不经过校验，任意群成员发送 `file:///etc/passwd` 类图片消息即可触发宿主机任意文件读取并落盘。新增 `_safe_local_read_path` 白名单校验：仅放行 AstrBot 数据目录（含 OneBot 客户端缓存）之内的路径；OneBot 兜底 `download_file`/`get_image` 返回的本地路径同步纳入校验
+
+### Fixed
+- **非法日期导致查询接口 500**：`parse_date` 对 `2024-13-40`、`2024-02-30` 等格式合法但月/日越界的输入抛未捕获 `ValueError`，穿透 `parse_time_range` 使 Web 查询与 `/huli_record history` 功能失效。现在返回 None 并正常回退最近 24 小时
+- **`limit` 参数为负数时 SQL 报错**：`api_stats_senders`/`api_stats_groups`/`api_stats_senders` 排行等接口对 `?limit=-1` 生成 `LIMIT -1`，MySQL 报 `Incorrect arguments to LIMIT`。`_safe_int` 增加 `min_val`/`max_val` 钳制，负数归零、超大值截断到上限
+- **导入过期任务残留文件**：`cleanup_expired_tasks` 清理过期/崩溃的导入任务时未删除上传文件（对比导出任务分支会删除），中断的导入文件永久残留磁盘。现已与导出任务一致删除 `file_path`
+- **`exports/` 目录残留**：`_cleanup_temp_dir` 启动清扫只清理 `temp/`，崩溃重启后旧导出文件残留。现已同时清理 `exports/`
+- **`+1d` 相对时间无法解析**：`parse_relative_time` 正则仅接受 `-`，与文档声称支持 `+1d` 不符，已支持 `+` 前缀；极端天数（如 `999999999999d`）触发 `OverflowError` 已捕获
+- **`_to_int` 不兼容 Decimal**：`snapshot_renderer._to_int` 声称兼容 MySQL 驱动的 Decimal，但 `Decimal` 实例会落入默认值返回 0，已改用 `numbers.Number` 判定
+- 版本号 bump 至 2.7.4
+
 ## [2.7.3] - 2026-08-08
 
 ### Fixed

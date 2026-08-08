@@ -1,5 +1,6 @@
 """media_downloader.py 单元测试"""
 
+import asyncio
 import io
 import json
 from unittest.mock import patch, MagicMock, AsyncMock
@@ -200,7 +201,12 @@ class TestDownloadMediaNonHttp:
         with patch.object(
             md, "_fetch_via_media_resolver", new_callable=AsyncMock, return_value=None
         ):
-            result = await md.download_media("abc123.image", "Image", bot_api=bot_api)
+            # 将数据目录 mock 到 tmp_path，使 OneBot 返回的本地文件通过白名单校验
+            with patch(
+                "astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader.get_astrbot_data_path",
+                return_value=str(tmp_path),
+            ):
+                result = await md.download_media("abc123.image", "Image", bot_api=bot_api)
         assert result is not None
         assert result.endswith(".png")
 
@@ -260,3 +266,70 @@ class TestSsrRedirectProtection:
         assert _is_safe_url("http://169.254.169.254/latest/meta-data/") is False
         assert _is_safe_url("http://127.0.0.1:3306/") is False
         assert _is_safe_url("http://localhost/") is False
+
+
+class TestLocalFileReadProtection:
+    """验证 file:/// 与绝对路径的本地文件读取白名单（防止任意文件读取）。"""
+
+    def test_file_uri_inside_data_dir_allowed(self, tmp_path):
+        from astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader import (
+            _safe_local_read_path,
+        )
+
+        target = tmp_path / "sub" / "cache" / "abc.png"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"x")
+        with patch(
+            "astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader.get_astrbot_data_path",
+            return_value=str(tmp_path),
+        ):
+            result = _safe_local_read_path(f"file://{target}")
+        assert result is not None
+        assert result == target.resolve()
+
+    def test_file_uri_outside_data_dir_rejected(self, tmp_path):
+        from astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader import (
+            _safe_local_read_path,
+        )
+
+        # /etc/passwd 在数据目录之外 → 拒绝
+        with patch(
+            "astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader.get_astrbot_data_path",
+            return_value=str(tmp_path),
+        ):
+            assert _safe_local_read_path("file:///etc/passwd") is None
+            assert _safe_local_read_path("/etc/passwd") is None
+
+    def test_absolute_path_outside_data_dir_rejected(self, tmp_path):
+        from astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader import (
+            _safe_local_read_path,
+        )
+
+        with patch(
+            "astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader.get_astrbot_data_path",
+            return_value=str(tmp_path),
+        ):
+            assert _safe_local_read_path("/root/.ssh/id_rsa") is None
+            assert _safe_local_read_path("/etc/shadow") is None
+
+    def test_relative_filename_not_absolute_returns_none(self, tmp_path):
+        from astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader import (
+            _safe_local_read_path,
+        )
+
+        with patch(
+            "astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader.get_astrbot_data_path",
+            return_value=str(tmp_path),
+        ):
+            # 纯文件名（相对路径，非绝对）不通过绝对路径校验
+            assert _safe_local_read_path("abc.png") is None
+            assert _safe_local_read_path("images/abc.png") is None
+
+    def test_resolver_rejects_outside_file_uri(self, tmp_path):
+        """集成：download_media 拒绝数据目录之外的 file:/// 引用。"""
+        md = MediaDownloader("test_plugin", max_retries=0)
+        with patch(
+            "astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader.get_astrbot_data_path",
+            return_value=str(tmp_path),
+        ):
+            assert asyncio.run(md.download_media("file:///etc/passwd", "Image")) is None

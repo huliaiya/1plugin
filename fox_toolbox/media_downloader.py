@@ -7,13 +7,16 @@ import ipaddress
 import socket
 from pathlib import Path
 from typing import Optional, List, Any, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 
 import aiohttp
 from PIL import Image
 
 from astrbot.api import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_data_path,
+    get_astrbot_plugin_data_path,
+)
 
 
 MEDIA_TYPE_MAP = {
@@ -115,6 +118,42 @@ def _is_safe_url(url: str) -> bool:
         return False
 
     return True
+
+
+def _safe_local_read_path(media_ref: str) -> Optional[Path]:
+    """将 file:/// URI 或本地绝对路径解析为 Path，并校验是否允许读取。
+
+    仅放行位于 AstrBot 数据目录（含 OneBot 客户端缓存等）之内的路径；
+    ``/etc/passwd``、``/root/.ssh/`` 等宿主机任意路径一律拒绝，防止
+    任意群成员通过发送 ``file:///etc/passwd`` 类消息触发任意文件读取。
+
+    :param media_ref: 媒体引用，可为 ``file:///`` URI 或本地路径
+    :return: 允许读取的绝对 Path；不合法或越界返回 None
+    """
+    try:
+        ref_str = str(media_ref)
+        if ref_str.lower().startswith("file://"):
+            parsed = urlparse(ref_str)
+            netloc = parsed.netloc or ""
+            path_part = parsed.path or ""
+            if netloc and netloc.lower() != "localhost":
+                path_part = f"//{netloc}{path_part}"
+            from urllib.request import url2pathname
+
+            path = Path(url2pathname(path_part))
+        else:
+            path = Path(ref_str)
+        path = path.resolve()
+    except Exception:
+        return None
+    if not path.is_absolute():
+        return None
+    try:
+        data_root = Path(get_astrbot_data_path()).resolve()
+        path.relative_to(data_root)
+    except (ValueError, OSError):
+        return None
+    return path
 
 
 class MediaDownloader:
@@ -299,11 +338,18 @@ class MediaDownloader:
         统一处理 http(s)、``file:///``、``base64://``、``data:`` 以及裸本地路径。
 
         ponytail: MediaResolver 在 aiohttp SSRF 检查之前执行，且支持 file:///
-        与裸本地路径，任意群成员发送 file:///etc/passwd 类消息会触发读取本地
-        文件并入库（信息被记录，需 WebUI 权限导出可见）。保留是为兼容 OneBot
-        客户端缓存文件的正常下载；若对隐私敏感，应在调用前对 file:// 路径
-        增加目录白名单校验。
+        与裸本地路径；本方法对 ``file:///`` 与绝对路径先做数据目录白名单校验
+        （见 `_safe_local_read_path`），拒绝读取宿主机任意文件，保留 OneBot
+        客户端缓存的正常下载。
         """
+        # 本地路径（file:/// 或绝对路径）白名单校验：拒绝读取数据目录之外的文件
+        if str(url).lower().startswith(("file://", "/", "\\")):
+            safe_path = _safe_local_read_path(url)
+            if safe_path is None:
+                logger.warning(
+                    f"[MediaDownloader] 拒绝读取数据目录之外的本地文件: {url[:80]}"
+                )
+                return None
         media_type_map = {
             "Image": "image",
             "Record": "audio",
@@ -426,6 +472,12 @@ class MediaDownloader:
                 if isinstance(result, dict):
                     path = result.get("file") or result.get("body")
                     if path:
+                        if _safe_local_read_path(str(path)) is None:
+                            logger.warning(
+                                f"[MediaDownloader] 拒绝读取数据目录之外的下载文件: "
+                                f"{path[:80]}"
+                            )
+                            return None
                         logger.debug(
                             f"[MediaDownloader] OneBot download_file 成功: "
                             f"{url[:50]}... -> {path}"
@@ -452,6 +504,12 @@ class MediaDownloader:
                 if isinstance(dl_result, dict):
                     path = dl_result.get("file") or dl_result.get("body")
                     if path:
+                        if _safe_local_read_path(str(path)) is None:
+                            logger.warning(
+                                f"[MediaDownloader] 拒绝读取数据目录之外的下载文件: "
+                                f"{path[:80]}"
+                            )
+                            return None
                         logger.debug(
                             f"[MediaDownloader] OneBot get_image+download_file 成功: "
                             f"{file_name} -> {path}"
@@ -459,8 +517,14 @@ class MediaDownloader:
                         return await asyncio.to_thread(PathLib(path).read_bytes)
                 return None
 
-            # 返回本地可达路径 → 直接读
+            # 返回本地可达路径 → 直接读（仅限 AstrBot 数据目录内的文件）
             if PathLib(returned_url).is_file():
+                if _safe_local_read_path(str(returned_url)) is None:
+                    logger.warning(
+                        f"[MediaDownloader] 拒绝读取数据目录之外的 OneBot 文件: "
+                        f"{returned_url[:80]}"
+                    )
+                    return None
                 logger.debug(
                     f"[MediaDownloader] OneBot get_image 本地路径成功: "
                     f"{file_name} -> {returned_url}"

@@ -15,11 +15,11 @@ def get_day_start_end(date: datetime) -> Tuple[int, int]:
 
 def parse_relative_time(time_str: str) -> Optional[Tuple[int, int]]:
     """
-    解析相对时间格式，如 -1d、-7d、-1h
+    解析相对时间格式，如 -1d、-7d、-1h、+1d
 
     返回: (start_timestamp, end_timestamp) 毫秒时间戳
     """
-    match = re.match(r'^(-?\d+)([dhm])$', time_str.lower())
+    match = re.match(r'^([+-]?\d+)([dhm])$', time_str.lower())
     if not match:
         return None
 
@@ -28,33 +28,37 @@ def parse_relative_time(time_str: str) -> Optional[Tuple[int, int]]:
 
     now = datetime.now()
 
-    if unit == 'd':
-        # 天
-        if value < 0:
-            # -1d 表示过去1天（从现在往前推）
-            start = now + timedelta(days=value)
-            end = now
+    try:
+        if unit == 'd':
+            # 天
+            if value < 0:
+                # -1d 表示过去1天（从现在往前推）
+                start = now + timedelta(days=value)
+                end = now
+            else:
+                # +1d 表示未来1天（从现在往后推）
+                start = now
+                end = now + timedelta(days=value)
+        elif unit == 'h':
+            # 小时
+            if value < 0:
+                start = now + timedelta(hours=value)
+                end = now
+            else:
+                start = now
+                end = now + timedelta(hours=value)
+        elif unit == 'm':
+            # 分钟
+            if value < 0:
+                start = now + timedelta(minutes=value)
+                end = now
+            else:
+                start = now
+                end = now + timedelta(minutes=value)
         else:
-            # +1d 表示未来1天（从现在往后推）
-            start = now
-            end = now + timedelta(days=value)
-    elif unit == 'h':
-        # 小时
-        if value < 0:
-            start = now + timedelta(hours=value)
-            end = now
-        else:
-            start = now
-            end = now + timedelta(hours=value)
-    elif unit == 'm':
-        # 分钟
-        if value < 0:
-            start = now + timedelta(minutes=value)
-            end = now
-        else:
-            start = now
-            end = now + timedelta(minutes=value)
-    else:
+            return None
+    except OverflowError:
+        # 极端值（如 999999999999d）导致 timedelta 溢出，视为无法解析
         return None
 
     return int(start.timestamp() * 1000), int(end.timestamp() * 1000)
@@ -74,10 +78,14 @@ def parse_date(date_str: str) -> Optional[datetime]:
         if match:
             groups = match.groups()
             year, month, day = int(groups[0]), int(groups[1]), int(groups[2])
-            if len(groups) >= 5:
-                hour, minute = int(groups[3]), int(groups[4])
-                return datetime(year, month, day, hour, minute)
-            return datetime(year, month, day)
+            try:
+                if len(groups) >= 5:
+                    hour, minute = int(groups[3]), int(groups[4])
+                    return datetime(year, month, day, hour, minute)
+                return datetime(year, month, day)
+            except ValueError:
+                # 非法日期（如 2024-13-40、2024-02-30），视为无法解析
+                return None
     return None
 
 

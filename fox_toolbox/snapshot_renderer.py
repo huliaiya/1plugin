@@ -13,6 +13,7 @@
 """
 
 import io
+import numbers
 import time
 import unicodedata
 from pathlib import Path
@@ -41,8 +42,11 @@ def _to_int(value, default=0):
         return default
     if isinstance(value, bool):
         return int(value)
-    if isinstance(value, (int, float)):
-        return int(value)
+    if isinstance(value, numbers.Number):
+        try:
+            return int(value)
+        except (ValueError, TypeError, OverflowError):
+            return default
     if isinstance(value, str):
         try:
             return int(float(value.strip()))
