@@ -56,3 +56,13 @@ Entries discovered by the Agent during task execution should follow this format:
   - 本仓库本地验证可直接使用 `PYTHONPATH=/workspace python3 -m pytest -q`
   - 语法检查可使用 `python3 -m compileall fox_toolbox astrbot_plugin_fox_toolbox`
   - 插件入口导入验证可使用 `PYTHONPATH=/workspace python3 -c "import conftest, main; print('main import ok')"`
+
+[Project Knowledge Summary]
+- Date: 2026-08-08
+- Context: Discovered by Agent while performing 全库死代码清理（曾漏扫 tests/ 导致误删被测试引用的常量）
+- Category: Testing Methods
+- Instructions:
+  - 死代码/未使用检查（pyflakes、vulture、grep 验证）必须同时扫描 `fox_toolbox/`、`main.py`、`tests/` 三处，遗漏 tests/ 会误删被测试引用的公共符号
+  - pyflakes 命令：`python3 -m pyflakes fox_toolbox/ main.py tests/`
+  - vulture 报的 `__aexit__(*exc)`、mock `execute(*a, **k)`、redis `set(ex=None)` 参数是协议/API 兼容性必需，属误报，不要改
+  - serializer.py 的 `MEDIA_COMPONENT_TYPES`/`COMPONENT_TYPE_MEDIA_MAP`/`ALL_KNOWN_COMPONENT_TYPES` 被 tests/test_serializer.py 引用，属公共常量，勿删
