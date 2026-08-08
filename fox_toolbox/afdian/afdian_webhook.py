@@ -48,7 +48,9 @@ class AfdianWebhookServer:
         self._order_callback = callback
 
     async def list_orders(self, request: web.Request):
-        if not self._auth_ok(request):
+        # /orders 返回全部订单（含收货手机号/地址），属管理端点，
+        # 未配置校验令牌时一律拒绝，防止公网暴露隐私数据
+        if not self._token or not self._auth_ok(request):
             return web.json_response({"ec": 403, "em": "forbidden"}, status=403)
         if not self.db:
             return web.json_response({"ec": -1, "em": "数据库未初始化"})
@@ -152,6 +154,12 @@ class AfdianWebhookServer:
             self._started = False
             raise
         logger.info(f"[Afdian] Webhook 服务已启动：监听 {self.host}:{self.port}")
+        if not self._token:
+            logger.warning(
+                "[Afdian] Webhook 未配置校验令牌（afdian_webhook_token），"
+                "任何请求均可触发订单处理；若端口暴露公网，请在回调 URL 中"
+                "携带 ?token=xxx 并配置令牌"
+            )
         return True
 
     async def stop(self):

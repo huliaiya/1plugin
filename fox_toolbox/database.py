@@ -959,6 +959,8 @@ class Database:
 
     async def get_content_type_stats(self) -> List[Dict]:
         """获取消息内容类型统计（文字/图片/文件/视频/语音/文档/音频/压缩包等）"""
+        # ponytail: 全表拉取 content_types/message_str 到内存统计，
+        # 百万级消息时会产生瞬时内存峰值；若数据量过大应改为 SQL 聚合或分批扫描
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("SELECT content_types, message_str FROM messages")
@@ -1063,6 +1065,8 @@ class Database:
 
     async def get_platform_detail_stats(self) -> List[Dict]:
         """获取各平台的详细统计（消息数、群聊数、私聊数等）"""
+        # ponytail: 全表拉取统计，百万级消息时内存峰值明显；
+        # 若数据量过大应改为按平台分组 SQL 聚合
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
@@ -1266,6 +1270,8 @@ class Database:
         group_id: Optional[str] = None,
     ) -> List[Dict]:
         """按时间间隔统计消息数量（Python 端分组，彻底兼容 MySQL 5.7）"""
+        # ponytail: 无 LIMIT 全表拉取时间列，百万级消息时内存峰值明显；
+        # 若数据量过大应改为 SQL 按日/周/月聚合
         conditions = []
         params: List[Any] = []
         if start_time:
@@ -1389,6 +1395,8 @@ class Database:
         platform: Optional[str] = None,
     ) -> List[Dict]:
         """获取群组活跃度排行"""
+        # ponytail: 全表拉取后 Python 端分组，百万级消息时内存峰值明显；
+        # 若数据量过大应改为 SQL GROUP BY
         conditions = [
             "group_id IS NOT NULL",
             "group_id != ''",

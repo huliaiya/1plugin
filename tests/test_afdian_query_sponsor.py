@@ -413,3 +413,62 @@ def test_cleanup_removes_expired_state():
     assert "old" not in feature.afdian_order_history
     assert "active" in feature.afdian_blacklist
     assert "active" in feature.afdian_order_history
+
+
+# ---- 2.7.1 安全修复回归 ----
+
+@pytest.mark.asyncio
+async def test_generate_payment_url_quotes_remark():
+    """支付链接 remark 含特殊字符时做 URL 编码，避免污染 query 参数。"""
+    client = _make_client({})
+    url = client.generate_payment_url(price=5, remark="u 1&x=y")
+    assert "remark=u%201%26x%3Dy" in url
+    assert "&x=y" not in url.replace("u%201%26x%3Dy", "")
+
+
+@pytest.mark.asyncio
+async def test_webhook_orders_requires_token():
+    """/orders 端点未配置令牌或令牌不匹配时一律 403（防止隐私泄露）。"""
+    from aiohttp.test_utils import make_mocked_request
+    from fox_toolbox.afdian.afdian_webhook import AfdianWebhookServer
+
+    server = AfdianWebhookServer("127.0.0.1", 6500, db=_FakeDb(), token="")
+    req = make_mocked_request("GET", "/orders", app=server.app)
+    resp = await server.list_orders(req)
+    assert resp.status == 403
+
+    server = AfdianWebhookServer("127.0.0.1", 6500, db=_FakeDb(), token="sec")
+    req = make_mocked_request("GET", "/orders", app=server.app)
+    resp = await server.list_orders(req)
+    assert resp.status == 403
+
+    req = make_mocked_request("GET", "/orders?token=wrong", app=server.app)
+    resp = await server.list_orders(req)
+    assert resp.status == 403
+
+    req = make_mocked_request("GET", "/orders?token=sec", app=server.app)
+    resp = await server.list_orders(req)
+    assert resp.status != 403
+
+
+@pytest.mark.asyncio
+async def test_afdian_create_order_rejects_invalid_price():
+    """/发电 金额为 0/负数/超上限时拒绝，且不登记待确认订单。"""
+    feature = _make_feature_with_rate_limit()
+    event = _FakeEvent()
+    for bad in (0, -1, 100001):
+        feature.afdian_pending_orders = {}
+        msg = await feature.afdian_create_order(event, price=bad)
+        assert "金额无效" in msg
+        assert feature.afdian_pending_orders == {}
+
+
+@pytest.mark.asyncio
+async def test_afdian_create_order_falls_back_default_on_bad_text():
+    """非数字文本回退默认金额生成链接（既有设计），并登记待确认订单。"""
+    feature = _make_feature_with_rate_limit()
+    event = _FakeEvent()
+    msg = await feature.afdian_create_order(event, price="abc")
+    assert "金额无效" not in msg
+    assert "afdian.com/order/create" in msg
+    assert "99901" in feature.afdian_pending_orders

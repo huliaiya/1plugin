@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.1] - 2026-08-08
+
+### Security
+- **`/orders` 端点强制令牌**：未配置 `afdian_webhook_token` 时不再放行查询（原逻辑无令牌即 403，但未配置时返回所有订单，含收货手机号/地址等隐私数据）；现未配置或令牌不匹配一律 403
+- **Webhook 启动未配令牌警告**：服务启动且未配置校验令牌时打印醒目警告，提示需在回调 URL 携带 `?token=xxx`
+- **支付链接 remark URL 编码**：`generate_payment_url` 对 remark 做 `urllib.parse.quote`，防止特殊字符污染 query 参数
+
+### Fixed
+- **`/发电` 金额上下限校验**：金额为 0/负数/超过 100000 时拒绝并提示，校验前置到待确认订单登记之前（非数字文本仍按既有设计回退默认金额）
+
+### Changed
+- **Webhook 模式内存防泄漏**：`use_polling=False` 时轮询循环永不启动，`afdian_pending_orders`/限流状态改为在每次 `/发电` 时惰性清理，防止字典无限增长
+- **统计接口标注上限**：`get_content_type_stats`/`get_platform_detail_stats`/`get_timeline_stats`/`get_group_ranking` 全表拉取标注 ponytail 注释（百万级消息时内存峰值明显，需改 SQL 聚合）
+- **媒体下载 file:// 风险标注**：`_fetch_via_media_resolver` 的任意本地文件读取风险以注释说明权衡（兼容 OneBot 客户端缓存下载），未改变行为
+- 版本号 bump 至 2.7.1
+
 ## [2.7.0] - 2026-08-08
 
 ### Changed

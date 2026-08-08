@@ -297,6 +297,12 @@ class MediaDownloader:
         """通过 AstrBot 官方 MediaResolver 获取字节。
 
         统一处理 http(s)、``file:///``、``base64://``、``data:`` 以及裸本地路径。
+
+        ponytail: MediaResolver 在 aiohttp SSRF 检查之前执行，且支持 file:///
+        与裸本地路径，任意群成员发送 file:///etc/passwd 类消息会触发读取本地
+        文件并入库（信息被记录，需 WebUI 权限导出可见）。保留是为兼容 OneBot
+        客户端缓存文件的正常下载；若对隐私敏感，应在调用前对 file:// 路径
+        增加目录白名单校验。
         """
         media_type_map = {
             "Image": "image",

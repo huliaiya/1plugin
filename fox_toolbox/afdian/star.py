@@ -32,6 +32,12 @@ class _MockAfdianClient:
     def __init__(self, order: dict):
         self._order = order
 
+    def generate_payment_url(self, price: float, remark: str) -> str:
+        return (
+            f"https://afdian.com/order/create?user_id=creator"
+            f"&remark={remark}&custom_price={round(price, 2):.2f}"
+        )
+
     async def query_order(self, page: int = 1, out_trade_no: str = "", per_page: int = 100) -> list:
         if page > 1:
             return []
@@ -92,7 +98,7 @@ class AfdianFeature:
         if getattr(self, "_afdian_brand", None):
             return self._afdian_brand
         name = "狐狸插件"
-        version = "2.7.0"
+        version = "2.7.1"
         try:
             meta_path = (
                 Path(__file__).resolve().parent.parent.parent / "metadata.yaml"
@@ -282,6 +288,22 @@ class AfdianFeature:
         """发电 <金额> —— 生成支付跳转链接。"""
         sender_id = str(event.get_sender_id())
 
+        # 惰性清理过期待确认订单与限流状态：
+        # 清理本挂在轮询循环里，但 use_polling=False（纯 Webhook）时轮询永不启动，
+        # 会在每次 /发电 时兜底清理，防止 pending/限流字典无限增长
+        await self._afdian_cleanup_expired_pending()
+        self._afdian_cleanup_rate_limit_state()
+
+        try:
+            price = float(price) if price is not None else float(
+                self.afdian_cfg.default_price
+            )
+        except (TypeError, ValueError):
+            price = float(self.afdian_cfg.default_price)
+
+        if not 0 < price <= 100000:
+            return "金额无效：请输入 0.01 ~ 100000 之间的金额"
+
         # 防刷限流：检查拉黑状态
         blackout = self._afdian_check_blacklist(sender_id)
         if blackout is not None:
@@ -313,13 +335,6 @@ class AfdianFeature:
                     self.afdian_bots.append(bot)
         except Exception:
             pass
-
-        try:
-            price = float(price) if price is not None else float(
-                self.afdian_cfg.default_price
-            )
-        except (TypeError, ValueError):
-            price = float(self.afdian_cfg.default_price)
 
         url = self.afdian_client.generate_payment_url(
             price=price, remark=str(sender_id)

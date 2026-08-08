@@ -6,6 +6,7 @@
 import hashlib
 import json
 import time
+from urllib.parse import quote
 
 import aiohttp
 
@@ -126,7 +127,7 @@ class AfdianAPIClient:
         url = (
             f"https://afdian.com/order/create?"
             f"user_id={self.user_id}"
-            f"&remark={remark}"
+            f"&remark={quote(remark)}"
             f"&custom_price={price_str}"
         )
         logger.debug(f"[Afdian] 生成跳转链接：{url}")
