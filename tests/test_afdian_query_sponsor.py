@@ -326,39 +326,42 @@ def _make_feature_with_rate_limit():
 
 
 def test_rate_limit_allows_two_orders_in_window():
-    """窗口内前两次发起不被拦截。"""
+    """窗口内前两次发起不被拦截（计数在链接生成成功后累加）。"""
     feature = _make_feature_with_rate_limit()
-    assert feature._afdian_check_rate_limit("u1") is None
-    assert feature._afdian_check_rate_limit("u1") is None
+    assert feature._afdian_rate_limit_exceeded("u1") is False
+    feature._afdian_record_order("u1")
+    assert feature._afdian_rate_limit_exceeded("u1") is False
+    feature._afdian_record_order("u1")
+    # 已有 2 次成功发起，本次为第 3 次，触发拉黑
+    assert feature._afdian_rate_limit_exceeded("u1") is True
 
 
 def test_rate_limit_blocks_third_and_blacklists():
     """窗口内第 3 次发起被拒绝，且触发拉黑。"""
     feature = _make_feature_with_rate_limit()
-    feature._afdian_check_rate_limit("u1")
-    feature._afdian_check_rate_limit("u1")
-    msg = feature._afdian_check_rate_limit("u1")
-    assert msg is not None
-    assert "已临时限制" in msg
+    feature._afdian_record_order("u1")
+    feature._afdian_record_order("u1")
+    assert feature._afdian_rate_limit_exceeded("u1") is True
     assert feature.afdian_blacklist.get("u1") is not None
 
 
 def test_blacklist_check_remains_active():
     """拉黑立即生效：后续调用直接命中拉黑提示。"""
     feature = _make_feature_with_rate_limit()
-    feature._afdian_check_rate_limit("u1")
-    feature._afdian_check_rate_limit("u1")
-    feature._afdian_check_rate_limit("u1")
+    feature._afdian_record_order("u1")
+    feature._afdian_record_order("u1")
+    feature._afdian_rate_limit_exceeded("u1")
     remaining = feature._afdian_check_blacklist("u1")
     assert remaining is not None and remaining > 0
 
 
 def test_rate_limit_disabled_allows_unlimited():
-    """关闭限流时不受次数限制。"""
+    """关闭限流时不受次数限制，也不记录计数。"""
     feature = _make_feature_with_rate_limit()
     feature.afdian_cfg.rate_limit_enabled = False
     for _ in range(10):
-        assert feature._afdian_check_rate_limit("u1") is None
+        feature._afdian_record_order("u1")
+        assert feature._afdian_rate_limit_exceeded("u1") is False
 
 
 def test_blacklist_check_clears_after_expiry():
@@ -368,3 +371,35 @@ def test_blacklist_check_clears_after_expiry():
     feature.afdian_order_history["u1"] = [time.time() - 1]
     assert feature._afdian_check_blacklist("u1") is None
     assert "u1" not in feature.afdian_blacklist
+
+
+def test_unrecorded_call_does_not_count():
+    """仅调用判断不计数；未成功发起则不会触发拉黑。"""
+    feature = _make_feature_with_rate_limit()
+    for _ in range(10):
+        assert feature._afdian_rate_limit_exceeded("u1") is False
+    assert "u1" not in feature.afdian_blacklist
+
+
+def test_record_after_success_accumulates():
+    """成功发起后才计数，连续 3 次触发拉黑。"""
+    feature = _make_feature_with_rate_limit()
+    feature._afdian_record_order("u1")
+    feature._afdian_record_order("u1")
+    assert feature._afdian_rate_limit_exceeded("u1") is True
+    # 触发后计数被清空，重新开始
+    assert feature.afdian_order_history.get("u1") in (None, [])
+
+
+def test_cleanup_removes_expired_state():
+    """定期清理会移除已到期拉黑与窗口外计数。"""
+    feature = _make_feature_with_rate_limit()
+    feature.afdian_blacklist["old"] = time.time() - 1
+    feature.afdian_order_history["old"] = [time.time() - 1]
+    feature.afdian_blacklist["active"] = time.time() + 3600
+    feature.afdian_order_history["active"] = [time.time()]
+    feature._afdian_cleanup_rate_limit_state()
+    assert "old" not in feature.afdian_blacklist
+    assert "old" not in feature.afdian_order_history
+    assert "active" in feature.afdian_blacklist
+    assert "active" in feature.afdian_order_history

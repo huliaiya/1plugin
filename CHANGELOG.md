@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.9] - 2026-08-08
+
+### Fixed
+- **修复限流误计数问题**：原实现先计数后生成支付链接，`generate_payment_url` 失败（如 API 异常）也会累加次数甚至误触发拉黑；现拆分为 `_afdian_rate_limit_exceeded`（判断是否达上限）与 `_afdian_record_order`（链接成功生成后才计数），失败不计数、不误拉黑
+- **修复拉黑后残留待确认订单**：触发拉黑时同时清理该用户在 `afdian_pending_orders` 中的未支付记录，避免轮询持续为其工作
+
+### Changed
+- **限流内存管理**：新增 `_afdian_cleanup_rate_limit_state`，随轮询定期清理已到期拉黑与窗口外计数，防止 `afdian_order_history` / `afdian_blacklist` 无限增长
+- 新增 3 项限流优化测试（判断不计数、成功后才计数、定期清理），全量 256 passed
+- 版本号 bump 至 2.6.9
+
 ## [2.6.8] - 2026-08-08
 
 ### Added

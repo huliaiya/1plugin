@@ -96,7 +96,7 @@ class AfdianFeature:
         if getattr(self, "_afdian_brand", None):
             return self._afdian_brand
         name = "狐狸插件"
-        version = "2.6.8"
+        version = "2.6.9"
         try:
             meta_path = (
                 Path(__file__).resolve().parent.parent.parent / "metadata.yaml"
@@ -296,9 +296,13 @@ class AfdianFeature:
                 f"请约 {minutes} 分钟后再试"
             )
         # 防刷限流：统计窗口内发起次数，达到上限则拉黑并拒绝本次
-        limit_msg = self._afdian_check_rate_limit(sender_id)
-        if limit_msg:
-            return limit_msg
+        if self._afdian_rate_limit_exceeded(sender_id):
+            max_orders = self.afdian_cfg.rate_limit_max_orders
+            ban_minutes = self.afdian_cfg.rate_limit_ban_seconds // 60
+            return (
+                f"⚠️ 检测到您在一分钟内发起了 {max_orders} 次订单，"
+                f"已临时限制 {ban_minutes} 分钟，请稍后再试"
+            )
 
         self.afdian_pending_orders[sender_id] = {
             "umo": event.unified_msg_origin,
@@ -325,6 +329,8 @@ class AfdianFeature:
         url = self.afdian_client.generate_payment_url(
             price=price, remark=str(sender_id)
         )
+        # 仅在支付链接成功生成后计数（生成失败不计入，避免误拉黑）
+        self._afdian_record_order(sender_id)
 
         # 无公网环境：优先用轮询检测新订单
         started = False
@@ -351,16 +357,17 @@ class AfdianFeature:
             return None
         return remaining
 
-    def _afdian_check_rate_limit(self, sender_id: str):
-        """统计 1 分钟窗口内发起订单次数；达到上限则拉黑并返回拒绝提示。
+    def _afdian_rate_limit_exceeded(self, sender_id: str) -> bool:
+        """判断本次 /发电 是否已触发限流。
 
-        仅统计成功走到下单的用户（即每次调用 /发电 算一次发起）。
-        达到 rate_limit_max_orders（默认 3 次）时：清空该用户计数并拉黑
-        rate_limit_ban_seconds（默认 1 小时），本次 /发电 被拒绝。
-        返回拒绝提示文案；未触发限制返回 None。
+        统计 rate_limit_window（默认 60 秒）窗口内该用户发起的订单次数；
+        若达到 rate_limit_max_orders-1 次（即本次为窗口内第 rate_limit_max_orders
+        次）则触发拉黑 rate_limit_ban_seconds（默认 1 小时）、清空计数并返回 True。
+        未达上限返回 False，计数由 `_afdian_record_order` 在链接成功生成后累加，
+        避免链接生成失败导致误计数。
         """
         if not self.afdian_cfg.rate_limit_enabled:
-            return None
+            return False
         window = self.afdian_cfg.rate_limit_window
         max_orders = self.afdian_cfg.rate_limit_max_orders
         now = time.time()
@@ -371,22 +378,33 @@ class AfdianFeature:
             for ts in history.get(sender_id, [])
             if now - ts < window
         ]
-        if len(user_times) >= max_orders - 1:
-            # 本次为窗口内第 max_orders 次发起，触发拉黑
-            blacklist[sender_id] = now + self.afdian_cfg.rate_limit_ban_seconds
-            history.pop(sender_id, None)
-            ban_minutes = self.afdian_cfg.rate_limit_ban_seconds // 60
-            logger.warning(
-                f"[Afdian] 用户 {sender_id} 在 {window} 秒内发起订单达到 "
-                f"{max_orders} 次，已拉黑 {ban_minutes} 分钟"
-            )
-            return (
-                f"⚠️ 检测到您在一分钟内发起了 {max_orders} 次订单，"
-                f"已临时限制 {ban_minutes} 分钟，请稍后再试"
-            )
+        if len(user_times) < max_orders - 1:
+            return False
+        # 本次为窗口内第 max_orders 次发起，触发拉黑
+        blacklist[sender_id] = now + self.afdian_cfg.rate_limit_ban_seconds
+        history.pop(sender_id, None)
+        getattr(self, "afdian_pending_orders", {}).pop(sender_id, None)
+        ban_minutes = self.afdian_cfg.rate_limit_ban_seconds // 60
+        logger.warning(
+            f"[Afdian] 用户 {sender_id} 在 {window} 秒内发起订单达到 "
+            f"{max_orders} 次，已拉黑 {ban_minutes} 分钟"
+        )
+        return True
+
+    def _afdian_record_order(self, sender_id: str):
+        """记录一次成功的订单发起（支付链接已生成），供限流窗口统计。"""
+        if not self.afdian_cfg.rate_limit_enabled:
+            return
+        window = self.afdian_cfg.rate_limit_window
+        now = time.time()
+        history = getattr(self, "afdian_order_history", {})
+        user_times = [
+            ts
+            for ts in history.get(sender_id, [])
+            if now - ts < window
+        ]
         user_times.append(now)
         history[sender_id] = user_times
-        return None
 
     # ---- 无公网轮询 ----
 
@@ -437,12 +455,30 @@ class AfdianFeature:
                     break
                 try:
                     await self._afdian_cleanup_expired_pending()
+                    self._afdian_cleanup_rate_limit_state()
                     await self.afdian_poll_once()
                 except Exception as e:
                     logger.warning(f"[Afdian] 轮询检测失败: {e}")
                 await asyncio.sleep(interval)
         finally:
             self.afdian_poll_task = None
+
+    def _afdian_cleanup_rate_limit_state(self):
+        """清理已到期的拉黑记录与窗口外历史计数，防止内存无限增长。"""
+        now = time.time()
+        history = getattr(self, "afdian_order_history", {})
+        blacklist = getattr(self, "afdian_blacklist", {})
+        for uid in list(blacklist):
+            if blacklist[uid] <= now:
+                blacklist.pop(uid, None)
+                history.pop(uid, None)
+        window = getattr(self.afdian_cfg, "rate_limit_window", 60)
+        for uid in list(history):
+            remaining = [
+                ts for ts in history[uid] if now - ts < window
+            ]
+            if remaining:
+                history[uid] = remaining
 
     async def _afdian_cleanup_expired_pending(self):
         """清理超时未支付的待确认订单，避免 pending 记录无限累积。"""
