@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.5] - 2026-08-08
+
+### Changed
+- **轮询改为按需限时模式**：原先只要开启 `afdian_use_polling` 就常驻每 `afdian_poll_interval` 秒请求一次接口，导致后台日志刷屏；现改为用户 `/发电` 生成待确认订单时才启动轮询，每 `afdian_poll_interval` 秒（默认 5 秒）拉取一次，最多持续 `afdian_poll_timeout` 秒（默认 5 分钟），待确认订单处理完或窗口到期即自动停止，无人发电时不再请求接口
+- **日志降噪**：`query_order` / `query_sponsor` 不再每次打印完整接口响应，改为有数据时打印返回条数、无数据时降为 debug 级别
+
+### Fixed
+- **订单只入库一次不覆盖旧订单**：轮询与 Webhook 均使用按 `out_trade_no` 去重的原子写入（INSERT IGNORE），旧订单不会被重复覆盖
+
+### Changed
+- 版本号 bump 至 2.6.5
+
 ## [2.6.4] - 2026-08-08
 
 ### Fixed

@@ -84,7 +84,15 @@ class AfdianAPIClient:
         if out_trade_no:
             params["out_trade_no"] = out_trade_no
         res = await self._post("/query-order", params)
-        logger.info(f"[Afdian] 查询订单 {out_trade_no} 结果: {res}")
+        if res.get("ec") != 0:
+            logger.warning(f"[Afdian] 查询订单失败: {res}")
+        elif res.get("data", {}).get("list"):
+            logger.info(
+                f"[Afdian] 查询订单 {out_trade_no or '全部'} 返回 "
+                f"{len(res['data']['list'])} 条"
+            )
+        else:
+            logger.debug(f"[Afdian] 查询订单 {out_trade_no or '全部'} 无新数据")
         return res.get("data", {}).get("list", [])
 
     async def query_sponsor(
@@ -102,7 +110,13 @@ class AfdianAPIClient:
         if sponsor_user_ids:
             params["user_id"] = sponsor_user_ids
         sponsors = await self._post("/query-sponsor", params)
-        logger.info(f"[Afdian] 查询赞助者({sponsor_user_ids}) 结果: {sponsors}")
+        if res := sponsors.get("data", {}).get("list"):
+            logger.info(
+                f"[Afdian] 查询赞助者({sponsor_user_ids or '全部'}) 返回 "
+                f"{len(res)} 条"
+            )
+        else:
+            logger.debug(f"[Afdian] 查询赞助者({sponsor_user_ids or '全部'}) 无数据")
         return sponsors.get("data", {})
 
     def generate_payment_url(self, price: float, remark: str) -> str:

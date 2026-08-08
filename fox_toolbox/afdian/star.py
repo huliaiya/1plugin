@@ -65,6 +65,7 @@ class AfdianFeature:
         self.afdian_started = False
         self.afdian_sync_task: asyncio.Task | None = None
         self.afdian_poll_task: asyncio.Task | None = None
+        self.afdian_poll_window_end: float = 0.0
 
     @property
     def afdian_brand(self) -> tuple:
@@ -72,7 +73,7 @@ class AfdianFeature:
         if getattr(self, "_afdian_brand", None):
             return self._afdian_brand
         name = "狐狸插件"
-        version = "2.6.4"
+        version = "2.6.5"
         try:
             meta_path = (
                 Path(__file__).resolve().parent.parent.parent / "metadata.yaml"
@@ -170,7 +171,8 @@ class AfdianFeature:
 
         - 尝试启动 Webhook 服务（有公网时由爱发电平台主动推送）
         - 启动/重载时后台拉取历史订单入库（去重，只存新增）
-        - 若配置启用轮询，启动无公网轮询检测作为补充/替代
+        - 轮询为按需模式：用户 /发电 登记待确认订单后才启动限时轮询，
+          无需在启动时预启动，避免无人发电时持续请求接口
         """
         if not self.afdian_cfg.enabled:
             logger.info("[Afdian] 爱发电功能未启用，跳过服务启动")
@@ -190,10 +192,6 @@ class AfdianFeature:
             self.afdian_sync_task = asyncio.create_task(
                 self.afdian_sync_history_orders()
             )
-
-        # 无公网轮询兜底（与 Webhook 可同时运行，订单按 out_trade_no 排重）
-        if self.afdian_cfg.use_polling:
-            await self.afdian_ensure_polling()
 
     async def afdian_stop(self):
         """停止爱发电 Webhook 服务并关闭 API 客户端。"""
@@ -304,44 +302,58 @@ class AfdianFeature:
     # ---- 无公网轮询 ----
 
     async def afdian_ensure_polling(self) -> bool:
-        """确保轮询检测任务运行（无公网时替代 Webhook 推送）。
+        """按需启动限时轮询：仅当存在待确认订单时启动。
 
-        调用前需为对应用户登记 pending_orders 记录。
+        由 /发电 命令在登记待确认订单后调用，并刷新轮询窗口
+        （每次发电最多 poll_timeout 秒）；窗口到期或无待确认订单
+        时轮询自动停止，避免无人发电时持续请求接口刷屏日志。
         """
+        if not self.afdian_cfg.use_polling:
+            return False
+        if not self.afdian_pending_orders:
+            return False
+        self.afdian_poll_window_end = time.time() + self.afdian_cfg.poll_timeout
         if self.afdian_poll_task is None or self.afdian_poll_task.done():
             try:
                 self.afdian_poll_task = asyncio.create_task(
                     self.afdian_poll_loop()
                 )
-                logger.info("[Afdian] 启动无公网轮询检测任务")
+                logger.info("[Afdian] 启动按需轮询检测任务")
             except Exception as e:
                 logger.warning(f"[Afdian] 启动轮询任务失败: {e}")
                 return False
         return True
 
     async def afdian_poll_loop(self):
-        """无公网轮询循环：定时拉取订单，发现新订单时走与 Webhook 相同的处理逻辑。
+        """按需限时轮询：发电后检测新订单，窗口到期或无待确认订单即停止。
 
-        每轮拉取最新若干订单，与本地库比对（按 out_trade_no 排重），
-        新订单调用 `on_afdian_new_order`（通知订阅会话 + 备注匹配自动回复，
-        与 Webhook 回调逻辑一致）。
+        每笔待确认订单触发一个轮询窗口（最多 poll_timeout 秒，默认 5 分钟），
+        窗口内每 poll_interval 秒（默认 5 秒）拉取一次订单；订单全部处理完
+        或窗口超时后自动停止，不再持续请求接口避免刷屏日志。
         """
-        # 等待历史订单同步完成，避免把历史订单误判为新订单触发通知
-        if self.afdian_sync_task and not self.afdian_sync_task.done():
-            try:
-                await self.afdian_sync_task
-            except (asyncio.CancelledError, Exception):
-                pass
-        interval = self.afdian_cfg.poll_interval
-        while True:
-            if not self.afdian_cfg.enabled:
-                break
-            try:
-                await self._afdian_cleanup_expired_pending()
-                await self.afdian_poll_once()
-            except Exception as e:
-                logger.warning(f"[Afdian] 轮询检测失败: {e}")
-            await asyncio.sleep(interval)
+        try:
+            # 等待历史订单同步完成，避免把历史订单误判为新订单触发通知
+            if self.afdian_sync_task and not self.afdian_sync_task.done():
+                try:
+                    await self.afdian_sync_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+            interval = self.afdian_cfg.poll_interval
+            while self.afdian_cfg.enabled:
+                if not self.afdian_pending_orders:
+                    logger.info("[Afdian] 无待确认订单，停止轮询")
+                    break
+                if time.time() >= self.afdian_poll_window_end:
+                    logger.info("[Afdian] 轮询窗口到期，停止轮询")
+                    break
+                try:
+                    await self._afdian_cleanup_expired_pending()
+                    await self.afdian_poll_once()
+                except Exception as e:
+                    logger.warning(f"[Afdian] 轮询检测失败: {e}")
+                await asyncio.sleep(interval)
+        finally:
+            self.afdian_poll_task = None
 
     async def _afdian_cleanup_expired_pending(self):
         """清理超时未支付的待确认订单，避免 pending 记录无限累积。"""

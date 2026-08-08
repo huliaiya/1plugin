@@ -5,7 +5,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E4.16%2C%3C5-blue?style=for-the-badge)](https://github.com/Soulter/astrbot)
 [![Python](https://img.shields.io/badge/Python-3.12+-green?style=for-the-badge)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.6.4-orange?style=for-the-badge)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.6.5-orange?style=for-the-badge)](CHANGELOG.md)
 
 **全平台聊天消息自动记录 | MySQL 5.7 存储 | Web 管理面板 | 全文搜索 | 插件 API**
 
@@ -273,11 +273,11 @@ Web 面板采用 **Liquid Glass** 液态玻璃设计风格，通过现代 CSS �
 | `/查询发电` | 查询默认账号收到的赞助记录；别名 `/查询赞助` | 管理员 |
 | `/开启发电通知` | 在当前会话开启爱发电订单通知；别名 `/发电通知`、`/爱发电通知` | 管理员 |
 
-> **工作流程**：用户在机器人发送 `/发电`，获得支付链接并付款（链接备注中写入用户ID）；有公网时爱发电通过 Webhook 推送订单给插件；无公网时插件按 `afdian_poll_interval`（默认 5 秒）轮询拉取新订单。两种方式下单均保存订单、通知所有订阅会话，并对该付款用户发送赞助成功回复。
+> **工作流程**：用户在机器人发送 `/发电`，获得支付链接并付款（链接备注中写入用户ID）；有公网时爱发电通过 Webhook 推送订单给插件；无公网时插件触发按需限时轮询，每 `afdian_poll_interval` 秒（默认 5 秒）拉取一次新订单，最多持续 `afdian_poll_timeout` 秒（默认 5 分钟），无待确认订单时自动停止。哪种方式下单均保存订单、通知所有订阅会话，并对该付款用户发送赞助成功回复。
 
 > **历史订单同步**：插件启动/重载时会自动分页拉取爱发电平台的全部历史订单并入库（按交易号 `out_trade_no` 去重，只保存新增订单），保证 Webhook/轮询上线前的订单不丢失；也可随时使用 `/同步历史订单` 命令手动补拉。
 
-> **无公网轮询**：无公网地址的机器可开启 `afdian_use_polling`（默认开启），用户点击发电后插件每 `afdian_poll_interval` 秒（默认 5 秒）拉取一次订单，在 `afdian_poll_timeout`（默认 300 秒）内发现新订单即按与 Webhook 完全相同的备注匹配逻辑处理；建议同时关闭 Webhook 端口对外监听。
+> **无公网轮询（按需限时）**：无公网地址的机器可开启 `afdian_use_polling`（默认开启）。用户点击发电后插件启动限时轮询：每 `afdian_poll_interval` 秒（默认 5 秒）拉取一次订单，最多持续 `afdian_poll_timeout` 秒（默认 300 秒 = 5 分钟）；发现新订单即按与 Webhook 完全相同的备注匹配逻辑处理，订单只有首次入库（按交易号去重，旧订单不会被覆盖）；待确认订单全部处理完或轮询窗口到期后自动停止，无人发电时不会持续请求接口、避免刷屏日志。建议同时关闭 Webhook 端口对外监听。
 
 > **图片水印**：`/查询订单`、`/查询发电` 的查询结果图片顶部显示插件名与插件版本（替代默认的框架名水印）。
 

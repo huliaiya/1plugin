@@ -1,11 +1,14 @@
-"""爱发电查询发电（query-sponsor）修复测试
+"""爱发电查询发电（query-sponsor）与按需轮询修复测试
 
 覆盖以下修复点：
 1. query_sponsor 不传 user_id 时查询全部赞助者（不把自己 user_id 当筛选条件）
 2. 指定 sponsor_user_ids 时仍会带上 user_id 筛选
 3. 查询赞助为空时回退展示本地已同步订单
 4. 本地订单 sku_detail 为 JSON 字符串时可正确还原解析
+5. 轮询为按需限时模式：无待确认订单时不启动；有待确认订单时启动并按窗口结束
 """
+
+from types import SimpleNamespace
 
 import pytest
 
@@ -119,3 +122,65 @@ async def test_db_query_to_dict_missing_sku_keeps_empty():
     row = {"out_trade_no": "T1"}
     result = _db_order_to_dict(row)
     assert result["sku_detail"] == []
+
+
+# ---- 按需限时轮询 ----
+
+def _make_feature(config=None, client=None):
+    """构建一个最小 AfdianFeature 实例。"""
+    cfg = SimpleNamespace(
+        enabled=True,
+        use_polling=True,
+        poll_interval=1,
+        poll_timeout=300,
+    )
+    if config:
+        for k, v in config.items():
+            setattr(cfg, k, v)
+    feature = AfdianFeature.__new__(AfdianFeature)
+    feature.afdian_cfg = cfg
+    feature.afdian_client = client or _make_client({"data": {"list": []}})
+    feature.afdian_db = SimpleNamespace(save_order_if_new=lambda order: False)
+    feature.afdian_sync_task = None
+    feature.afdian_poll_task = None
+    feature.afdian_pending_orders = {}
+    return feature
+
+
+@pytest.mark.asyncio
+async def test_ensure_polling_skips_without_pending():
+    """无待确认订单时不启动轮询（不请求接口）。"""
+    feature = _make_feature()
+    started = await feature.afdian_ensure_polling()
+    assert started is False
+    assert feature.afdian_poll_task is None
+
+
+@pytest.mark.asyncio
+async def test_ensure_polling_starts_with_pending():
+    """有待确认订单时启动限时轮询任务。"""
+    feature = _make_feature()
+    feature.afdian_pending_orders["user_1"] = {"created_at": 0}
+    started = await feature.afdian_ensure_polling()
+    assert started is True
+    assert feature.afdian_poll_task is not None
+
+
+@pytest.mark.asyncio
+async def test_ensure_polling_disabled_when_use_polling_off():
+    """use_polling 关闭时不启动轮询。"""
+    feature = _make_feature({"use_polling": False})
+    feature.afdian_pending_orders["user_1"] = {"created_at": 0}
+    started = await feature.afdian_ensure_polling()
+    assert started is False
+    assert feature.afdian_poll_task is None
+
+
+@pytest.mark.asyncio
+async def test_poll_loop_stops_when_pending_cleared():
+    """待确认订单被处理后（pending 清空）轮询自动停止。"""
+    feature = _make_feature()
+    feature.afdian_pending_orders["user_1"] = {"created_at": 0}
+    feature.afdian_poll_window_end = 0  # 窗口立即过期
+    await feature.afdian_poll_loop()
+    assert feature.afdian_poll_task is None
