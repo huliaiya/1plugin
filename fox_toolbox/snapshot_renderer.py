@@ -510,8 +510,10 @@ def _draw_stat_cards(img, y, stats: MessageStats, db_table_count: int):
 
 
 def _draw_redis_card(img, y, redis_status: Optional[Dict] = None) -> int:
-    """绘制 Redis 缓存状态卡片（单行横向布局）。"""
-    card_h = _PX(96)
+    """绘制 Redis 缓存状态卡片（单列信息布局）。
+
+    卡片高度按信息行数动态计算，避免文字溢出卡片底部。
+    """
     x0 = _PX(_PADDING)
     x1 = _W_FULL - _PX(_PADDING)
     draw = ImageDraw.Draw(img)
@@ -534,16 +536,7 @@ def _draw_redis_card(img, y, redis_status: Optional[Dict] = None) -> int:
         state_text = "已降级（SQLite/无缓存）" if enabled else "已配置未启用"
         accent = (255, 167, 38) if enabled else (176, 190, 197)
 
-    _draw_glass_card(img, (x0, y, x1, y + card_h), title=title, accent=accent)
-
-    # 状态徽标（右侧）
-    f_state = _get_font(_PX(20), bold=True)
-    sw = _text_width(draw, state_text, f_state)
-    sx = x1 - sw - _PX(24)
-    sy = y + (card_h - _PX(24)) // 2
-    _draw_text(draw, (sx, sy), state_text, f_state, accent, img)
-
-    # 连接信息（左侧）
+    # 准备信息行（端点在配置未启用时仍展示，keys 仅在可用时展示）
     f_val = _get_font(_PX(18), bold=True)
     endpoint = f"{status.get('host') or '-'}:{status.get('port') or '-'}"
     parts = [
@@ -558,11 +551,25 @@ def _draw_redis_card(img, y, redis_status: Optional[Dict] = None) -> int:
         parts.append(("统计缓存", "-" if stats_n is None else f"{stats_n} 条"))
         parts.append(("最近消息", "-" if recent_n is None else f"{recent_n} 条"))
 
+    # 卡片高度 = 顶部留白 + 每行行高 + 底部留白
+    line_h = _PX(40)
+    card_h = _PX(18) + line_h * len(parts) + _PX(16)
+
+    _draw_glass_card(img, (x0, y, x1, y + card_h), title=title, accent=accent)
+
+    # 状态徽标（右侧，随内容行数垂直居中）
+    f_state = _get_font(_PX(20), bold=True)
+    sw = _text_width(draw, state_text, f_state)
+    sx = x1 - sw - _PX(24)
+    sy = y + (card_h - _PX(24)) // 2
+    _draw_text(draw, (sx, sy), state_text, f_state, accent, img)
+
+    # 信息行（左侧）
     cx = x0 + _PX(24)
     cy = y + _PX(18)
     for k, v in parts:
         _draw_text(draw, (cx, cy), f"{k}: {v}", f_val, _TEXT_DARK, img)
-        cy += _PX(34)
+        cy += line_h
 
     return y + card_h + _PX(12)
 

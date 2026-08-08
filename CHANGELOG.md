@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.6.3] - 2026-08-08
 
+### Added
+- **WebUI Redis 状态卡片增加持续浮动动画**：与统计卡片一致的 `cardFloat` 悬浮效果，风格统一
+
+### Fixed
+- **修复快照 Redis 卡片文字溢出**：运行中状态渲染 5 行信息超出固定卡片高度，现按信息行数动态计算卡片高度，各状态文字均在卡片边界内
+
 ### Changed
 - 版本号 bump 至 2.6.3
 

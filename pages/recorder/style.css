@@ -369,8 +369,10 @@ body::after {
   box-shadow: var(--glass-shadow);
   padding: 1.5rem;
   margin-bottom: 1.5rem;
-  animation: cardAppear 0.4s ease both;
+  animation: cardAppear 0.4s ease both, cardFloat 6s ease-in-out 0.5s infinite;
   overflow: hidden;
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .redis-card::after {
