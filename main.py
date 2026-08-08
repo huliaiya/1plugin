@@ -1035,6 +1035,7 @@ class MessageRecorder(Star, AfdianFeature):
     @filter.command("发电模拟", alias={"模拟发电", "模拟发电订单", "爱发电模拟"})
     async def cmd_afdian_simulate(self, event: AstrMessageEvent):
         """发电模拟 - 模拟一笔新订单，走完整检测+入库+推送到推送群链路"""
+        logger.info(f"[Afdian] 收到发电模拟命令，来自 {event.get_sender_id()}")
         if not self.afdian_cfg.enabled:
             yield event.plain_result("爱发电功能未启用，请在插件配置中开启")
             return
