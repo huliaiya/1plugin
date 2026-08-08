@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.8] - 2026-08-08
+
+### Added
+- **新增 `/发电` 防刷限流**：同一用户在 `afdian_rate_limit_window`（默认 60 秒）内发起订单次数达到 `afdian_rate_limit_max_orders`（默认 3 次）时，拒绝本次 `/发电` 并拉黑 `afdian_rate_limit_ban_seconds`（默认 1 小时）；拉黑期间该用户 `/发电` 直接返回临时限制提示。可通过 `afdian_rate_limit_enabled` 开关关闭
+- 新增 6 项限流单元测试（允许前两次、第三次拦截、拉黑生效、自动解除、开关关闭）
+
+### Changed
+- 版本号 bump 至 2.6.8
+
 ## [2.6.7] - 2026-08-08
 
 ### Fixed

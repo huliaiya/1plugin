@@ -125,3 +125,33 @@ class AfdianConfig:
     def ready(self) -> bool:
         """API 凭据是否就绪（user_id / token 均已填写）。"""
         return bool(self.user_id and self.token)
+
+    # ---- 防刷限流 ----
+    @property
+    def rate_limit_enabled(self) -> bool:
+        """是否启用 /发电 命令频率限制（1 分钟内发起订单数上限）。"""
+        return bool(self._cfg.get("afdian_rate_limit_enabled", True))
+
+    @property
+    def rate_limit_max_orders(self) -> int:
+        """1 分钟窗口内允许发起订单的最大次数（达到该值即触发拉黑）。"""
+        try:
+            return max(1, int(self._cfg.get("afdian_rate_limit_max_orders", 3)))
+        except (TypeError, ValueError):
+            return 3
+
+    @property
+    def rate_limit_window(self) -> int:
+        """频率统计窗口（秒）。"""
+        try:
+            return max(10, int(self._cfg.get("afdian_rate_limit_window", 60)))
+        except (TypeError, ValueError):
+            return 60
+
+    @property
+    def rate_limit_ban_seconds(self) -> int:
+        """触发限制后的拉黑时长（秒），默认 1 小时。"""
+        try:
+            return max(60, int(self._cfg.get("afdian_rate_limit_ban_seconds", 3600)))
+        except (TypeError, ValueError):
+            return 3600

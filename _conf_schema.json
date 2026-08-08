@@ -161,6 +161,30 @@
     "default": [],
     "hint": "可不填，在会话中用「开启发电通知」指令开启通知"
   },
+  "afdian_rate_limit_enabled": {
+    "type": "bool",
+    "description": "是否启用 /发电 防刷限流",
+    "default": true,
+    "hint": "同一用户在 1 分钟内发起订单次数达到上限时，拒绝本次并拉黑 1 小时"
+  },
+  "afdian_rate_limit_max_orders": {
+    "type": "int",
+    "description": "1 分钟窗口内允许发起订单的最大次数",
+    "default": 3,
+    "hint": "达到该次数即触发拉黑（如设为 3，则第 3 次 /发电 被拒绝并拉黑）"
+  },
+  "afdian_rate_limit_window": {
+    "type": "int",
+    "description": "限流统计窗口（秒）",
+    "default": 60,
+    "hint": "在窗口时间内统计发起订单次数"
+  },
+  "afdian_rate_limit_ban_seconds": {
+    "type": "int",
+    "description": "触发限流后的拉黑时长（秒）",
+    "default": 3600,
+    "hint": "默认 3600 秒（1 小时），期间该用户 /发电 会被拒绝"
+  },
   "redis_enabled": {
     "type": "bool",
     "description": "是否启用 Redis 缓存",

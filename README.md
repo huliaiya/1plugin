@@ -5,7 +5,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E4.16%2C%3C5-blue?style=for-the-badge)](https://github.com/Soulter/astrbot)
 [![Python](https://img.shields.io/badge/Python-3.12+-green?style=for-the-badge)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.6.7-orange?style=for-the-badge)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.6.8-orange?style=for-the-badge)](CHANGELOG.md)
 
 **全平台聊天消息自动记录 | MySQL 5.7 存储 | Web 管理面板 | 全文搜索 | 插件 API**
 
@@ -141,6 +141,12 @@ git clone https://github.com/leafliber/astrbot_plugin_fox_toolbox.git
 | `afdian_default_price` | `5` | 发起赞助时的默认金额（元） |
 | `afdian_default_reply` | `赞助成功，感谢支持！` | 赞助成功后的默认回复语 |
 | `afdian_notice_sessions` | `[]` | 接收订单通知的会话 ID（可用「开启发电通知」指令添加） |
+| `afdian_rate_limit_enabled` | `true` | 是否启用 `/发电` 防刷限流 |
+| `afdian_rate_limit_max_orders` | `3` | 1 分钟窗口内允许发起订单的最大次数，达到即触发拉黑 |
+| `afdian_rate_limit_window` | `60` | 限流统计窗口（秒） |
+| `afdian_rate_limit_ban_seconds` | `3600` | 触发限流后的拉黑时长（秒），默认 1 小时 |
+
+> **防刷限流**：同一用户在 1 分钟窗口内发起 `/发电` 达到上限次数（默认 3 次）时，拒绝本次请求并临时拉黑（默认 1 小时），期间该用户再使用 `/发电` 会被拒绝并提示剩余等待时间，防止批量刷单/骚扰推送。
 
 > **Webhook 要求**：爱发电订单通知需要公网可达的回调地址。请放行 `afdian_webhook_port` 对应端口，并在爱发电开发者设置中将回调地址指向该端口（如 `http://公网IP:6500/`）；若无公网 IP，可配置反向代理或内网穿透（frp / ngrok / cloudflared）转发到该端口。
 >

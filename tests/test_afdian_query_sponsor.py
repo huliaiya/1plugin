@@ -11,6 +11,7 @@
 from types import SimpleNamespace
 
 import pytest
+import time
 
 from astrbot_plugin_fox_toolbox.fox_toolbox.afdian.afdian_api import AfdianAPIClient
 from astrbot_plugin_fox_toolbox.fox_toolbox.afdian.star import (
@@ -305,3 +306,65 @@ async def test_mock_client_returns_single_order_then_empty():
     r2 = await client.query_order(page=2)
     assert len(r1) == 1
     assert r2 == []
+
+
+# ---- /发电 防刷限流 ----
+
+def _make_feature_with_rate_limit():
+    """构建带限流配置的 feature。"""
+    feature = _make_simple_feature(
+        {
+            "rate_limit_enabled": True,
+            "rate_limit_max_orders": 3,
+            "rate_limit_window": 60,
+            "rate_limit_ban_seconds": 3600,
+        }
+    )
+    feature.afdian_order_history = {}
+    feature.afdian_blacklist = {}
+    return feature
+
+
+def test_rate_limit_allows_two_orders_in_window():
+    """窗口内前两次发起不被拦截。"""
+    feature = _make_feature_with_rate_limit()
+    assert feature._afdian_check_rate_limit("u1") is None
+    assert feature._afdian_check_rate_limit("u1") is None
+
+
+def test_rate_limit_blocks_third_and_blacklists():
+    """窗口内第 3 次发起被拒绝，且触发拉黑。"""
+    feature = _make_feature_with_rate_limit()
+    feature._afdian_check_rate_limit("u1")
+    feature._afdian_check_rate_limit("u1")
+    msg = feature._afdian_check_rate_limit("u1")
+    assert msg is not None
+    assert "已临时限制" in msg
+    assert feature.afdian_blacklist.get("u1") is not None
+
+
+def test_blacklist_check_remains_active():
+    """拉黑立即生效：后续调用直接命中拉黑提示。"""
+    feature = _make_feature_with_rate_limit()
+    feature._afdian_check_rate_limit("u1")
+    feature._afdian_check_rate_limit("u1")
+    feature._afdian_check_rate_limit("u1")
+    remaining = feature._afdian_check_blacklist("u1")
+    assert remaining is not None and remaining > 0
+
+
+def test_rate_limit_disabled_allows_unlimited():
+    """关闭限流时不受次数限制。"""
+    feature = _make_feature_with_rate_limit()
+    feature.afdian_cfg.rate_limit_enabled = False
+    for _ in range(10):
+        assert feature._afdian_check_rate_limit("u1") is None
+
+
+def test_blacklist_check_clears_after_expiry():
+    """拉黑到期后自动解除，并清空历史计数。"""
+    feature = _make_feature_with_rate_limit()
+    feature.afdian_blacklist["u1"] = time.time() - 1
+    feature.afdian_order_history["u1"] = [time.time() - 1]
+    assert feature._afdian_check_blacklist("u1") is None
+    assert "u1" not in feature.afdian_blacklist
