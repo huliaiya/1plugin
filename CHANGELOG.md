@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.3] - 2026-08-08
+
+### Fixed
+- **修复付款成功「感谢支持」不发送到用户会话**：`/发电` 生成的付款链接备注（32 位 hex）可能与爱发电回调备注的字符串大小写不一致，导致 `on_afdian_new_order` 无法匹配待确认订单。新增 `_match_pending_sender` 按备注精确/忽略大小写匹配
+- **兜底私聊不再对非数字 ID 报错**：付款人 ID 非数字时跳过 `int()` 转换，走通用告警路径
+
+### Changed
+- **美化订单信息展示**：`parse_order` 输出改为分栏布局（标题分隔线 + 字段 + SKU 列表），金额统一 `¥xx.xx` 格式化，订单状态显示为「待支付/已支付」可读文案而非裸数字
+- 版本号 bump 至 2.7.3
+
 ## [2.7.2] - 2026-08-08
 
 ### Removed

@@ -10,6 +10,7 @@ import json
 import time
 import uuid
 from pathlib import Path
+from typing import Optional
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
@@ -98,7 +99,7 @@ class AfdianFeature:
         if getattr(self, "_afdian_brand", None):
             return self._afdian_brand
         name = "狐狸插件"
-        version = "2.7.2"
+        version = "2.7.3"
         try:
             meta_path = (
                 Path(__file__).resolve().parent.parent.parent / "metadata.yaml"
@@ -259,28 +260,49 @@ class AfdianFeature:
 
         # 通过 remark（记录为付款用户ID）识别特定用户订单，发送自动回复
         if order:
-            sender_id = str(order.get("remark") or "")
-            info = self.afdian_pending_orders.pop(sender_id, None)
-            if info:
-                umo = info.get("umo")
-                try:
-                    await self.context.send_message(
-                        umo, MessageChain().message(self.afdian_cfg.default_reply)
-                    )
-                except Exception as e:
-                    # 兜底：尝试调用 OneBot 私聊发送默认回复
-                    if self.afdian_bots:
-                        try:
-                            await self.afdian_bots[0].send_private_msg(
-                                user_id=int(sender_id),
-                                message=self.afdian_cfg.default_reply,
-                            )
-                        except Exception as e2:
-                            logger.warning(
-                                f"[Afdian] 兜底私聊发送失败 {sender_id}：{e2}"
-                            )
-                    else:
-                        logger.warning(f"[Afdian] 特定用户通知失败 {umo}：{e}")
+            sender_id = self._match_pending_sender(order)
+            if sender_id is None:
+                logger.warning(
+                    f"[Afdian] 订单 {order.get('out_trade_no')} 备注 "
+                    f"{order.get('remark')!r} 未匹配到待确认订单，跳过付款人回复"
+                )
+            else:
+                info = self.afdian_pending_orders.pop(sender_id, None)
+                if info:
+                    umo = info.get("umo")
+                    try:
+                        await self.context.send_message(
+                            umo, MessageChain().message(self.afdian_cfg.default_reply)
+                        )
+                    except Exception as e:
+                        # 兜底：尝试调用 OneBot 私聊发送默认回复
+                        if self.afdian_bots and str(sender_id).isdigit():
+                            try:
+                                await self.afdian_bots[0].send_private_msg(
+                                    user_id=int(sender_id),
+                                    message=self.afdian_cfg.default_reply,
+                                )
+                            except Exception as e2:
+                                logger.warning(
+                                    f"[Afdian] 兜底私聊发送失败 {sender_id}：{e2}"
+                                )
+                        else:
+                            logger.warning(f"[Afdian] 特定用户通知失败 {umo}：{e}")
+
+    def _match_pending_sender(self, order: dict) -> Optional[str]:
+        """从待确认订单中匹配付款人对应的会话 key。
+
+        优先按备注精确匹配，其次忽略大小写匹配（爱发电可能对备注做大小写
+        变换）；返回匹配到的 pending key，无匹配返回 None。
+        """
+        remark = str(order.get("remark") or "")
+        remark_lower = remark.lower()
+        if not remark_lower:
+            return None
+        for sid in self.afdian_pending_orders:
+            if sid == remark or sid.lower() == remark_lower:
+                return sid
+        return None
 
     # ---- 命令处理 ----
 

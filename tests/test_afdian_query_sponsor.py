@@ -318,6 +318,57 @@ async def test_mock_client_returns_single_order_then_empty():
     assert r2 == []
 
 
+# ---- 付款人匹配（2.7.3） ----
+
+@pytest.mark.asyncio
+async def test_reply_matches_pending_ignoring_case():
+    """备注与待确认订单 key 大小写不一致时仍能匹配（爱发电可能转换大小写）。"""
+    feature = _make_feature_with_rate_limit()
+    event = _FakeEvent(sender_id="abc123")
+    await feature.afdian_create_order(event, price=5)
+    assert "abc123" in feature.afdian_pending_orders
+    order = {
+        "out_trade_no": "T1",
+        "remark": "ABC123",  # 大写备注
+    }
+    await feature.on_afdian_new_order(order)
+    assert "abc123" not in feature.afdian_pending_orders
+    sent_umos = {u for u, _ in feature.context.sent}
+    assert "grp_abc123" in sent_umos
+
+
+@pytest.mark.asyncio
+async def test_reply_skipped_when_no_pending_match():
+    """备注无对应待确认订单时跳过付款人回复，且不抛出异常。"""
+    feature = _make_feature_with_rate_limit()
+    order = {"out_trade_no": "T2", "remark": "nobody"}
+    await feature.on_afdian_new_order(order)
+    # 仅通知订阅会话，付款人会话无回复（remark 无匹配）
+    umos = {u for u, _ in feature.context.sent}
+    assert "grp_nobody" not in umos
+
+
+@pytest.mark.asyncio
+async def test_reply_onebot_fallback_skips_non_digit_id():
+    """付款人 ID 非数字时兜底私聊不触发 int() 崩溃。"""
+    feature = _make_feature_with_rate_limit()
+    event = _FakeEvent(sender_id="u_99901")
+    await feature.afdian_create_order(event, price=5)
+    class _FakeBot:
+        def __init__(self):
+            self.called = False
+        async def send_private_msg(self, user_id=None, message=None):
+            self.called = True
+    feature.afdian_bots = [_FakeBot()]
+    order = {"out_trade_no": "T3", "remark": "u_99901"}
+    # 让会话发送失败，触发兜底路径
+    async def _boom(*args, **kwargs):
+        raise RuntimeError("send failed")
+    feature.context.send_message = _boom
+    await feature.on_afdian_new_order(order)
+    assert feature.afdian_bots[0].called is False
+
+
 # ---- /发电 防刷限流 ----
 
 def _make_feature_with_rate_limit():
@@ -471,4 +522,39 @@ async def test_afdian_create_order_falls_back_default_on_bad_text():
     msg = await feature.afdian_create_order(event, price="abc")
     assert "金额无效" not in msg
     assert "afdian.com/order/create" in msg
-    assert "99901" in feature.afdian_pending_orders
+
+
+# ---- parse_order 格式化（2.7.3） ----
+
+def test_parse_order_human_status_labels():
+    """parse_order 把订单状态显示为可读文案而非裸数字。"""
+    from astrbot_plugin_fox_toolbox.fox_toolbox.afdian.utils import parse_order
+
+    text = parse_order(
+        {
+            "out_trade_no": "T1",
+            "user_name": "用户A",
+            "total_amount": 5,
+            "status": 2,
+            "remark": "ABC",
+            "create_time": 1754146687,
+        }
+    )
+    assert "**订单状态**：已支付" in text
+    assert "**总金额**：¥5.00" in text
+
+
+def test_parse_order_pending_status_label():
+    """status=0 展示为待支付。"""
+    from astrbot_plugin_fox_toolbox.fox_toolbox.afdian.utils import parse_order
+
+    text = parse_order({"out_trade_no": "T2", "status": 0})
+    assert "**订单状态**：待支付" in text
+
+
+def test_parse_order_missing_status_omitted():
+    """status 缺失时整行省略，不展示空值。"""
+    from astrbot_plugin_fox_toolbox.fox_toolbox.afdian.utils import parse_order
+
+    text = parse_order({"out_trade_no": "T3"})
+    assert "订单状态" not in text

@@ -13,39 +13,57 @@ def format_time(timestamp):
     return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _format_order_status(status) -> str:
+    """订单状态展示。爱发电 webhook 仅推送已支付订单；
+    0 为未支付，其余按已支付展示，避免暴露裸数字。"""
+    try:
+        status = int(status)
+    except (TypeError, ValueError):
+        return str(status) if status not in (None, "") else ""
+    if status == 0:
+        return "待支付"
+    return "已支付"
+
+
 def parse_order(order: dict) -> str:
     """解析订单数据为可读文本（markdown 格式）。"""
-    fields = {
-        "交易号": order.get("out_trade_no"),
-        "计划标题": order.get("plan_title"),
-        "用户名": order.get("user_name"),
-        "用户ID": order.get("user_id"),
-        "计划ID": order.get("plan_id"),
-        "时长": f"{order['month']}个月" if order.get("month") else None,
-        "总金额": order.get("total_amount"),
-        "订单状态": order.get("status"),
-        "产品类型": order.get("product_type"),
-        "折扣": order.get("discount"),
-        "备注": order.get("remark"),
-        "兑换码ID": order.get("redeem_id"),
-        "创建时间": format_time(order.get("create_time", 0)),
-    }
-
-    lines = ["### 📦 订单信息"]
-    lines += [
-        f"- **{k}**：{v}" for k, v in fields.items() if v not in [None, "", "N/A"]
+    fields = [
+        ("交易号", order.get("out_trade_no")),
+        ("计划标题", order.get("plan_title")),
+        ("用户名", order.get("user_name")),
+        ("用户ID", order.get("user_id")),
+        ("计划ID", order.get("plan_id")),
+        ("时长", f"{order['month']}个月" if order.get("month") else None),
+        ("总金额", order.get("total_amount")),
+        ("订单状态", _format_order_status(order.get("status"))),
+        ("产品类型", order.get("product_type")),
+        ("折扣", order.get("discount")),
+        ("备注", order.get("remark")),
+        ("兑换码ID", order.get("redeem_id")),
+        ("创建时间", format_time(order.get("create_time", 0))),
     ]
+
+    lines = ["📦 订单信息", "──────────────"]
+    for k, v in fields:
+        if v not in [None, "", "N/A"]:
+            if k == "总金额":
+                try:
+                    v = f"¥{float(v):.2f}"
+                except (TypeError, ValueError):
+                    pass
+            lines.append(f"**{k}**：{v}")
+    lines.append("──────────────")
 
     sku_detail = order.get("sku_detail", [])
     sku_lines = [
-        f"  - **{sku.get('name', '未知')}** × {sku.get('count', 'N/A')}"
+        f"**{sku.get('name', '未知')}** × {sku.get('count', 'N/A')}"
         f"（SKU ID: {sku.get('sku_id', 'N/A')}）"
         for sku in sku_detail
         if any(sku.get(key) for key in ("name", "count", "sku_id"))
     ]
     if sku_lines:
-        lines.append("- **SKU 列表**：")
-        lines.extend(sku_lines)
+        lines.append("**SKU 列表**：")
+        lines.extend(f"- {s}" for s in sku_lines)
 
     return "\n".join(lines)
 
