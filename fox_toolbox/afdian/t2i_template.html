@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>{{ plugin_name }} {{ version }}</title>
+  <title>{{ plugin_name | e }} {{ version | e }}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
   <style>
       body {
@@ -247,15 +247,15 @@
 </head>
 <body>
   <div class="hero">
-    <span class="brand">{{ plugin_name }}</span>
-    <span class="ver">{{ version }}</span>
+    <span class="brand">{{ plugin_name | e }}</span>
+    <span class="ver">{{ version | e }}</span>
   </div>
   <article id="content"></article>
 
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
-  <textarea id="markdown-source" hidden>{{ text | safe }}</textarea>
+  <textarea id="markdown-source" hidden>{{ text | e }}</textarea>
   <script>
     (function () {
       const contentElement = document.getElementById("content");

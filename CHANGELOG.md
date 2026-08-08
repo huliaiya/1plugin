@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **修复快照 Redis 卡片文字溢出**：运行中状态渲染 5 行信息超出固定卡片高度，现按信息行数动态计算卡片高度，各状态文字均在卡片边界内
+- **修复快照 Redis 卡片标题与连接地址重合**：状态徽标原先随内容行数垂直居中，运行中 5 行时压住信息行；现徽标与标题同行右对齐，信息行整体下移至标题区下方
+- **修复爱发电查询图片空白/乱码**：`t2i_template.html` 的 markdown 源文本原先使用 `{{ text | safe }}` 不做 HTML 转义，当订单备注、计划标题等含 `<`、`&`、`</textarea>` 字符时会破坏页面结构导致渲染空白或乱码；现改为强制转义，插件名与版本号同步转义
 
 ### Changed
 - 版本号 bump 至 2.6.3

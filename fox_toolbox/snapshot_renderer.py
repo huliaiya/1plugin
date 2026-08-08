@@ -551,22 +551,23 @@ def _draw_redis_card(img, y, redis_status: Optional[Dict] = None) -> int:
         parts.append(("统计缓存", "-" if stats_n is None else f"{stats_n} 条"))
         parts.append(("最近消息", "-" if recent_n is None else f"{recent_n} 条"))
 
-    # 卡片高度 = 顶部留白 + 每行行高 + 底部留白
+    # 卡片高度 = 标题区 + 每行行高 + 底部留白
+    # 标题绘制于 y + _PX(12)，内容区约定从 y + _PX(52) 开始，避免信息行压住标题
     line_h = _PX(40)
-    card_h = _PX(18) + line_h * len(parts) + _PX(16)
+    card_h = _PX(52) + line_h * len(parts) + _PX(16)
 
     _draw_glass_card(img, (x0, y, x1, y + card_h), title=title, accent=accent)
 
-    # 状态徽标（右侧，随内容行数垂直居中）
+    # 状态徽标（右侧，与标题同行对齐，避免与信息行重合）
     f_state = _get_font(_PX(20), bold=True)
     sw = _text_width(draw, state_text, f_state)
     sx = x1 - sw - _PX(24)
-    sy = y + (card_h - _PX(24)) // 2
+    sy = y + _PX(10)
     _draw_text(draw, (sx, sy), state_text, f_state, accent, img)
 
-    # 信息行（左侧）
+    # 信息行（标题下方内容区，左侧）
     cx = x0 + _PX(24)
-    cy = y + _PX(18)
+    cy = y + _PX(52)
     for k, v in parts:
         _draw_text(draw, (cx, cy), f"{k}: {v}", f_val, _TEXT_DARK, img)
         cy += line_h
