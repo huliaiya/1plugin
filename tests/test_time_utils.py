@@ -1,9 +1,7 @@
 """time_utils.py 单元测试"""
 
 import time
-from datetime import datetime, timedelta
-
-import pytest
+from datetime import datetime
 
 from astrbot_plugin_fox_toolbox.fox_toolbox.time_utils import (
     get_day_start_end,

@@ -1,7 +1,6 @@
 """serializer.py 单元测试"""
 
 import json
-import pytest
 
 from astrbot_plugin_fox_toolbox.fox_toolbox.serializer import (
     serialize_component,

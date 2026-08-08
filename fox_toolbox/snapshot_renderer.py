@@ -13,7 +13,6 @@
 """
 
 import io
-import math
 import time
 import unicodedata
 from pathlib import Path
@@ -325,7 +324,6 @@ def _truncate_middle(draw, text: str, font, max_width: int) -> str:
     if not text or _text_width(draw, text, font) <= max_width:
         return text or ""
     ellipsis = "…"
-    ew = _text_width(draw, ellipsis, font)
     max_n = len(text) // 2
     n = 0
     for i in range(1, max_n + 1):
@@ -387,7 +385,6 @@ def _draw_glass_card(img: Image.Image, xy, title: Optional[str] = None, accent: 
     """
     x0, y0, x1, y1 = xy
     cw, ch = x1 - x0, y1 - y0
-    pad = _PX(16)
 
     # 绘制阴影
     shadow_offset = _PX(4)
@@ -400,7 +397,6 @@ def _draw_glass_card(img: Image.Image, xy, title: Optional[str] = None, accent: 
 
     # 绘制玻璃主体
     glass = Image.new("RGBA", (cw, ch), _GLASS_FILL)
-    glass_draw = ImageDraw.Draw(glass)
     
     # 添加顶部高光效果
     highlight = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
@@ -471,7 +467,7 @@ def _draw_stat_cards(img, y, stats: MessageStats, db_table_count: int):
         label, color = _STAT_CARDS[idx]
         
         # 绘制卡片
-        card_content = _draw_glass_card(img, (cx, cy, cx + card_w, cy + card_h), accent=color)
+        _draw_glass_card(img, (cx, cy, cx + card_w, cy + card_h), accent=color)
         
         f_val = _get_font(_PX(32), bold=True)
         f_lbl = _get_font(_PX(15))

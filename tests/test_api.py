@@ -7,8 +7,7 @@ import uuid
 import pytest
 
 from astrbot_plugin_fox_toolbox.fox_toolbox.api import MessageRecorderAPI
-from astrbot_plugin_fox_toolbox.fox_toolbox.models import MessageRecord, QueryFilter, SCHEMA_VERSION
-from astrbot_plugin_fox_toolbox.fox_toolbox.serializer import compute_content_hash
+from astrbot_plugin_fox_toolbox.fox_toolbox.models import MessageRecord, SCHEMA_VERSION
 
 
 @pytest.fixture

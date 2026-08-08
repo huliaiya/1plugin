@@ -1,7 +1,5 @@
 """platform_adapter.py 单元测试"""
 
-import pytest
-
 from astrbot.core.platform.message_type import MessageType
 
 from astrbot_plugin_fox_toolbox.fox_toolbox.platform_adapter import (

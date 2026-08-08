@@ -2,10 +2,8 @@
 
 import io
 import json
-from pathlib import Path
 from unittest.mock import patch, MagicMock, AsyncMock
 
-import pytest
 from PIL import Image
 
 from astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader import (

@@ -1,7 +1,5 @@
 """redis_cache.py 单元测试 - 使用 mock 模拟 redis.asyncio"""
 
-import asyncio
-import json
 import sys
 import types
 
@@ -9,9 +7,6 @@ import pytest
 
 from astrbot_plugin_fox_toolbox.fox_toolbox.redis_cache import (
     RedisCache,
-    RECENT_MESSAGES_KEY,
-    STATS_KEY,
-    RECENT_MESSAGES_CAP,
 )
 
 
@@ -81,7 +76,7 @@ def _uninstall_fake_aioredis():
 class TestRedisCacheConnect:
     @pytest.mark.asyncio
     async def test_connect_success(self):
-        rc = _install_fake_aioredis()
+        _install_fake_aioredis()
         try:
             cache = RedisCache(host="127.0.0.1", port=6379, ttl=60)
             ok = await cache.connect()
@@ -94,7 +89,7 @@ class TestRedisCacheConnect:
 
     @pytest.mark.asyncio
     async def test_connect_failure_degrades_gracefully(self):
-        rc = _install_fake_aioredis(client_factory=_FakePingFailClient)
+        _install_fake_aioredis(client_factory=_FakePingFailClient)
         try:
             cache = RedisCache(host="127.0.0.1", port=6379, ttl=60)
             ok = await cache.connect()
@@ -118,7 +113,7 @@ class TestRedisCacheConnect:
 class TestRedisCacheStats:
     @pytest.mark.asyncio
     async def test_stats_roundtrip(self):
-        rc = _install_fake_aioredis()
+        _install_fake_aioredis()
         try:
             cache = RedisCache(ttl=60)
             await cache.connect()
@@ -140,7 +135,7 @@ class TestRedisCacheStats:
 class TestRedisCacheRecentMessages:
     @pytest.mark.asyncio
     async def test_push_and_read(self):
-        rc = _install_fake_aioredis()
+        _install_fake_aioredis()
         try:
             cache = RedisCache(ttl=60)
             await cache.connect()

@@ -101,7 +101,7 @@ _FILE_EXT_CATEGORIES = {
     "msi": "FileArchive", "lz": "FileArchive", "lzma": "FileArchive",
     "zst": "FileArchive", "ar": "FileArchive", "cpio": "FileArchive",
     # 代码/程序
-    "py": "FileCode", "js": "FileCode", "ts": "FileCode", "java": "FileCode",
+    "py": "FileCode", "js": "FileCode", "java": "FileCode",
     "c": "FileCode", "cpp": "FileCode", "h": "FileCode", "go": "FileCode",
     "rs": "FileCode", "rb": "FileCode", "php": "FileCode", "sh": "FileCode",
     "html": "FileCode", "css": "FileCode", "json": "FileCode", "xml": "FileCode",

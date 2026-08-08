@@ -1,15 +1,13 @@
 """database.py 集成测试 - 使用 MySQL 数据库"""
 
-import asyncio
 import json
 import time
 import uuid
 
 import pytest
 
-from astrbot_plugin_fox_toolbox.fox_toolbox.database import Database, _row_to_record
+from astrbot_plugin_fox_toolbox.fox_toolbox.database import Database
 from astrbot_plugin_fox_toolbox.fox_toolbox.models import MessageRecord, QueryFilter
-from astrbot_plugin_fox_toolbox.fox_toolbox.serializer import compute_content_hash
 
 
 def _make_record(**overrides) -> MessageRecord:

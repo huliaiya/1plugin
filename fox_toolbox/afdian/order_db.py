@@ -80,10 +80,6 @@ class OrderDB:
             Path(self._sqlite_path).parent.mkdir(parents=True, exist_ok=True)
             self._init_sqlite()
 
-    @property
-    def using_mysql(self) -> bool:
-        return self._mysql_ready
-
     # ---- 初始化 ----
 
     def _init_sqlite(self):
@@ -225,53 +221,6 @@ class OrderDB:
             )
         if self._sqlite_path:
             return await asyncio.to_thread(self._query_sqlite, "SELECT * FROM afdian_orders ORDER BY create_time DESC")
-        return []
-
-    async def get_order_by_id(self, out_trade_no: str):
-        if self._mysql_ready and self._pool and not self._pool_is_closed():
-            rows = await self._query_mysql(
-                "SELECT * FROM afdian_orders WHERE out_trade_no = %s",
-                (out_trade_no,),
-                sqlite_sql="SELECT * FROM afdian_orders WHERE out_trade_no = ?",
-            )
-            return rows[0] if rows else None
-        if self._sqlite_path:
-            rows = await asyncio.to_thread(
-                self._query_sqlite,
-                "SELECT * FROM afdian_orders WHERE out_trade_no = ?",
-                (out_trade_no,),
-            )
-            return rows[0] if rows else None
-        return None
-
-    async def get_orders_by_user(self, user_id: str) -> list:
-        if self._mysql_ready and self._pool and not self._pool_is_closed():
-            return await self._query_mysql(
-                "SELECT * FROM afdian_orders WHERE user_id = %s ORDER BY create_time DESC",
-                (user_id,),
-                sqlite_sql="SELECT * FROM afdian_orders WHERE user_id = ? ORDER BY create_time DESC",
-            )
-        if self._sqlite_path:
-            return await asyncio.to_thread(
-                self._query_sqlite,
-                "SELECT * FROM afdian_orders WHERE user_id = ? ORDER BY create_time DESC",
-                (user_id,),
-            )
-        return []
-
-    async def get_orders_by_status(self, status: int) -> list:
-        if self._mysql_ready and self._pool and not self._pool_is_closed():
-            return await self._query_mysql(
-                "SELECT * FROM afdian_orders WHERE status = %s ORDER BY create_time DESC",
-                (status,),
-                sqlite_sql="SELECT * FROM afdian_orders WHERE status = ? ORDER BY create_time DESC",
-            )
-        if self._sqlite_path:
-            return await asyncio.to_thread(
-                self._query_sqlite,
-                "SELECT * FROM afdian_orders WHERE status = ? ORDER BY create_time DESC",
-                (status,),
-            )
         return []
 
     async def _query_mysql(self, sql: str, params: tuple = (), sqlite_sql: str = None) -> list:

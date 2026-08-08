@@ -8,4 +8,5 @@ dist/
 build/
 /data
 .pytest_cache/
-CLAUDE.mdtest_glassmorphism_snapshot.png
+CLAUDE.md
+test_glassmorphism_snapshot.png

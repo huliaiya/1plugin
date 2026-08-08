@@ -60,7 +60,7 @@ class AfdianWebhookServer:
     async def receive_webhook(self, request: web.Request):
         if not self._auth_ok(request):
             logger.warning(
-                f"[Afdian] 收到未通过令牌校验的 Webhook 请求，已拒绝"
+                "[Afdian] 收到未通过令牌校验的 Webhook 请求，已拒绝"
             )
             return web.json_response({"ec": 403, "em": "forbidden"}, status=403)
         try:

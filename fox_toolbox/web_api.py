@@ -10,7 +10,7 @@ import asyncio
 import zipfile
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 
 import base64
 
@@ -53,22 +53,11 @@ CHUNK_SIZE = 5 * 1024 * 1024
 CHUNK_SESSION_MAX_AGE = 3600
 MAX_CHUNK_SESSIONS = 20
 DB_OPERATION_TIMEOUT = 30
-IMPORT_RECORD_TIMEOUT = 5
 
 _export_tasks: Dict[str, Dict[str, Any]] = {}
 _chunk_sessions: Dict[str, Dict[str, Any]] = {}
 _import_tasks: Dict[str, Dict[str, Any]] = {}
 _background_tasks: set = set()
-
-
-def _safe_float_metric(metric_name: str, getter, default: float = 0.0) -> float:
-    """Safely collect a float metric so status API can degrade gracefully."""
-    try:
-        value = getter()
-        return float(value)
-    except Exception as e:
-        logger.warning(f"[FoxToolbox Web] 采集 {metric_name} 失败: {e}")
-        return default
 
 
 async def _build_db_status_payload(db: Optional[Database], error: str = "") -> Dict[str, Any]:
@@ -1306,7 +1295,7 @@ class _StreamingJsonWriter:
                 prefix_len = self._find_placeholder_offset(f, placeholder)
                 if prefix_len is None:
                     logger.debug(
-                        f"[FoxToolbox Web] 导出占位符未找到，跳过回填"
+                        "[FoxToolbox Web] 导出占位符未找到，跳过回填"
                     )
                     return
                 # 读前缀 + 占位符 + 剩余，流式重组到临时文件

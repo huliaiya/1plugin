@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.2] - 2026-08-08
+
+### Removed
+- **删除无引用模块 `sys_util.py` 及其测试**：进程资源采集（CPU/内存/运行时长）在 Dashboard 移除「资源占用」卡片后已无任何生产调用方，仅被测试引用
+- **删除 `order_db.py` 死代码**：`using_mysql` 属性与 `get_order_by_id`/`get_orders_by_user`/`get_orders_by_status` 查询方法（无调用方）
+- **删除 `web_api.py` 死代码**：未使用的 `IMPORT_RECORD_TIMEOUT` 常量、`_safe_float_metric` 辅助函数与 `List` import
+- **删除 `serializer.py` 无生产引用的常量组**（`_INTERACTIVE_COMPONENT_TYPES`/`_RICH_MEDIA_COMPONENT_TYPES`/`ALL_KNOWN_COMPONENT_TYPES`，保留有测试保护的 `MEDIA_COMPONENT_TYPES` 与 `COMPONENT_TYPE_MEDIA_MAP`）
+- **清理测试未使用 import**：`conftest.py`/`test_api.py`/`test_database.py`/`test_media_downloader.py`/`test_models.py`/`test_platform_adapter.py`/`test_redis_cache.py`/`test_serializer.py`/`test_time_utils.py` 中未使用的 import 与局部变量
+
+### Changed
+- **`main.py` 扩展名映射去重**：移除重复的 `"ts"` key（原被后置 `FileVideo` 覆盖），行为不变，消除字典重复键告警
+- **`snapshot_renderer.py` 清理未使用变量**：`_truncate_middle` 的 `ew`、玻璃卡片绘制的 `pad`/`glass_draw`、状态卡片未接收的返回值
+- **修复 `.gitignore` 粘连行**：`CLAUDE.md` 与 `test_glassmorphism_snapshot.png` 两个条目间缺失换行符
+- 版本号 bump 至 2.7.2
+
 ## [2.7.1] - 2026-08-08
 
 ### Security
