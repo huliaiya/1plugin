@@ -37,9 +37,6 @@ class _MockAfdianClient:
             return []
         return [self._order]
 
-    async def query_sponsor(self, *args, **kwargs) -> dict:
-        return {}
-
 
 def _db_order_to_dict(row: dict) -> dict:
     """把 OrderDB 行记录还原为 parse_order 可用的订单字典。"""
@@ -83,7 +80,6 @@ class AfdianFeature:
         )
         self.afdian_pending_orders: dict = {}
         self.afdian_bots = []
-        self.afdian_started = False
         self.afdian_sync_task: asyncio.Task | None = None
         self.afdian_poll_task: asyncio.Task | None = None
         self.afdian_poll_window_end: float = 0.0
@@ -96,7 +92,7 @@ class AfdianFeature:
         if getattr(self, "_afdian_brand", None):
             return self._afdian_brand
         name = "狐狸插件"
-        version = "2.6.9"
+        version = "2.7.0"
         try:
             meta_path = (
                 Path(__file__).resolve().parent.parent.parent / "metadata.yaml"
@@ -205,10 +201,8 @@ class AfdianFeature:
         try:
             self.afdian_server.register_order_callback(self.on_afdian_new_order)
             await self.afdian_server.start()
-            self.afdian_started = True
         except Exception as e:
             logger.error(f"[Afdian] 启动 Webhook 服务失败: {e}")
-            self.afdian_started = False
 
         # 启动/重载时后台拉取历史订单入库（去重，只存新增）
         if self.afdian_sync_task is None or self.afdian_sync_task.done():
@@ -268,11 +262,12 @@ class AfdianFeature:
                         umo, MessageChain().message(self.afdian_cfg.default_reply)
                     )
                 except Exception as e:
-                    # 兜底：尝试调用 OneBot 私聊发送
+                    # 兜底：尝试调用 OneBot 私聊发送默认回复
                     if self.afdian_bots:
                         try:
                             await self.afdian_bots[0].send_private_msg(
-                                user_id=int(sender_id), message=message
+                                user_id=int(sender_id),
+                                message=self.afdian_cfg.default_reply,
                             )
                         except Exception as e2:
                             logger.warning(
@@ -553,7 +548,8 @@ class AfdianFeature:
 
         构造一笔模拟订单，注入 mock API 客户端后调用 `afdian_poll_once`：
         query_order 拉单 → save_order_if_new 入库 → on_afdian_new_order
-        推送到所有已设置的通知会话（推送群），并匹配备注向付款人回复。
+        推送到所有已设置的通知会话（推送群），并匹配备注向付款人回复；
+        同时向当前聊天会话额外发送一条测试订单通知（若未在推送群列表中）。
         返回文本描述模拟结果（订单号、入库状态、推送会话数）。
         """
         sender_id = str(event.get_sender_id())
@@ -601,15 +597,23 @@ class AfdianFeature:
         finally:
             self.afdian_client = original_client
 
-        sessions = self.afdian_cfg.notice_sessions
-        if not sessions:
-            return (
-                f"模拟订单 {order['out_trade_no']} 已生成并入库，"
-                "但当前未设置通知会话，请先使用「开启发电通知」添加推送群"
-            )
+        # 通知目标 = 已配置通知会话 + 当前聊天会话（去重）
+        sessions = list(self.afdian_cfg.notice_sessions)
+        current_umo = getattr(event, "unified_msg_origin", None)
+        if current_umo and current_umo not in sessions:
+            sessions.append(current_umo)
+        # 已配置会话已由 on_afdian_new_order 推送；此处仅补推当前聊天会话
+        if current_umo and current_umo not in self.afdian_cfg.notice_sessions:
+            try:
+                await self.context.send_message(
+                    current_umo, MessageChain().message(parse_order(order))
+                )
+            except Exception as e:
+                logger.warning(f"[Afdian] 模拟测试通知失败 会话 {current_umo}：{e}")
+
         return (
-            f"模拟订单 {order['out_trade_no']} 已检测并入库，"
-            f"已推送到 {len(sessions)} 个通知会话：{', '.join(sessions)}"
+            f"测试订单 {order['out_trade_no']} 已检测并入库，"
+            f"已推送到 {len(sessions)} 个会话：{', '.join(sessions)}"
         )
 
     async def afdian_add_notice_session(self, event, umo=None):

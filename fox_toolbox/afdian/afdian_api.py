@@ -66,10 +66,6 @@ class AfdianAPIClient:
             logger.error(f"[Afdian] 请求失败: {e}")
             return {"ec": -1, "em": str(e)}
 
-    async def ping(self) -> dict:
-        """测试接口连通性及签名是否正确。"""
-        return await self._post("/ping", {"a": 114514})
-
     async def query_order(
         self, page: int = 1, out_trade_no: str = "", per_page: int = 50
     ) -> list:

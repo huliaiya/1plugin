@@ -893,7 +893,7 @@ class MessageRecorder(Star, AfdianFeature):
         try:
             start_time, end_time = parse_time_range(time_range)
             time_desc = format_time_range(start_time, end_time)
-            msgs = await self._api.query(time=time_range, limit=limit)
+            msgs = await self._api.query(start_time=start_time, end_time=end_time, limit=limit)
         except Exception as e:
             yield event.plain_result(f"查询失败: {e}")
             return
@@ -1022,20 +1022,13 @@ class MessageRecorder(Star, AfdianFeature):
         yield event.plain_result(f"⚡ 发电打赏 {price_str}（备注为您的用户ID）:\n{urlret}")
 
     @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("爱发电测试")
+    @filter.command(
+        "爱发电测试",
+        alias={"发电测试", "发电模拟", "模拟发电", "模拟发电订单", "爱发电模拟"},
+    )
     async def cmd_afdian_test(self, event: AstrMessageEvent):
-        """爱发电测试 - 手动触发一次测试通知，验证通知链路"""
-        if not self.afdian_cfg.enabled:
-            yield event.plain_result("爱发电功能未启用，请在插件配置中开启")
-            return
-        await self.on_afdian_new_order(None)
-        yield event.plain_result("已发送测试通知")
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("发电模拟", alias={"模拟发电", "模拟发电订单", "爱发电模拟"})
-    async def cmd_afdian_simulate(self, event: AstrMessageEvent):
-        """发电模拟 - 模拟一笔新订单，走完整检测+入库+推送到推送群链路"""
-        logger.info(f"[Afdian] 收到发电模拟命令，来自 {event.get_sender_id()}")
+        """爱发电测试 - 模拟一笔订单并通知所有已配置推送群与当前聊天群"""
+        logger.info(f"[Afdian] 收到爱发电测试命令，来自 {event.get_sender_id()}")
         if not self.afdian_cfg.enabled:
             yield event.plain_result("爱发电功能未启用，请在插件配置中开启")
             return
@@ -1043,8 +1036,8 @@ class MessageRecorder(Star, AfdianFeature):
             msg = await self.afdian_simulate_new_order(event)
             yield event.plain_result(msg)
         except Exception as e:
-            logger.warning(f"[Afdian] 发电模拟失败: {e}")
-            yield event.plain_result(f"发电模拟失败：{e}")
+            logger.warning(f"[Afdian] 爱发电测试失败: {e}")
+            yield event.plain_result(f"爱发电测试失败：{e}")
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("同步历史订单")

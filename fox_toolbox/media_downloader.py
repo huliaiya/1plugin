@@ -580,34 +580,3 @@ class MediaDownloader:
     def extract_media_paths(message_chain_json: Optional[str]) -> List[str]:
         from .serializer import extract_media_paths as _extract
         return _extract(message_chain_json)
-
-    def cleanup_orphaned_media(self, retention_days: int) -> int:
-        if retention_days <= 0:
-            return 0
-        import time as _time
-
-        cutoff = _time.time() - retention_days * 86400
-        deleted = 0
-
-        for subdir in MEDIA_TYPE_MAP.values():
-            type_dir = self.media_base_path / subdir
-            if not type_dir.exists():
-                continue
-            for sub_dir in type_dir.iterdir():
-                if not sub_dir.is_dir():
-                    continue
-                for file_path in sub_dir.iterdir():
-                    if not file_path.is_file():
-                        continue
-                    try:
-                        if file_path.stat().st_mtime < cutoff:
-                            file_path.unlink()
-                            deleted += 1
-                    except OSError:
-                        pass
-
-        if deleted > 0:
-            logger.info(
-                f"[MediaDownloader] 已清理 {deleted} 个过期媒体文件"
-            )
-        return deleted

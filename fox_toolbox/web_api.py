@@ -23,7 +23,6 @@ from .database import Database
 from .db_explorer import DbExplorer
 from .models import QueryFilter, MessageRecord, MessageStats, PLUGIN_DIR_NAME, SCHEMA_VERSION
 from .time_utils import parse_time_range, normalize_timestamp
-from . import sys_util
 
 # Quart send_file 参数名兼容：旧版用 attachment_filename，新版本改名 download_name
 try:
@@ -268,7 +267,7 @@ def _build_query_filter(args: Dict[str, Any]) -> QueryFilter:
     start_time = _safe_int(args.get("start_time"), 0) if args.get("start_time") else None
     end_time = _safe_int(args.get("end_time"), 0) if args.get("end_time") else None
 
-    limit = min(_safe_int(args.get("limit"), 50), 200)
+    limit = min(max(_safe_int(args.get("limit"), 50), 1), 200)
     offset = max(_safe_int(args.get("offset"), 0), 0)
     order = args.get("order", "desc")
     if order not in ("asc", "desc"):
@@ -389,6 +388,8 @@ async def register_all_web_apis(context, db: Database):
     prefix = f"/{PLUGIN_DIR_NAME}"
 
     db_error = getattr(context, "fox_toolbox_db_error", "")
+
+    registered_count = 0
 
     # ========== Stats APIs ==========
 
@@ -1135,37 +1136,67 @@ async def register_all_web_apis(context, db: Database):
     # ========== Register all APIs ==========
 
     context.register_web_api(f"{prefix}/stats", api_stats, ["GET"], "获取统计概览")
+    registered_count += 1
     context.register_web_api(f"{prefix}/status", api_plugin_status, ["GET"], "获取插件状态与资源占用")
+    registered_count += 1
     context.register_web_api(f"{prefix}/plugin/status", api_plugin_status, ["GET"], "获取插件状态与资源占用（兼容旧路径）")
+    registered_count += 1
     context.register_web_api(f"{prefix}/stats/timeline", api_stats_timeline, ["GET"], "获取时间趋势")
+    registered_count += 1
     context.register_web_api(f"{prefix}/stats/senders", api_stats_senders, ["GET"], "获取发送者排行")
+    registered_count += 1
     context.register_web_api(f"{prefix}/stats/groups", api_stats_groups, ["GET"], "获取群组排行")
+    registered_count += 1
     context.register_web_api(f"{prefix}/stats/content-types", api_stats_content_types, ["GET"], "获取内容类型统计")
+    registered_count += 1
     context.register_web_api(f"{prefix}/stats/platforms", api_stats_platforms_detail, ["GET"], "获取平台详情统计")
+    registered_count += 1
     context.register_web_api(f"{prefix}/messages", api_messages, ["GET"], "查询消息列表")
+    registered_count += 1
     context.register_web_api(f"{prefix}/message/detail", api_message_detail, ["GET"], "获取消息详情")
+    registered_count += 1
     context.register_web_api(f"{prefix}/message/context", api_message_context, ["GET"], "获取消息上下文")
+    registered_count += 1
     context.register_web_api(f"{prefix}/search", api_search, ["GET"], "搜索消息")
+    registered_count += 1
     context.register_web_api(f"{prefix}/export", api_export, ["POST"], "创建导出任务")
+    registered_count += 1
     context.register_web_api(f"{prefix}/export/status", api_export_status, ["GET"], "查询导出状态")
+    registered_count += 1
     context.register_web_api(f"{prefix}/export/download", api_export_download, ["GET"], "下载导出文件")
+    registered_count += 1
     context.register_web_api(f"{prefix}/export/download_data", api_export_download_data, ["GET"], "获取导出文件数据(base64)")
+    registered_count += 1
     context.register_web_api(f"{prefix}/import/upload", api_import_upload, ["POST"], "简单文件导入")
+    registered_count += 1
     context.register_web_api(f"{prefix}/import/init", api_import_init, ["POST"], "初始化分片导入")
+    registered_count += 1
     context.register_web_api(f"{prefix}/import/chunk/<session_id>/<int:chunk_index>", api_import_chunk, ["POST"], "上传分片")
+    registered_count += 1
     context.register_web_api(f"{prefix}/import/complete", api_import_complete, ["POST"], "完成分片导入")
+    registered_count += 1
     context.register_web_api(f"{prefix}/import/status", api_import_status, ["GET"], "查询导入状态")
+    registered_count += 1
     context.register_web_api(f"{prefix}/platforms", api_platforms, ["GET"], "获取平台列表")
+    registered_count += 1
     context.register_web_api(f"{prefix}/senders", api_senders, ["GET"], "获取发送者列表")
+    registered_count += 1
     context.register_web_api(f"{prefix}/groups", api_groups, ["GET"], "获取群组列表")
+    registered_count += 1
     context.register_web_api(f"{prefix}/media", api_media, ["GET"], "获取媒体文件")
+    registered_count += 1
     context.register_web_api(f"{prefix}/schema_version", api_schema_version, ["GET"], "获取数据库Schema版本")
+    registered_count += 1
     context.register_web_api(f"{prefix}/db/tables", api_db_tables, ["GET"], "列出数据库所有业务表")
+    registered_count += 1
     context.register_web_api(f"{prefix}/db/schema", api_db_schema, ["GET"], "获取指定表结构")
+    registered_count += 1
     context.register_web_api(f"{prefix}/db/data", api_db_data, ["GET"], "预览指定表数据")
+    registered_count += 1
     context.register_web_api(f"{prefix}/db/query", api_db_query, ["POST"], "执行只读 SQL 查询")
+    registered_count += 1
 
-    logger.info(f"[FoxToolbox] 已注册 {26} 个 Web API")
+    logger.info(f"[FoxToolbox] 已注册 {registered_count} 个 Web API")
 
 
 # ========== Export Task Execution ==========
@@ -1634,7 +1665,6 @@ async def _execute_import_task(task_id: str, db: Database, file_path: str, mode:
         if file_ext == ".zip":
             records_list, media_restored = await asyncio.to_thread(_import_zip_package, file_path)
             records = records_list
-            task["total_records"] = len(records_list)
         elif file_ext == ".json":
             records = _iter_json_records(file_path)
         elif file_ext == ".csv":

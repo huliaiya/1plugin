@@ -277,6 +277,16 @@ async def test_simulate_pushes_to_notice_sessions():
 
 
 @pytest.mark.asyncio
+async def test_simulate_pushes_to_current_chat_session():
+    """模拟订单会额外通知当前聊天会话（未配置时也能收到测试通知）。"""
+    feature = _make_simple_feature({"notice_sessions": []})
+    event = _FakeEvent()
+    await feature.afdian_simulate_new_order(event)
+    umos = {u for u, _ in feature.context.sent}
+    assert "grp_99901" in umos
+
+
+@pytest.mark.asyncio
 async def test_simulate_reply_to_payer_via_remark():
     """模拟订单按备注匹配 pending，向付款用户发送默认回复。"""
     feature = _make_simple_feature()
@@ -289,12 +299,12 @@ async def test_simulate_reply_to_payer_via_remark():
 
 
 @pytest.mark.asyncio
-async def test_simulate_without_notice_sessions_warns():
-    """未设置通知会话时给出提示，仍完成入库。"""
+async def test_simulate_without_notice_sessions_still_pushes_current():
+    """未设置通知会话时仍推送到当前聊天会话，完成入库。"""
     feature = _make_simple_feature({"notice_sessions": []})
     event = _FakeEvent()
     msg = await feature.afdian_simulate_new_order(event)
-    assert "未设置通知会话" in msg
+    assert "已检测并入库" in msg
     assert len(feature.afdian_db.saved) == 1
 
 

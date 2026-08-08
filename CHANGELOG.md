@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-08-08
+
+### Changed
+- **合并测试指令**：删除 `cmd_afdian_simulate`，`/爱发电测试` 成为唯一测试指令（别名含 `发电测试/发电模拟/模拟发电/模拟发电订单/爱发电模拟`），统一走完整订单链路
+- **模拟指令推送增强**：`afdian_simulate_new_order` 完整推送所有已配置通知会话，并在当前聊天会话不在通知会话时补推，便于验证推送链路
+- **history 命令复用解析结果**：`/history` 使用已解析的 `start_time/end_time` 查询，避免时间范围二次解析
+
+### Fixed
+- **修复 zip 导入记录数翻倍**：zip 分支预置 `total_records` 后又随循环累加，导致总数翻倍；移除预置统一由循环计数
+- **修复 `_migrate_v3` 幂等性**：全新数据库建表已含 `content_types`，迁移 v3 重复 ADD COLUMN 会崩溃；现用 INFORMATION_SCHEMA 检查列/索引存在性后跳过
+- **修复 MySQL 降级后不回退 SQLite**：`_query_mysql` 新增 `sqlite_sql` 参数，MySQL 故障降级后走 SQLite 查询
+- **修复 `on_afdian_new_order` 兜底私聊内容错误**：原发订单文本 `message`，改为发 `default_reply`
+- **修复 `_parse_query_filter` limit 无下限**：limit 为 0 或负值时钳制到 [1, 200]
+
+### Removed
+- **删除无用代码**：`order_db.py` 中无调用方的 `save_order/_save_mysql/_save_sqlite`、`afdian_api.py` 的 `ping()`、`media_downloader.py` 的 `cleanup_orphaned_media`、`star.py` 只写不读的 `afdian_started`、`_MockAfdianClient.query_sponsor`、`web_api.py` 未使用的 `sys_util` import、`snapshot_renderer.py` return 后的不可达代码
+- **删除 19 个根目录临时调试脚本**（`debug_*.py`、`final_*.py`、`quick_test.py`、`second_check.py`、`test_*.py` 等）及 3 个过期文档（`PROJECT_SUMMARY.md`、`README_TEST_IMAGES.md`、`RENDERER_FIX_SUMMARY.md`）
+
+### Other
+- **Web API 注册数动态统计**：不再硬编码 `已注册 26 个 Web API`，改为运行时计数（当前 31 个）
+- 版本号 bump 至 2.7.0
+
 ## [2.6.9] - 2026-08-08
 
 ### Fixed

@@ -9,7 +9,6 @@
 import asyncio
 import json
 import sqlite3
-from decimal import Decimal
 from pathlib import Path
 from typing import Optional
 
@@ -143,14 +142,6 @@ class OrderDB:
 
     # ---- 写入 ----
 
-    async def save_order(self, order) -> None:
-        if self._mysql_ready and self._pool:
-            await self._save_mysql(order)
-        elif self._sqlite_path:
-            await asyncio.to_thread(self._save_sqlite, order)
-        else:
-            logger.error("[Afdian] 无可用存储后端，订单未保存")
-
     async def save_order_if_new(self, order) -> bool:
         """原子地保存订单，仅当订单原本不存在时返回 True。
 
@@ -201,41 +192,6 @@ class OrderDB:
             conn.commit()
             return cur.rowcount > 0
 
-    async def _save_mysql(self, order) -> None:
-        fields = self._build_fields(order)
-        sql = """
-            REPLACE INTO afdian_orders (
-                out_trade_no, user_id, user_name, user_private_id, plan_id,
-                plan_title, month, total_amount, show_amount, status,
-                product_type, discount, remark, redeem_id, sku_detail,
-                address_person, address_phone, address_address, create_time
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, %s, %s
-            )
-        """
-        try:
-            async with self._pool.acquire() as conn:
-                async with conn.cursor() as cur:
-                    await cur.execute(sql, tuple(fields.values()))
-                    await conn.commit()
-        except Exception as e:
-            self._degrade_to_sqlite(str(e))
-            if self._sqlite_path:
-                await asyncio.to_thread(self._save_sqlite, order)
-
-    def _save_sqlite(self, order) -> None:
-        fields = self._build_fields(order)
-        columns = ", ".join(fields.keys())
-        placeholders = ", ".join("?" * len(fields))
-        with sqlite3.connect(self._sqlite_path) as conn:
-            conn.execute(
-                f"INSERT OR REPLACE INTO afdian_orders "
-                f"({columns}) VALUES ({placeholders})",
-                tuple(fields.values()),
-            )
-            conn.commit()
-
     def _build_fields(self, order) -> dict:
         return {
             "out_trade_no": order.get("out_trade_no") or "",
@@ -263,7 +219,10 @@ class OrderDB:
 
     async def get_all_orders(self) -> list:
         if self._mysql_ready and self._pool and not self._pool_is_closed():
-            return await self._query_mysql("SELECT * FROM afdian_orders ORDER BY create_time DESC")
+            return await self._query_mysql(
+                "SELECT * FROM afdian_orders ORDER BY create_time DESC",
+                sqlite_sql="SELECT * FROM afdian_orders ORDER BY create_time DESC",
+            )
         if self._sqlite_path:
             return await asyncio.to_thread(self._query_sqlite, "SELECT * FROM afdian_orders ORDER BY create_time DESC")
         return []
@@ -273,6 +232,7 @@ class OrderDB:
             rows = await self._query_mysql(
                 "SELECT * FROM afdian_orders WHERE out_trade_no = %s",
                 (out_trade_no,),
+                sqlite_sql="SELECT * FROM afdian_orders WHERE out_trade_no = ?",
             )
             return rows[0] if rows else None
         if self._sqlite_path:
@@ -289,6 +249,7 @@ class OrderDB:
             return await self._query_mysql(
                 "SELECT * FROM afdian_orders WHERE user_id = %s ORDER BY create_time DESC",
                 (user_id,),
+                sqlite_sql="SELECT * FROM afdian_orders WHERE user_id = ? ORDER BY create_time DESC",
             )
         if self._sqlite_path:
             return await asyncio.to_thread(
@@ -303,6 +264,7 @@ class OrderDB:
             return await self._query_mysql(
                 "SELECT * FROM afdian_orders WHERE status = %s ORDER BY create_time DESC",
                 (status,),
+                sqlite_sql="SELECT * FROM afdian_orders WHERE status = ? ORDER BY create_time DESC",
             )
         if self._sqlite_path:
             return await asyncio.to_thread(
@@ -312,8 +274,16 @@ class OrderDB:
             )
         return []
 
-    async def _query_mysql(self, sql: str, params: tuple = ()) -> list:
+    async def _query_mysql(self, sql: str, params: tuple = (), sqlite_sql: str = None) -> list:
+        """执行 MySQL 查询；故障时降级到 SQLite 兜底查询（需提供 SQLite 版 SQL）。
+
+        :param sql: MySQL SQL（%s 占位符）
+        :param params: 查询参数
+        :param sqlite_sql: SQLite 版 SQL（? 占位符），为空时仅记录降级并返回 []
+        """
         if not self._pool:
+            if sqlite_sql and self._sqlite_path:
+                return await asyncio.to_thread(self._query_sqlite, sqlite_sql, params)
             return []
         try:
             async with self._pool.acquire() as conn:
@@ -324,6 +294,8 @@ class OrderDB:
                     return [dict(zip(columns, row)) for row in rows]
         except Exception as e:
             self._degrade_to_sqlite(str(e))
+            if sqlite_sql and self._sqlite_path:
+                return await asyncio.to_thread(self._query_sqlite, sqlite_sql, params)
             return []
 
     def _query_sqlite(self, sql: str, params: tuple = ()) -> list:

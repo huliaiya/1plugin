@@ -1618,16 +1618,28 @@ class Database:
 
 
 async def _migrate_v3(pool: aiomysql.Pool) -> None:
-    """v2 → v3: 添加 content_types 列"""
+    """v2 → v3: 添加 content_types 列（幂等：列/索引已存在时跳过）。"""
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                "ALTER TABLE messages ADD COLUMN content_types VARCHAR(256) DEFAULT NULL "
-                "AFTER content_hash"
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'messages' "
+                "AND COLUMN_NAME = 'content_types'"
             )
+            if (await cur.fetchone())[0] == 0:
+                await cur.execute(
+                    "ALTER TABLE messages ADD COLUMN content_types VARCHAR(256) "
+                    "DEFAULT NULL AFTER content_hash"
+                )
             await cur.execute(
-                "ALTER TABLE messages ADD INDEX idx_content_types (content_types)"
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'messages' "
+                "AND INDEX_NAME = 'idx_content_types'"
             )
+            if (await cur.fetchone())[0] == 0:
+                await cur.execute(
+                    "ALTER TABLE messages ADD INDEX idx_content_types (content_types)"
+                )
             await conn.commit()
 
 

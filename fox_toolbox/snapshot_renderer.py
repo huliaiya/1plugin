@@ -426,26 +426,6 @@ def _draw_glass_card(img: Image.Image, xy, title: Optional[str] = None, accent: 
     
     return (x0 + _PX(24), y0 + _PX(52) if title else y0 + _PX(24), x1 - _PX(24), y1 - _PX(24))
 
-    # 绘制边框
-    border = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
-    border_draw = ImageDraw.Draw(border)
-    _round_rect(border_draw, (0, 0, cw, ch), _CARD_RADIUS, outline=_GLASS_BORDER, width=_PX(1))
-    img.paste(border, (x0, y0), border)
-
-    # 标题区域处理
-    if title:
-        draw = ImageDraw.Draw(img)
-        f = _get_font(_PX(24), bold=True)
-        _draw_text(draw, (x0 + _PX(20), y0 + _PX(16)), title, f, _TEXT_DARK, img)
-        
-        # 标题下划线
-        line_y = y0 + _PX(50)
-        draw.line([(x0 + _PX(20), line_y), (x1 - _PX(20), line_y)], 
-                 fill=_GLASS_BORDER, width=_PX(1))
-        
-        return (x0 + _PX(20), y0 + _PX(60), x1 - _PX(20), y1 - _PX(16))
-    return (x0 + _PX(20), y0 + _PX(16), x1 - _PX(20), y1 - _PX(16))
-
 
 # ========== 绘制函数 ==========
 
