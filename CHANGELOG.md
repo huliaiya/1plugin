@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.7] - 2026-08-08
+
+### Fixed
+- **修复 `/发电模拟` 命令触发受限问题**：原命令走 `_afdian_check`（要求真实 API 凭据已配置），但模拟命令使用 mock 客户端、不请求真实接口，未配置 user_id/token 时会被直接拦截；现改为仅要求功能开关开启，未配置凭据也可用于验证推送链路
+- **修复模拟订单号碰撞导致重复模拟被去重跳过**：原 `out_trade_no` 使用秒级时间戳 `TEST{now}`，同一秒内重复执行会被 `save_order_if_new` 按交易号去重而跳过推送；现追加 uuid 短后缀保证每次订单号唯一
+
+### Changed
+- 版本号 bump 至 2.6.7
+
 ## [2.6.6] - 2026-08-08
 
 ### Added

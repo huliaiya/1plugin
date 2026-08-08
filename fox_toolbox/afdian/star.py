@@ -8,6 +8,7 @@ main.py 中的主 Star 类继承使用。
 import asyncio
 import json
 import time
+import uuid
 from pathlib import Path
 
 from astrbot.api import logger
@@ -93,7 +94,7 @@ class AfdianFeature:
         if getattr(self, "_afdian_brand", None):
             return self._afdian_brand
         name = "狐狸插件"
-        version = "2.6.6"
+        version = "2.6.7"
         try:
             meta_path = (
                 Path(__file__).resolve().parent.parent.parent / "metadata.yaml"
@@ -454,7 +455,7 @@ class AfdianFeature:
         sender_id = str(event.get_sender_id())
         now = int(time.time())
         order = {
-            "out_trade_no": f"TEST{now}",
+            "out_trade_no": f"TEST{now}-{uuid.uuid4().hex[:6]}",
             "user_id": f"sim_{sender_id}",
             "user_name": f"模拟用户({sender_id})",
             "user_private_id": "",
