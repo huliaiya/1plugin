@@ -31,6 +31,7 @@ def _create_mock_astrbot_modules():
 
     api_event.filter = MagicMock()
     api_event.AstrMessageEvent = MagicMock
+    api_event.MessageChain = MagicMock
 
     api_star.Context = MagicMock
     api_star.Star = MagicMock

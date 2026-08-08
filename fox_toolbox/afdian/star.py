@@ -6,6 +6,7 @@ main.py 中的主 Star 类继承使用。
 """
 
 import asyncio
+import json
 import time
 from pathlib import Path
 
@@ -17,6 +18,22 @@ from .afdian_api import AfdianAPIClient
 from .afdian_webhook import AfdianWebhookServer
 from .order_db import OrderDB
 from .utils import parse_order, parse_sponsors
+
+
+def _db_order_to_dict(row: dict) -> dict:
+    """把 OrderDB 行记录还原为 parse_order 可用的订单字典。"""
+    order = dict(row)
+    sku_detail = order.get("sku_detail")
+    if not isinstance(sku_detail, list):
+        if isinstance(sku_detail, str):
+            try:
+                sku_detail = json.loads(sku_detail)
+            except (TypeError, ValueError):
+                sku_detail = []
+        else:
+            sku_detail = []
+    order["sku_detail"] = sku_detail
+    return order
 
 
 class AfdianFeature:
@@ -55,7 +72,7 @@ class AfdianFeature:
         if getattr(self, "_afdian_brand", None):
             return self._afdian_brand
         name = "狐狸插件"
-        version = "2.6.3"
+        version = "2.6.4"
         try:
             meta_path = (
                 Path(__file__).resolve().parent.parent.parent / "metadata.yaml"
@@ -376,15 +393,23 @@ class AfdianFeature:
         return "\n\n".join(texts)
 
     async def afdian_query_sponsor(self, event, sponsor_user_ids=None):
-        """查询发电 —— 查询收到的赞助记录。"""
-        sponsor_user_ids = sponsor_user_ids or self.afdian_cfg.user_id
+        """查询发电 —— 查询收到的赞助记录。
+
+        默认查询全部赞助者（不传入自己的 user_id 作筛选，避免查空）；
+        仅当无任何赞助关系记录时，回退展示本地已同步的历史订单，
+        保证查询结果始终有内容。
+        """
+        sponsor_user_ids = (sponsor_user_ids or "").strip()
         sponsors = await self.afdian_client.query_sponsor(
             sponsor_user_ids=sponsor_user_ids
         )
-        if not sponsors or not sponsors.get("list"):
-            return "未找到赞助记录"
-        sponsor_list = parse_sponsors(sponsors)
-        return "\n\n".join(sponsor_list)
+        if sponsors and sponsors.get("list"):
+            sponsor_list = parse_sponsors(sponsors)
+            return "\n\n".join(sponsor_list)
+        orders = await self.afdian_db.get_all_orders()
+        if orders:
+            return "\n\n".join(parse_order(_db_order_to_dict(o)) for o in orders)
+        return "未找到赞助记录"
 
     async def afdian_add_notice_session(self, event, umo=None):
         """开启发电通知 —— 在当前会话接收爱发电订单通知。"""

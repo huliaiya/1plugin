@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.4] - 2026-08-08
+
+### Fixed
+- **修复爱发电查询发电/查询赞助为空**：`query_sponsor` 原先默认把创作者自己的 `user_id` 当作赞助者筛选条件传给接口，导致按"创作者作为赞助者"过滤恒为空；现默认不传 `user_id` 查询全部赞助者，仅当显式指定赞助者用户 ID 时才按该 ID 筛选
+- **查询发电无赞助记录时回退展示本地订单**：当账号不存在赞助关系但已同步历史订单时，查询发电回退展示本地已同步订单，保证查询结果有内容
+
+### Changed
+- 版本号 bump 至 2.6.4
+
 ## [2.6.3] - 2026-08-08
 
 ### Added

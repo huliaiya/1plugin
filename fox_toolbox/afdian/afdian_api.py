@@ -93,11 +93,14 @@ class AfdianAPIClient:
         """查询赞助者列表。
 
         :param page: 页码
-        :param sponsor_user_ids: 用户ID，多个用英文逗号分隔
+        :param sponsor_user_ids: 指定要查询的赞助者用户ID（多个用英文逗号分隔），
+            留空时查询全部赞助者
         :param per_page: 每页数量
         :return: 返回 data 字典
         """
-        params: dict = {"page": page, "user_id": sponsor_user_ids, "per_page": per_page}
+        params: dict = {"page": page, "per_page": per_page}
+        if sponsor_user_ids:
+            params["user_id"] = sponsor_user_ids
         sponsors = await self._post("/query-sponsor", params)
         logger.info(f"[Afdian] 查询赞助者({sponsor_user_ids}) 结果: {sponsors}")
         return sponsors.get("data", {})
