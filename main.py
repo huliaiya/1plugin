@@ -998,7 +998,7 @@ class MessageRecorder(Star, AfdianFeature):
         """生成 WebUI 仪表盘快照图片并发送。
 
         用 Pillow 将数据库统计数据渲染成与 WebUI 风格一致的 PNG，
-        包含统计卡片、时间趋势、发送者/群组排行、平台分布、平台详情、内容类型分布。
+        包含统计卡片、时间趋势、平台分布、平台详情、内容类型分布、发送者/群组排行。
         数据库不可用时降级返回文本提示。
         """
         if not self._check_initialized() or not self._db:

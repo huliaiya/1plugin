@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.2] - 2026-08-09
+
+### Changed
+- **快照卡片顺序调整**：平台消息详情移到平台分布下方、消息内容类型分布移到平台消息详情下方，发送者/群组排行移至内容类型分布之后，图表阅读顺序更符合「平台概览 → 消息构成 → 活跃用户」的信息流
+- 版本号 bump 至 2.8.2
+
 ## [2.8.1] - 2026-08-09
 
 ### Fixed

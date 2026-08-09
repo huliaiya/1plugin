@@ -1267,7 +1267,29 @@ def render_snapshot(
     )
     y += plat_h + _PX(30)
 
-    # 5. 发送者 + 群组排行
+    # 5. 平台消息详情卡片
+    pd_h = _PX(300)
+    _draw_glass_card(img, (_PX(_PADDING), y, _W_FULL - _PX(_PADDING), y + pd_h), 
+                     title="平台消息详情", accent=_CHART_COLORS[2])
+    _draw_platform_detail(
+        img,
+        (_PX(_PADDING) + _PX(24), y + _PX(52), _W_FULL - _PX(_PADDING) - _PX(24), y + pd_h - _PX(24)),
+        platform_detail or [],
+    )
+    y += pd_h + _PX(30)
+
+    # 6. 内容类型分布卡片
+    ct_h = _PX(320)
+    _draw_glass_card(img, (_PX(_PADDING), y, _W_FULL - _PX(_PADDING), y + ct_h), 
+                     title="消息内容类型分布", accent=_CHART_COLORS[3])
+    _draw_content_types(
+        img,
+        (_PX(_PADDING) + _PX(24), y + _PX(52), _W_FULL - _PX(_PADDING) - _PX(24), y + ct_h - _PX(24)),
+        content_types,
+    )
+    y += ct_h + _PX(30)
+
+    # 7. 发送者 + 群组排行
     gap = _PX(_CARD_GAP)
     half_w = (_W_FULL - 2 * _PX(_PADDING) - gap) // 2
     rank_h = _PX(390)
@@ -1292,28 +1314,6 @@ def render_snapshot(
         group_ranking, "display_name", "count", _CHART_COLORS[1],
     )
     y += rank_h + _PX(30)
-
-    # 6. 平台消息详情卡片
-    pd_h = _PX(300)
-    _draw_glass_card(img, (_PX(_PADDING), y, _W_FULL - _PX(_PADDING), y + pd_h), 
-                     title="平台消息详情", accent=_CHART_COLORS[2])
-    _draw_platform_detail(
-        img,
-        (_PX(_PADDING) + _PX(24), y + _PX(52), _W_FULL - _PX(_PADDING) - _PX(24), y + pd_h - _PX(24)),
-        platform_detail or [],
-    )
-    y += pd_h + _PX(30)
-
-    # 7. 内容类型分布卡片
-    ct_h = _PX(320)
-    _draw_glass_card(img, (_PX(_PADDING), y, _W_FULL - _PX(_PADDING), y + ct_h), 
-                     title="消息内容类型分布", accent=_CHART_COLORS[3])
-    _draw_content_types(
-        img,
-        (_PX(_PADDING) + _PX(24), y + _PX(52), _W_FULL - _PX(_PADDING) - _PX(24), y + ct_h - _PX(24)),
-        content_types,
-    )
-    y += ct_h + _PX(30)
 
     # 8. 底部水印
     draw = ImageDraw.Draw(img)
