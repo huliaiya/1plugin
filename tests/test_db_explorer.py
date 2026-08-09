@@ -163,6 +163,22 @@ class TestEnsureLimit:
         )
         assert sql.endswith("LIMIT 100")
 
+    def test_parameterized_limit_not_duplicated(self, explorer):
+        # 参数化 LIMIT 无法钳制，应保持原样而非追加第二个 LIMIT 造成语法错误
+        sql = explorer._ensure_limit("SELECT * FROM messages LIMIT %s", 100)
+        assert sql == "SELECT * FROM messages LIMIT %s"
+        sql2 = explorer._ensure_limit("SELECT * FROM messages LIMIT ?", 100)
+        assert sql2 == "SELECT * FROM messages LIMIT ?"
+
+    def test_limit_all_not_duplicated(self, explorer):
+        # 非数字 LIMIT 形式同样不能追加重复 LIMIT
+        sql = explorer._ensure_limit("SELECT * FROM messages LIMIT ALL", 100)
+        assert sql == "SELECT * FROM messages LIMIT ALL"
+
+    def test_limit_offset_form_kept(self, explorer):
+        sql = explorer._ensure_limit("SELECT * FROM messages LIMIT 10 OFFSET 20", 100)
+        assert sql == "SELECT * FROM messages LIMIT 10 OFFSET 20"
+
     def test_select_into_outfile_flagged(self, explorer):
         dangerous, reason = explorer.check_dangerous(
             "SELECT * FROM messages INTO OUTFILE '/tmp/x'"

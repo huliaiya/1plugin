@@ -5,6 +5,8 @@ import io
 import json
 from unittest.mock import patch, MagicMock, AsyncMock
 
+import pytest
+
 from PIL import Image
 
 from astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader import (
@@ -333,3 +335,69 @@ class TestLocalFileReadProtection:
             return_value=str(tmp_path),
         ):
             assert asyncio.run(md.download_media("file:///etc/passwd", "Image")) is None
+
+
+class TestFetchViaAiohttpContentLength:
+    """aiohttp 响应 Content-Length 非数字时的容错"""
+
+    class _FakeContent:
+        def __init__(self, body: bytes):
+            self._body = body
+
+        async def read(self, size):
+            return self._body
+
+    class _FakeResp:
+        def __init__(self, status, headers, body: bytes):
+            self.status = status
+            self.headers = headers
+            self.content = TestFetchViaAiohttpContentLength._FakeContent(body)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+    class _FakeSession:
+        def __init__(self, resp):
+            self._resp = resp
+
+        def get(self, url, allow_redirects=False):
+            return self._resp
+
+    def _make_md(self, tmp_path) -> MediaDownloader:
+        with patch(
+            "astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader.get_astrbot_plugin_data_path",
+            return_value=str(tmp_path),
+        ):
+            return MediaDownloader("test_plugin")
+
+    @pytest.mark.asyncio
+    async def test_non_numeric_content_length_tolerated(self, tmp_path):
+        md = self._make_md(tmp_path)
+        resp = self._FakeResp(200, {"Content-Length": "not-a-number"}, b"hello world")
+        md._get_session = AsyncMock(return_value=self._FakeSession(resp))
+
+        with patch(
+            "astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader._is_safe_url",
+            return_value=True,
+        ):
+            content, content_type = await md._fetch_via_aiohttp(
+                "http://example.com/x.png"
+            )
+        assert content == b"hello world"
+        assert content_type == ""
+
+    @pytest.mark.asyncio
+    async def test_numeric_oversize_rejected(self, tmp_path):
+        md = self._make_md(tmp_path)
+        resp = self._FakeResp(200, {"Content-Length": "999999999"}, b"")
+        md._get_session = AsyncMock(return_value=self._FakeSession(resp))
+
+        with patch(
+            "astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader._is_safe_url",
+            return_value=True,
+        ):
+            content, _ = await md._fetch_via_aiohttp("http://example.com/big.bin")
+        assert content is None

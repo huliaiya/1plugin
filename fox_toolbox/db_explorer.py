@@ -118,7 +118,9 @@ class DbExplorer:
             return sql
         # 在剥除字符串字面量的文本上检测，避免把数据内的 'LIMIT 9999' 误判为已有 LIMIT
         stripped_sql = self._strip_string_literals(sql)
-        if re.search(r"\bLIMIT\s+\d+", stripped_sql, re.IGNORECASE):
+        if re.search(r"\bLIMIT\b", stripped_sql, re.IGNORECASE):
+            # 已有 LIMIT（数字 / 参数 ? / %s / ALL 等）时统一钳制其中的数字 count；
+            # 非数字形式无法钳制则保持原样，避免追加第二个 LIMIT 造成语法错误。
             # 统一钳制 LIMIT 的 count；两参形式 LIMIT offset, count 也钳制 count
             def _replace_limit(m):
                 limit_kw = m.group(1)

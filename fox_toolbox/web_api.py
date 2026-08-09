@@ -45,6 +45,9 @@ async def _send_attachment(file_path, filename, mimetype):
     )
 
 MAX_IMPORT_FILE_SIZE = 4 * 1024 * 1024 * 1024
+MAX_IMPORT_JSON_BYTES = 512 * 1024 * 1024
+MAX_IMPORT_MEDIA_BYTES = 8 * 1024 * 1024 * 1024
+MAX_IMPORT_MEDIA_FILES = 10000
 MAX_EXPORT_FILE_AGE = 3600
 MAX_DOWNLOAD_DATA_SIZE = 50 * 1024 * 1024
 MAX_STATS_LIMIT = 200
@@ -1791,6 +1794,14 @@ def _import_zip_package(file_path: str) -> tuple:
     with zipfile.ZipFile(file_path, "r") as zf:
         if "data.json" not in zf.namelist():
             raise ValueError("无效的导入包：缺少 data.json")
+
+        json_info = zf.getinfo("data.json")
+        if json_info.file_size > MAX_IMPORT_JSON_BYTES:
+            raise ValueError(
+                f"无效的导入包：data.json 过大"
+                f"（{json_info.file_size} bytes > {MAX_IMPORT_JSON_BYTES} bytes）"
+            )
+
         with zf.open("data.json") as f:
             data = json.loads(f.read().decode("utf-8"))
         if isinstance(data, dict) and "messages" in data:
@@ -1798,9 +1809,24 @@ def _import_zip_package(file_path: str) -> tuple:
         elif isinstance(data, list):
             records = data
 
-        for name in zf.namelist():
-            if not name.startswith("media/"):
-                continue
+        # 防 zip 炸弹：按解压后文件头大小统计总量与条目数，超限直接拒绝
+        media_infos = [
+            info for info in zf.infolist() if info.filename.startswith("media/")
+        ]
+        total_media_bytes = sum(info.file_size for info in media_infos)
+        if total_media_bytes > MAX_IMPORT_MEDIA_BYTES:
+            raise ValueError(
+                f"无效的导入包：媒体文件解压总量过大"
+                f"（{total_media_bytes} bytes > {MAX_IMPORT_MEDIA_BYTES} bytes）"
+            )
+        if len(media_infos) > MAX_IMPORT_MEDIA_FILES:
+            raise ValueError(
+                f"无效的导入包：媒体文件数量过多"
+                f"（{len(media_infos)} > {MAX_IMPORT_MEDIA_FILES}）"
+            )
+
+        for info in media_infos:
+            name = info.filename
             rel_path = name[len("media/"):]
             if not rel_path:
                 continue

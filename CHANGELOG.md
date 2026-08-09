@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.6] - 2026-08-09
+
+### Security
+- **导入 zip 解压防 zip 炸弹**：`_import_zip_package` 解压媒体文件此前无任何大小/数量限制，恶意或异常导入包可把磁盘撑爆、`data.json` 全量读入内存无上限。新增三个上限：`data.json` 最大 512MB、媒体解压总量最大 8GB、媒体条目数最大 10000，超限直接拒绝导入
+
+### Fixed
+- **aiohttp Content-Length 容错**：`media_downloader` 对服务器返回的非数字 `Content-Length` 头直接 `int()` 抛 `ValueError`，该异常不在现有 `except` 范围内导致该次下载静默失败，现已容错为 0 继续按实际内容大小限制校验
+- **db_explorer 重复 LIMIT 语法错误**：`_ensure_limit` 仅识别 `LIMIT <数字>`，对参数化 `LIMIT ?`/`LIMIT %s`/`LIMIT ALL` 等已有 LIMIT 检测不到而追加第二个 LIMIT，导致 SQL 语法错误；现对任意形式的已有 LIMIT 均不再追加，仅钳制其中的数字 count
+- **快照发送 unlink 竞态**：`/huli_record snapshot` 生成图片后在命令生成器 `finally` 中立即删除文件，而 AstrBot 框架在生成器结束后才实际发送图片，发送失败率高；改为登记延迟删除任务（30 秒后清理，纳入 `_pending_tasks` 生命周期管理）
+- **`_pending_tasks` 无上限**：消息监听为每条消息新建后台任务并无限累积，消息洪峰时内存持续增长；新增 `MAX_PENDING_TASKS=200` 上限，超过时先等待任一任务完成再登记，形成自然背压
+- **快照水印版本过期**：水印硬编码 `v2.4.3` 与当前版本脱节，改为从 `metadata.yaml` 动态读取版本号
+- 版本号 bump 至 2.7.6
+
 ## [2.7.5] - 2026-08-08
 
 ### Changed

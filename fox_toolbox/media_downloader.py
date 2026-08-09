@@ -419,12 +419,17 @@ class MediaDownloader:
                         return None, ""
 
                     content_length = resp.headers.get("Content-Length")
-                    if content_length and int(content_length) > MAX_DOWNLOAD_SIZE:
-                        logger.warning(
-                            f"[MediaDownloader] 文件过大，拒绝下载: "
-                            f"{int(content_length)} bytes, URL: {current_url[:80]}"
-                        )
-                        return None, ""
+                    if content_length:
+                        try:
+                            content_length = int(content_length)
+                        except (ValueError, TypeError):
+                            content_length = 0
+                        if content_length > MAX_DOWNLOAD_SIZE:
+                            logger.warning(
+                                f"[MediaDownloader] 文件过大，拒绝下载: "
+                                f"{content_length} bytes, URL: {current_url[:80]}"
+                            )
+                            return None, ""
 
                     content = await resp.content.read(MAX_DOWNLOAD_SIZE + 1)
                     if len(content) > MAX_DOWNLOAD_SIZE:

@@ -158,6 +158,21 @@ _emoji_font: Optional[ImageFont.FreeTypeFont] = None
 _emoji_font_inited = False
 
 
+def _get_plugin_version() -> str:
+    """从 metadata.yaml 读取插件版本，作为水印标识（避免硬编码版本过期）。"""
+    try:
+        meta_path = Path(__file__).resolve().parent.parent / "metadata.yaml"
+        if meta_path.exists():
+            for line in meta_path.read_text(encoding="utf-8").splitlines():
+                if line.startswith("version:"):
+                    version = line.split(":", 1)[1].strip().strip('"\'')
+                    if version:
+                        return version
+    except Exception:
+        pass
+    return "2.7.6"
+
+
 def _search_font_path(name_keywords: List[str]) -> Optional[str]:
     """在常见字体目录中递归搜索匹配关键字的字体文件。"""
     seen: set = set()
@@ -1205,7 +1220,10 @@ def render_snapshot(
 
     # 8. 底部水印
     draw = ImageDraw.Draw(img)
-    watermark_text = "由狐狸插件 /huli_record snapshot 生成 · 天空蓝清新风格 v2.4.3"
+    watermark_text = (
+        f"由狐狸插件 /huli_record snapshot 生成 · "
+        f"天空蓝清新风格 v{_get_plugin_version()}"
+    )
     f_watermark = _get_font(_PX(14))
     _draw_text(draw, (_PX(24), y + _PX(12)), watermark_text, f_watermark, _TEXT_MEDIUM, img)
 

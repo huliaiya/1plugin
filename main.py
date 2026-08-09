@@ -37,6 +37,7 @@ from .fox_toolbox.snapshot_renderer import render_snapshot, _to_int
 
 MAX_CONCURRENT_SAVES = 8
 MAX_CONCURRENT_DOWNLOADS = 4
+MAX_PENDING_TASKS = 200
 
 # 内容类型 -> 摘要文本的映射
 _CONTENT_TYPE_LABELS = {
@@ -546,6 +547,20 @@ class MessageRecorder(Star, AfdianFeature):
             return
 
         task = asyncio.create_task(self._save_message_async(event))
+        await self._track_pending_task(task)
+
+    async def _track_pending_task(self, task: asyncio.Task):
+        """登记后台任务，并在积压超过上限时形成背压。
+
+        消息洪峰下避免无限创建任务对象导致内存增长：超过
+        MAX_PENDING_TASKS 时先等待任意一个任务完成再登记新任务。
+        """
+        if len(self._pending_tasks) >= MAX_PENDING_TASKS:
+            if self._pending_tasks:
+                done, _ = await asyncio.wait(
+                    set(self._pending_tasks),
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
         self._pending_tasks.add(task)
         task.add_done_callback(self._pending_tasks.discard)
 
@@ -989,10 +1004,22 @@ class MessageRecorder(Star, AfdianFeature):
         try:
             yield event.image_result(str(snapshot_path))
         finally:
-            try:
-                snapshot_path.unlink(missing_ok=True)
-            except Exception:
-                pass
+            # 延迟删除：AstrBot 在命令生成器结束后才实际发送图片，
+            # 立即 unlink 会产生文件被删除的竞态，改为延迟清理。
+            clean_task = asyncio.create_task(
+                self._delayed_unlink(snapshot_path, delay=30.0)
+            )
+            self._pending_tasks.add(clean_task)
+            clean_task.add_done_callback(self._pending_tasks.discard)
+
+    @staticmethod
+    async def _delayed_unlink(path: Path, delay: float = 30.0):
+        """延迟删除快照临时文件，给框架留出图片发送窗口。"""
+        try:
+            await asyncio.sleep(delay)
+            path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
     # ========== 爱发电对接（复刻自 astrbot_plugin_afdian） ==========
 
