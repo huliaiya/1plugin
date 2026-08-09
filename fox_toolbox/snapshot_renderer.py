@@ -170,7 +170,7 @@ def _get_plugin_version() -> str:
                         return version
     except Exception:
         pass
-    return "2.7.7"
+    return "2.7.8"
 
 
 def _search_font_path(name_keywords: List[str]) -> Optional[str]:

@@ -5,7 +5,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E4.16%2C%3C5-blue?style=for-the-badge)](https://github.com/Soulter/astrbot)
 [![Python](https://img.shields.io/badge/Python-3.12+-green?style=for-the-badge)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.7.7-orange?style=for-the-badge)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.7.8-orange?style=for-the-badge)](CHANGELOG.md)
 
 **全平台聊天消息自动记录 | MySQL 5.7 存储 | Web 管理面板 | 全文搜索 | 插件 API**
 
@@ -135,6 +135,7 @@ git clone https://github.com/leafliber/astrbot_plugin_fox_toolbox.git
 | `afdian_use_polling` | `true` | 是否启用无公网订单轮询检测（无公网机器替代 Webhook 推送） |
 | `afdian_poll_interval` | `5` | 订单轮询间隔（秒），最小 1 秒 |
 | `afdian_poll_timeout` | `300` | 发电后等待支付的完成时限（秒），默认 5 分钟 |
+| `afdian_recovery_check_interval` | `30` | MySQL 故障降级后订单存储的恢复检测间隔（秒），恢复后自动切回并回写降级期订单，最小 5 秒 |
 | `afdian_api_base_url` | `https://afdian.com/api/open` | 爱发电 API 根地址 |
 | `afdian_api_user_id` | `` | 爱发电用户 ID（开发者后台获取） |
 | `afdian_api_token` | `` | 爱发电 API 密钥（开发者后台获取） |

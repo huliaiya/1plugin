@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.8] - 2026-08-09
+
+### Added
+- **爱发电订单存储 MySQL 自动恢复**：MySQL 故障降级到 SQLite 后，`OrderDB` 现在会周期检测主库恢复（每 30 秒，可通过 `afdian_recovery_check_interval` 配置），恢复后自动重新绑定连接池并把降级期间积累的订单幂等回写 MySQL（`INSERT IGNORE` 去重），消除此前"降级永久化、SQLite 与 MySQL 分脑"的问题
+- **爱发电订单 SQLite 写保护**：SQLite 兜底连接统一启用 WAL + `busy_timeout`（30 秒）+ `synchronous=NORMAL`，并发写入（Webhook 与轮询并存）时的锁定异常被捕获记录日志而非上抛导致订单处理失败
+
+### Fixed
+- **帮助菜单补全爱发电指令**：`/狐狸菜单` 与 `/hulihelp` 此前未列出爱发电模块指令；现新增「⚡ 爱发电」分类，完整展示 `/发电 [金额]`（普通用户）及 5 个 `[管理员]` 指令（爱发电测试、同步历史订单、查询订单、查询发电、开启发电通知），与真实注册指令一一对应
+- 版本号 bump 至 2.7.8
+
 ## [2.7.7] - 2026-08-09
 
 ### Added

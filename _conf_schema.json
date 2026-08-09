@@ -120,6 +120,12 @@
     "default": 300,
     "hint": "生成支付链接后要求用户在该时限内完成支付，超时提醒作废；默认 300 秒（5 分钟）"
   },
+  "afdian_recovery_check_interval": {
+    "type": "int",
+    "description": "爱发电订单存储 MySQL 恢复检测间隔（秒）",
+    "default": 30,
+    "hint": "MySQL 故障降级到 SQLite 后，每隔多少秒检测一次主库是否恢复；恢复后自动切回并回写降级期订单，最小 5 秒"
+  },
   "afdian_api_base_url": {
     "type": "string",
     "description": "爱发电 API 根地址",
