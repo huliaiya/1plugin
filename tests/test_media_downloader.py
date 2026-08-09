@@ -250,7 +250,16 @@ class TestPathTraversalProtection:
 
 
 class TestSsrRedirectProtection:
-    """验证重定向到不安全地址会被拒绝。"""
+    async def test_redirect_to_internal_rejected(self, tmp_path):
+        from astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader import _is_safe_url
+        assert _is_safe_url("http://example.com/img.png") is True
+        assert _is_safe_url("http://169.254.169.254/latest/meta-data/") is False
+        assert _is_safe_url("http://127.0.0.1:3306/") is False
+        assert _is_safe_url("http://localhost/") is False
+
+
+class TestResolverSsrProtection:
+    """MediaResolver 路径对 http(s) 链接同样执行 SSRF 校验（防绕过）。"""
 
     def _make_md(self, tmp_path):
         with patch(
@@ -259,15 +268,53 @@ class TestSsrRedirectProtection:
         ):
             return MediaDownloader("test_plugin", max_retries=0)
 
-    def test_redirect_to_internal_rejected(self, tmp_path):
-        from astrbot_plugin_fox_toolbox.fox_toolbox.media_downloader import _is_safe_url
+    @pytest.fixture(autouse=True)
+    def _inject_media_utils(self):
+        """注入 mock 的 astrbot.core.utils.media_utils 模块，供延迟导入使用。"""
+        import sys
+        import types
 
-        # 对外可信域名
-        assert _is_safe_url("http://example.com/img.png") is True
-        # 重定向目标为内网/元数据地址 → 不安全
-        assert _is_safe_url("http://169.254.169.254/latest/meta-data/") is False
-        assert _is_safe_url("http://127.0.0.1:3306/") is False
-        assert _is_safe_url("http://localhost/") is False
+        mod = types.ModuleType("astrbot.core.utils.media_utils")
+        mod.MediaResolver = MagicMock()
+        sys.modules["astrbot.core.utils.media_utils"] = mod
+        yield mod
+        sys.modules.pop("astrbot.core.utils.media_utils", None)
+
+    @pytest.mark.asyncio
+    async def test_internal_http_url_rejected(self, tmp_path, _inject_media_utils):
+        md = self._make_md(tmp_path)
+        _inject_media_utils.MediaResolver.return_value.to_bytes = AsyncMock(
+            return_value=b"data"
+        )
+        result = await md._fetch_via_media_resolver(
+            "http://169.254.169.254/latest/meta-data/", "Image"
+        )
+        assert result is None
+        _inject_media_utils.MediaResolver.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_internal_https_url_rejected(self, tmp_path, _inject_media_utils):
+        md = self._make_md(tmp_path)
+        _inject_media_utils.MediaResolver.return_value.to_bytes = AsyncMock(
+            return_value=b"data"
+        )
+        result = await md._fetch_via_media_resolver(
+            "https://127.0.0.1:3306/", "Image"
+        )
+        assert result is None
+        _inject_media_utils.MediaResolver.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_public_http_url_passes_to_resolver(self, tmp_path, _inject_media_utils):
+        md = self._make_md(tmp_path)
+        _inject_media_utils.MediaResolver.return_value.to_bytes = AsyncMock(
+            return_value=b"data"
+        )
+        result = await md._fetch_via_media_resolver(
+            "http://example.com/img.png", "Image"
+        )
+        assert result == b"data"
+        _inject_media_utils.MediaResolver.assert_called_once()
 
 
 class TestLocalFileReadProtection:

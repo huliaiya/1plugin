@@ -350,6 +350,14 @@ class MediaDownloader:
                     f"[MediaDownloader] 拒绝读取数据目录之外的本地文件: {url[:80]}"
                 )
                 return None
+        # http(s) 链接：MediaResolver 内部下载无 SSRF 校验，需先过本模块防护，
+        # 否则会绕过 _fetch_via_aiohttp 的 _is_safe_url 检查访问内网/元数据地址
+        if str(url).lower().startswith(("http://", "https://")):
+            if not _is_safe_url(url):
+                logger.warning(
+                    f"[MediaDownloader] 拒绝不安全的URL (SSRF防护): {url[:80]}"
+                )
+                return None
         media_type_map = {
             "Image": "image",
             "Record": "audio",
