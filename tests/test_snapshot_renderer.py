@@ -2,7 +2,12 @@
 
 from decimal import Decimal
 
-from astrbot_plugin_fox_toolbox.fox_toolbox.snapshot_renderer import _to_int
+import pytest
+
+from astrbot_plugin_fox_toolbox.fox_toolbox.snapshot_renderer import (
+    _to_int,
+    render_snapshot,
+)
 
 
 class TestToInt:
@@ -33,3 +38,53 @@ class TestToInt:
         assert _to_int({"a": 1}) == 0
         assert _to_int([1, 2]) == 0
         assert _to_int("abc") == 0
+
+
+@pytest.mark.parametrize(
+    "redis_status",
+    [
+        {
+            "configured": True,
+            "available": True,
+            "enabled": True,
+            "host": "127.0.0.1",
+            "port": 6379,
+            "db": 0,
+            "ttl": 300,
+            "version": "7.2.4",
+            "keys": {"stats": 1, "recent_messages": 10},
+        },
+        {
+            "configured": True,
+            "available": False,
+            "enabled": True,
+            "version": None,
+        },
+        None,
+    ],
+)
+def test_render_snapshot_with_redis_status(redis_status):
+    """render_snapshot 在各 Redis 状态下均可正常出图（含版本字段）。"""
+    from astrbot_plugin_fox_toolbox.fox_toolbox.models import MessageStats
+
+    stats = MessageStats(
+        total_count=100,
+        group_message_count=60,
+        private_message_count=30,
+        channel_message_count=10,
+    )
+    png = render_snapshot(
+        stats,
+        db_table_count=6,
+        timeline=[
+            {"date": "01-01", "count": 10, "group_count": 6, "private_count": 3, "channel_count": 1}
+        ],
+        sender_ranking=[{"sender_id": "u1", "sender_name": "A", "platform": "tg", "count": 50}],
+        group_ranking=[{"group_id": "g1", "platform": "tg", "count": 40, "sender_count": 5}],
+        content_types=[{"type": "text", "label": "文本", "count": 80}],
+        platform_stats={"telegram": 70, "discord": 30},
+        platform_detail=[{"platform": "telegram", "platform_name": "Telegram", "total": 70}],
+        redis_status=redis_status,
+    )
+    assert isinstance(png, bytes)
+    assert len(png) > 0

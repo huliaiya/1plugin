@@ -44,10 +44,18 @@ class _FakeRedisClient:
         items = self._data.get(key, [])
         return items[start : stop + 1]
 
+    async def info(self, section=None):
+        return {"redis_version": "7.2.4"}
+
 
 class _FakePingFailClient(_FakeRedisClient):
     async def ping(self):
         raise ConnectionError("connection refused")
+
+
+class _FakeVersionlessClient(_FakeRedisClient):
+    async def info(self, section=None):
+        raise RuntimeError("no info")
 
 
 def _install_fake_aioredis(client_factory=None):
@@ -109,6 +117,49 @@ class TestRedisCacheConnect:
         ok = await cache.connect()
         assert ok is False
         assert cache.available is False
+
+
+class TestRedisCacheStatus:
+    @pytest.mark.asyncio
+    async def test_status_includes_server_version(self):
+        _install_fake_aioredis()
+        try:
+            cache = RedisCache(host="127.0.0.1", port=6379, db=0, ttl=60)
+            ok = await cache.connect()
+            assert ok is True
+            status = await cache.status()
+            assert status["version"] == "7.2.4"
+            assert status["host"] == "127.0.0.1"
+            assert status["db"] == 0
+            await cache.close()
+        finally:
+            _uninstall_fake_aioredis()
+
+    @pytest.mark.asyncio
+    async def test_status_version_none_when_info_fails(self):
+        _install_fake_aioredis(client_factory=_FakeVersionlessClient)
+        try:
+            cache = RedisCache(host="127.0.0.1", port=6379, ttl=60)
+            ok = await cache.connect()
+            assert ok is True
+            status = await cache.status()
+            assert status["version"] is None
+            await cache.close()
+        finally:
+            _uninstall_fake_aioredis()
+
+    @pytest.mark.asyncio
+    async def test_status_version_none_when_disconnected(self):
+        _install_fake_aioredis(client_factory=_FakePingFailClient)
+        try:
+            cache = RedisCache(host="127.0.0.1", port=6379, ttl=60)
+            ok = await cache.connect()
+            assert ok is False
+            status = await cache.status()
+            assert status["available"] is False
+            assert status["version"] is None
+        finally:
+            _uninstall_fake_aioredis()
 
 
 class TestRedisCacheStats:

@@ -1,4 +1,53 @@
 {
+  "enable_commands": {
+    "type": "bool",
+    "description": "是否启用消息记录指令",
+    "default": true,
+    "hint": "启用后可通过 /狐狸记录 指令查询消息记录、查看统计等"
+  },
+  "max_records": {
+    "type": "int",
+    "description": "最大消息记录数，超过时自动清理最旧的记录",
+    "default": 0,
+    "hint": "设置为 0 表示不限制记录数量（可能占用大量磁盘空间）"
+  },
+  "retention_days": {
+    "type": "int",
+    "description": "消息保留天数",
+    "default": 0,
+    "hint": "超过此天数的消息将被自动清理，设置为 0 表示永久保留"
+  },
+  "cleanup_interval_hours": {
+    "type": "int",
+    "description": "自动清理过期消息的间隔（小时）",
+    "default": 24,
+    "hint": "每隔指定小时数自动清理过期和超量记录"
+  },
+  "save_message_chain": {
+    "type": "bool",
+    "description": "是否保存完整消息链（包含图片、表情等消息段）",
+    "default": true,
+    "hint": "关闭后只保存纯文本消息，可节省存储空间"
+  },
+  "save_raw_message": {
+    "type": "bool",
+    "description": "是否保存原始消息对象（平台原始数据）",
+    "default": false,
+    "hint": "开启后会保存平台的原始消息数据，便于调试但会占用更多空间"
+  },
+  "save_media_files": {
+    "type": "bool",
+    "description": "是否保存多媒体文件（图片、语音、视频、文件）到本地",
+    "default": false,
+    "hint": "开启后会下载消息中的多媒体文件，需要打开「保存完整消息链」选项。QQ 等平台的多媒体链接有有效期，建议开启以永久保存"
+  },
+  "image_save_mode": {
+    "type": "string",
+    "description": "图片保存模式",
+    "default": "original",
+    "hint": "original: 保存原图（体积大，画质高）；thumbnail: 保存缩略图（压缩后的小图，节省空间）",
+    "options": ["original", "thumbnail"]
+  },
   "mysql_host": {
     "type": "string",
     "description": "MySQL 数据库主机地址",
@@ -29,54 +78,35 @@
     "default": "fox_toolbox",
     "hint": "用于存储消息记录的数据库名（需提前在 MySQL 中创建该数据库，字符集建议 utf8mb4）"
   },
-  "enable_commands": {
+  "storage_fallback_enabled": {
     "type": "bool",
-    "description": "是否启用消息记录指令",
+    "description": "是否启用本地 SQLite 自动兜底存储",
     "default": true,
-    "hint": "启用后可通过 /huli_record 指令查询消息记录、查看统计等"
+    "hint": "MySQL 不可用时自动降级到本地 SQLite 文件存储消息，MySQL 恢复后自动切回并补写；关闭后故障行为与旧版一致（消息无法记录）"
   },
-  "max_records": {
+  "recovery_check_interval": {
     "type": "int",
-    "description": "最大消息记录数，超过时自动清理最旧的记录",
-    "default": 0,
-    "hint": "设置为 0 表示不限制记录数量（可能占用大量磁盘空间）"
+    "description": "MySQL 恢复检测间隔（秒）",
+    "default": 30,
+    "hint": "降级模式下每隔指定秒数检测一次 MySQL 是否恢复，最小 5 秒"
   },
-  "retention_days": {
+  "connection_max_retries": {
     "type": "int",
-    "description": "消息保留天数",
-    "default": 0,
-    "hint": "超过此天数的消息将被自动清理，设置为 0 表示永久保留"
+    "description": "断连后最大自动重连次数",
+    "default": 5,
+    "hint": "MySQL 与 Redis 断连后自动重试重连的最大连续次数（最小 1）；达到上限后停止自动重连，分别进入 SQLite 降级 / 无缓存模式，需重启插件或重新触发连接才会恢复自动重连"
   },
-  "save_message_chain": {
-    "type": "bool",
-    "description": "是否保存完整消息链（包含图片、表情等消息段）",
-    "default": true,
-    "hint": "关闭后只保存纯文本消息，可节省存储空间"
-  },
-  "save_raw_message": {
-    "type": "bool",
-    "description": "是否保存原始消息对象（平台原始数据）",
-    "default": false,
-    "hint": "开启后会保存平台的原始消息数据，便于调试但会占用更多空间"
-  },
-  "cleanup_interval_hours": {
+  "backfill_batch_size": {
     "type": "int",
-    "description": "自动清理过期消息的间隔（小时）",
-    "default": 24,
-    "hint": "每隔指定小时数自动清理过期和超量记录"
+    "description": "单批补写消息条数",
+    "default": 500,
+    "hint": "MySQL 恢复后每次向 MySQL 补写的消息条数，按批推进避免大事务"
   },
-  "save_media_files": {
-    "type": "bool",
-    "description": "是否保存多媒体文件（图片、语音、视频、文件）到本地",
-    "default": false,
-    "hint": "开启后会下载消息中的多媒体文件，需要打开「保存完整消息链」选项。QQ 等平台的多媒体链接有有效期，建议开启以永久保存"
-  },
-  "image_save_mode": {
-    "type": "string",
-    "description": "图片保存模式",
-    "default": "original",
-    "hint": "original: 保存原图（体积大，画质高）；thumbnail: 保存缩略图（压缩后的小图，节省空间）",
-    "options": ["original", "thumbnail"]
+  "sqlite_max_retention_days": {
+    "type": "int",
+    "description": "已同步消息在 SQLite 中的保留天数",
+    "default": 30,
+    "hint": "已补写进 MySQL 的消息在本地 SQLite 中的保留期限，超过后自动清理以控制文件增长"
   },
   "afdian_enabled": {
     "type": "bool",
@@ -96,23 +126,23 @@
     "default": 6500,
     "hint": "需在防火墙 / 安全组放行；如无公网地址请配置反向代理或内网穿透转发到该端口"
   },
-  "afdian_use_polling": {
-    "type": "bool",
-    "description": "是否启用订单轮询检测（按需限时：用户发电后每轮询间隔秒检测一次，最多持续轮询时限秒，无待确认订单时自动停止）",
-    "default": true,
-    "hint": "无公网环境可关闭 Webhook，开启此项：用户点击发电后按需启动轮询，每 poll_interval 秒拉取一次订单，最多持续 poll_timeout 秒，无待确认订单时自动停止，避免持续请求接口"
-  },
   "afdian_webhook_token": {
     "type": "string",
     "description": "爱发电 Webhook 校验令牌（可选）",
     "default": "",
     "hint": "防止伪造订单推送。配置后在爱发电回调 URL 末尾添加 ?token=该值（如 http://公网IP:6500/?token=xxx），插件仅处理携带正确令牌的请求；留空表示不校验"
   },
+  "afdian_use_polling": {
+    "type": "bool",
+    "description": "是否启用订单轮询检测（按需限时：用户发电后按轮询间隔检测，无待确认订单时自动停止）",
+    "default": true,
+    "hint": "无公网环境可关闭 Webhook 并开启此项：用户点击发电后按需启动轮询，每 poll_interval 秒拉一次，最多持续 poll_timeout 秒，无待确认订单时自动停止"
+  },
   "afdian_poll_interval": {
     "type": "int",
     "description": "订单轮询间隔（秒）",
     "default": 5,
-    "hint": "无公网轮询模式下每间隔多少秒拉取一次订单，最小 1 秒"
+    "hint": "轮询模式每间隔多少秒拉取一次订单，最小 1 秒"
   },
   "afdian_poll_timeout": {
     "type": "int",
@@ -124,7 +154,7 @@
     "type": "int",
     "description": "爱发电订单存储 MySQL 恢复检测间隔（秒）",
     "default": 30,
-    "hint": "MySQL 故障降级到 SQLite 后，每隔多少秒检测一次主库是否恢复；恢复后自动切回并回写降级期订单，最小 5 秒"
+    "hint": "MySQL 故障降级到 SQLite 后，每隔多少秒检测主库是否恢复；恢复后自动切回并回写降级期订单，最小 5 秒"
   },
   "afdian_api_base_url": {
     "type": "string",
@@ -195,7 +225,7 @@
     "type": "bool",
     "description": "是否启用 Redis 缓存",
     "default": false,
-    "hint": "开启后用 Redis 缓存消息统计与最近消息，可显著降低 WebUI 首页加载时对数据库的压力。需先安装 redis 包（pip install redis），未启用或连接失败时插件自动以无缓存模式运行"
+    "hint": "开启后用 Redis 缓存消息统计与最近消息，可显著降低 WebUI 压力。需先安装 redis 包（pip install redis），未启用或连接失败时插件自动以无缓存模式运行"
   },
   "redis_host": {
     "type": "string",
@@ -225,36 +255,6 @@
     "type": "int",
     "description": "统计缓存有效期（秒）",
     "default": 300,
-    "hint": "消息统计结果在 Redis 中的缓存时长；消息落库后会即时更新最近消息缓存，统计缓存则按此 TTL 刷新"
-  },
-  "storage_fallback_enabled": {
-    "type": "bool",
-    "description": "是否启用本地 SQLite 自动兜底存储",
-    "default": true,
-    "hint": "MySQL 不可用时自动降级到本地 SQLite 文件存储消息，MySQL 恢复后自动切回并补写；关闭后故障行为与旧版一致（消息无法记录）"
-  },
-  "recovery_check_interval": {
-    "type": "int",
-    "description": "MySQL 恢复检测间隔（秒）",
-    "default": 30,
-    "hint": "降级模式下每隔指定秒数检测一次 MySQL 是否恢复，最小 5 秒"
-  },
-  "connection_max_retries": {
-    "type": "int",
-    "description": "断连后最大自动重连次数",
-    "default": 5,
-    "hint": "MySQL 与 Redis 断连后自动重试重连的最大连续次数（最小 1）；达到上限后停止自动重连，分别进入 SQLite 降级 / 无缓存模式，需重启插件或重新触发连接才会恢复自动重连"
-  },
-  "backfill_batch_size": {
-    "type": "int",
-    "description": "单批补写消息条数",
-    "default": 500,
-    "hint": "MySQL 恢复后每次向 MySQL 补写的消息条数，按批推进避免大事务"
-  },
-  "sqlite_max_retention_days": {
-    "type": "int",
-    "description": "已同步消息在 SQLite 中的保留天数",
-    "default": 30,
-    "hint": "已补写进 MySQL 的消息在本地 SQLite 中的保留期限，超过后自动清理以控制文件增长"
+    "hint": "消息统计结果在 Redis 中的缓存时长；消息落库后即时更新最近消息缓存，统计缓存按此刷新"
   }
 }

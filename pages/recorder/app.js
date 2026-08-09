@@ -456,6 +456,7 @@ function updateRedisCard(redisStatus) {
     setVal('redisEndpoint', '-');
     setVal('redisDb', '-');
     setVal('redisTtl', '-');
+    setVal('redisVersion', '-');
     setVal('redisStatsKey', '-');
     setVal('redisRecentKey', '-');
     return;
@@ -465,6 +466,7 @@ function updateRedisCard(redisStatus) {
   setVal('redisEndpoint', endpoint);
   setVal('redisDb', redisStatus.db != null ? `db${redisStatus.db}` : '-');
   setVal('redisTtl', redisStatus.ttl != null ? `${redisStatus.ttl}s` : '-');
+  setVal('redisVersion', redisStatus.version || '-');
 
   if (redisStatus.available) {
     clearBadge();

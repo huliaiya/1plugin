@@ -889,10 +889,9 @@ class MessageRecorder(Star, AfdianFeature):
 [管理员] /开启发电通知 - 在当前会话接收爱发电订单通知
 
 🆘 帮助:
-/狐狸记录 帮助 - 查看本帮助
-/狐狸菜单 或 /hulihelp - 查看本帮助
+/狐狸菜单 - 查看全部指令说明
+/狐狸记录 帮助 - 查看全部指令说明
 
-提示: 旧英文指令（如 /huli_record stats）仍可用作别名。
 选项: limit 默认 10，最大 50"""
 
     @huli_record.command("帮助", alias={"help"})

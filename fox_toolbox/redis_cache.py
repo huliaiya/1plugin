@@ -46,6 +46,7 @@ class RedisCache:
         self._delta_lock = asyncio.Lock()
         self._reconnect_task: Optional[asyncio.Task] = None
         self._reconnect_interval: float = 30.0
+        self._server_version: Optional[str] = None
 
     @property
     def available(self) -> bool:
@@ -65,6 +66,7 @@ class RedisCache:
             "port": self._port,
             "db": self._db,
             "ttl": self._ttl,
+            "version": self._server_version,
             "keys": {"stats": None, "recent_messages": None},
         }
         if self._available and self._client is not None:
@@ -127,13 +129,23 @@ class RedisCache:
                     pass
             self._client = client
             self._available = True
+            try:
+                info = await asyncio.wait_for(client.info("server"), timeout=3)
+                self._server_version = (
+                    info.get("redis_version") if isinstance(info, dict) else None
+                )
+            except Exception:
+                self._server_version = None
             logger.info(
                 f"[FoxToolbox] Redis 缓存连接成功: "
-                f"{self._host}:{self._port}/{self._db} (TTL={self._ttl}s)"
+                f"{self._host}:{self._port}/{self._db} (TTL={self._ttl}s"
+                + (f", version={self._server_version}" if self._server_version else "")
+                + ")"
             )
             return True
         except Exception as e:
             self._available = False
+            self._server_version = None
             if self._client is not None:
                 try:
                     await self._client.aclose()
@@ -188,6 +200,7 @@ class RedisCache:
                     except Exception:
                         # 连接已断开：标记降级并尝试重连
                         self._available = False
+                        self._server_version = None
                         logger.warning("[FoxToolbox] Redis 连接断开，开始自动重连")
 
                 if not connected:
@@ -217,6 +230,7 @@ class RedisCache:
                 logger.debug(f"[FoxToolbox] 关闭 Redis 连接失败: {e}")
             self._client = None
         self._available = False
+        self._server_version = None
         self._checked = True
 
     async def get_stats(self) -> Optional[dict]:

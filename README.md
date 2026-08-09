@@ -99,16 +99,6 @@ git clone https://github.com/leafliber/astrbot_plugin_fox_toolbox.git
 
 在 AstrBot WebUI 的插件配置页面可调整以下选项：
 
-### MySQL 数据库配置
-
-| 配置项 | 默认值 | 说明 |
-|--------|--------|------|
-| `mysql_host` | `127.0.0.1` | MySQL 服务器地址 |
-| `mysql_port` | `3306` | MySQL 服务器端口 |
-| `mysql_user` | `root` | MySQL 用户名 |
-| `mysql_password` | `` | MySQL 密码 |
-| `mysql_database` | `fox_toolbox` | MySQL 数据库名（需提前创建） |
-
 ### 功能配置
 
 | 配置项 | 默认值 | 说明 |
@@ -123,6 +113,32 @@ git clone https://github.com/leafliber/astrbot_plugin_fox_toolbox.git
 | `image_save_mode` | `original` | 图片保存模式：`original`（原图）/ `thumbnail`（缩略图） |
 
 > **提示**：首次使用需先在 MySQL 中创建数据库（如 `CREATE DATABASE fox_toolbox CHARACTER SET utf8mb4;`），然后在配置页面填写连接信息。
+
+### MySQL 数据库配置
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `mysql_host` | `127.0.0.1` | MySQL 服务器地址 |
+| `mysql_port` | `3306` | MySQL 服务器端口 |
+| `mysql_user` | `root` | MySQL 用户名 |
+| `mysql_password` | `` | MySQL 密码 |
+| `mysql_database` | `fox_toolbox` | MySQL 数据库名（需提前创建） |
+
+### 本地 SQLite 兜底存储（自动降级）
+
+MySQL 不可用、故障或连接中断时，插件自动降级到本地 SQLite 文件继续记录消息与爱发电订单，避免消息丢失；MySQL 恢复后自动切回并分批补写降级期间的消息（默认每 30 秒检测一次，单批 500 条幂等写入）。降级期间全部查询、统计、排行、导出功能保持可用，Web 面板状态卡片会标注当前存储后端与未同步消息数。
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `storage_fallback_enabled` | `true` | 是否启用本地 SQLite 自动兜底存储；关闭后故障行为与旧版一致（消息无法记录） |
+| `recovery_check_interval` | `30` | MySQL 恢复检测间隔（秒），最小 5 秒 |
+| `connection_max_retries` | `5` | MySQL 与 Redis 断连后自动重连的最大连续次数（最小 1）；达到上限后停止自动重连，分别进入 SQLite 降级 / 无缓存模式 |
+| `backfill_batch_size` | `500` | MySQL 恢复后单批补写消息条数，按批推进避免大事务 |
+| `sqlite_max_retention_days` | `30` | 已补写进 MySQL 的消息在本地 SQLite 中的保留天数，超过后自动清理以控制文件增长 |
+
+> **存储位置**：SQLite 兜底库位于插件数据目录下 `astrbot_plugin_fox_toolbox/messages_fallback.db`（如 `data/plugins/astrbot_plugin_fox_toolbox/messages_fallback.db`），无需额外安装依赖。降级与恢复全程自动，无需人工干预。
+>
+> **数据安全**：降级期间按保留天数/条数执行的自动清理只针对**已补写进 MySQL 的同步数据**，未同步（待补写）的消息会完整保留，确保 MySQL 恢复补写时不丢失任何消息。
 
 ### 爱发电打赏对接（可选）
 
@@ -169,22 +185,6 @@ git clone https://github.com/leafliber/astrbot_plugin_fox_toolbox.git
 | `redis_cache_ttl` | `300` | 统计缓存有效期（秒）；消息落库后会即时更新最近消息缓存，统计缓存按此 TTL 刷新 |
 
 > **依赖安装**：使用 Redis 缓存需安装 `redis` 包。在 AstrBot 容器内执行 `pip install redis` 或在插件依赖中声明；未安装时插件会打印提示并自动降级为无缓存模式。
-
-### 本地 SQLite 兜底存储（自动降级）
-
-MySQL 不可用、故障或连接中断时，插件自动降级到本地 SQLite 文件继续记录消息与爱发电订单，避免消息丢失；MySQL 恢复后自动切回并分批补写降级期间的消息（默认每 30 秒检测一次，单批 500 条幂等写入）。降级期间全部查询、统计、排行、导出功能保持可用，Web 面板状态卡片会标注当前存储后端与未同步消息数。
-
-| 配置项 | 默认值 | 说明 |
-|--------|--------|------|
-| `storage_fallback_enabled` | `true` | 是否启用本地 SQLite 自动兜底存储；关闭后故障行为与旧版一致（消息无法记录） |
-| `recovery_check_interval` | `30` | MySQL 恢复检测间隔（秒），最小 5 秒 |
-| `connection_max_retries` | `5` | MySQL 与 Redis 断连后自动重连的最大连续次数（最小 1）；达到上限后停止自动重连，分别进入 SQLite 降级 / 无缓存模式 |
-| `backfill_batch_size` | `500` | MySQL 恢复后单批补写消息条数，按批推进避免大事务 |
-| `sqlite_max_retention_days` | `30` | 已补写进 MySQL 的消息在本地 SQLite 中的保留天数，超过后自动清理以控制文件增长 |
-
-> **存储位置**：SQLite 兜底库位于插件数据目录下 `astrbot_plugin_fox_toolbox/messages_fallback.db`（如 `data/plugins/astrbot_plugin_fox_toolbox/messages_fallback.db`），无需额外安装依赖。降级与恢复全程自动，无需人工干预。
->
-> **数据安全**：降级期间按保留天数/条数执行的自动清理只针对**已补写进 MySQL 的同步数据**，未同步（待补写）的消息会完整保留，确保 MySQL 恢复补写时不丢失任何消息。
 
 ---
 

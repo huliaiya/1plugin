@@ -604,6 +604,9 @@ def _draw_redis_card(img, y, redis_status: Optional[Dict] = None) -> int:
         ("TTL", f"{status.get('ttl')}s" if status.get("ttl") is not None else "-"),
     ]
     if available:
+        version = status.get("version")
+        if version:
+            parts.insert(1, ("版本", str(version)))
         keys = status.get("keys") or {}
         stats_n = keys.get("stats")
         recent_n = keys.get("recent_messages")

@@ -126,6 +126,7 @@ async def _build_redis_status_payload(db: Optional[Database]) -> Dict[str, Any]:
             "port": None,
             "db": None,
             "ttl": None,
+            "version": None,
             "keys": {"stats": None, "recent_messages": None},
         }
     try:
@@ -138,6 +139,7 @@ async def _build_redis_status_payload(db: Optional[Database]) -> Dict[str, Any]:
                 "port": redis_cache._port,
                 "db": redis_cache._db,
                 "ttl": redis_cache._ttl,
+                "version": None,
                 "keys": {"stats": None, "recent_messages": None},
             }
         return {"configured": True, **await redis_cache.status()}
@@ -151,6 +153,7 @@ async def _build_redis_status_payload(db: Optional[Database]) -> Dict[str, Any]:
             "port": getattr(redis_cache, "_port", None),
             "db": getattr(redis_cache, "_db", None),
             "ttl": getattr(redis_cache, "_ttl", None),
+            "version": None,
             "keys": {"stats": None, "recent_messages": None},
         }
 
