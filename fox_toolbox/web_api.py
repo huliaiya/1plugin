@@ -57,6 +57,41 @@ CHUNK_SESSION_MAX_AGE = 3600
 MAX_CHUNK_SESSIONS = 20
 DB_OPERATION_TIMEOUT = 30
 
+# 可安全内联提供媒体文件的白名单（排除 html/svg/xml 等可执行脚本载体）。
+# 用于 /media 接口的 Content-Type 白名单与 zip 导入媒体扩展名校验。
+_MEDIA_MIME_TYPES = {
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "bmp": "image/bmp",
+    "ico": "image/x-icon",
+    "tiff": "image/tiff",
+    "heic": "image/heic",
+    "heif": "image/heif",
+    "avif": "image/avif",
+    "jfif": "image/jpeg",
+    "mp4": "video/mp4",
+    "webm": "video/webm",
+    "avi": "video/x-msvideo",
+    "mkv": "video/x-matroska",
+    "mov": "video/quicktime",
+    "wmv": "video/x-ms-wmv",
+    "flv": "video/x-flv",
+    "m4v": "video/mp4",
+    "3gp": "video/3gpp",
+    "mp3": "audio/mpeg",
+    "wav": "audio/wav",
+    "ogg": "audio/ogg",
+    "amr": "audio/amr",
+    "flac": "audio/flac",
+    "silk": "audio/silk",
+    "aac": "audio/aac",
+    "m4a": "audio/mp4",
+    "wma": "audio/x-ms-wma",
+}
+
 _export_tasks: Dict[str, Dict[str, Any]] = {}
 _chunk_sessions: Dict[str, Dict[str, Any]] = {}
 _import_tasks: Dict[str, Dict[str, Any]] = {}
@@ -1122,7 +1157,16 @@ async def register_all_web_apis(context, db: Database):
             return jsonify({"success": False, "error": "文件不存在"}), 404
         if not resolved_path.is_file():
             return jsonify({"success": False, "error": "非法路径"}), 403
-        return await send_file(str(resolved_path))
+        # 媒体文件 Content-Type 白名单：仅允许图片/音频/视频等可安全内联的
+        # 类型，未知扩展名一律拒绝，防止存储型 XSS（如注入 html/svg）
+        ext = resolved_path.suffix.lower().lstrip(".")
+        media_mime = _MEDIA_MIME_TYPES.get(ext)
+        if media_mime is None:
+            logger.warning(
+                f"[FoxToolbox Web] 拒绝提供非白名单媒体类型: {rel_path[:100]}"
+            )
+            return jsonify({"success": False, "error": "非法媒体类型"}), 403
+        return await send_file(str(resolved_path), mimetype=media_mime)
 
     async def api_schema_version():
         return jsonify({
@@ -1888,6 +1932,12 @@ def _import_zip_package(file_path: str) -> tuple:
             if not rel_path:
                 continue
             if ".." in Path(rel_path).parts or rel_path.startswith("/"):
+                continue
+            # 媒体扩展名白名单：拒绝 html/svg/xml 等可执行脚本载体随导入包落盘
+            if Path(rel_path).suffix.lower().lstrip(".") not in _MEDIA_MIME_TYPES:
+                logger.warning(
+                    f"[FoxToolbox Web] 跳过导入包中非白名单媒体文件: {name}"
+                )
                 continue
             target_path = media_base / rel_path
             try:

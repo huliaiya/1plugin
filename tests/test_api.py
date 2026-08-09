@@ -242,3 +242,23 @@ class TestSafeInt:
         safe_int = self._make_safe_int()
         assert safe_int("99999", 20, min_val=0, max_val=200) == 200
         assert safe_int("300", 20, min_val=0, max_val=200) == 200
+
+
+class TestMediaMimeWhitelist:
+    """媒体 Content-Type 白名单仅包含可安全内联的图片/音频/视频，排除脚本载体。"""
+
+    def _whitelist(self):
+        from astrbot_plugin_fox_toolbox.fox_toolbox.web_api import _MEDIA_MIME_TYPES
+
+        return _MEDIA_MIME_TYPES
+
+    def test_allows_image_audio_video(self):
+        wl = self._whitelist()
+        assert "jpg" in wl and "png" in wl and "gif" in wl
+        assert "mp3" in wl and "wav" in wl
+        assert "mp4" in wl and "webm" in wl
+
+    def test_excludes_script_carriers(self):
+        wl = self._whitelist()
+        for bad in ("html", "htm", "svg", "xml", "js", "mjs", "xhtml"):
+            assert bad not in wl, f"{bad} 不应出现在媒体白名单"
