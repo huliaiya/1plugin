@@ -56,59 +56,63 @@ class TestDatabaseInit:
 
 
 class _FakePool:
-    def acquire(self):
-        class _Conn:
-            async def __aenter__(self):
-                return self
+    async def acquire(self):
+        return _FakeConn()
 
-            async def __aexit__(self, *a):
-                return False
+    def release(self, conn):
+        pass
 
-            def cursor(self):
-                class _Cur:
-                    async def __aenter__(self):
-                        return self
 
-                    async def __aexit__(self, *a):
-                        return False
+class _FakeConn:
+    async def commit(self):
+        return None
 
-                    async def execute(self, *a, **k):
-                        return None
+    def cursor(self):
+        return _FakeCursor()
 
-                    async def fetchone(self):
-                        return (1,)
 
-                return _Cur()
+class _FakeCursor:
+    async def __aenter__(self):
+        return self
 
-        return _Conn()
+    async def __aexit__(self, *a):
+        return False
+
+    async def execute(self, *a, **k):
+        return None
+
+    async def fetchone(self):
+        return (1,)
 
 
 class _FailingPool:
-    def acquire(self):
-        class _Conn:
-            async def __aenter__(self):
-                return self
+    async def acquire(self):
+        return _FailingConn()
 
-            async def __aexit__(self, *a):
-                return False
+    def release(self, conn):
+        pass
 
-            def cursor(self):
-                class _Cur:
-                    async def __aenter__(self):
-                        return self
 
-                    async def __aexit__(self, *a):
-                        return False
+class _FailingConn:
+    async def commit(self):
+        return None
 
-                    async def execute(self, *a, **k):
-                        raise RuntimeError("connection lost")
+    def cursor(self):
+        return _FailingCursor()
 
-                    async def fetchone(self):
-                        raise RuntimeError("connection lost")
 
-                return _Cur()
+class _FailingCursor:
+    async def __aenter__(self):
+        return self
 
-        return _Conn()
+    async def __aexit__(self, *a):
+        return False
+
+    async def execute(self, *a, **k):
+        raise RuntimeError("connection lost")
+
+    async def fetchone(self):
+        raise RuntimeError("connection lost")
 
 
 class TestPing:
@@ -677,3 +681,89 @@ class TestMediaPaths:
 
         paths = await mysql_db.get_media_paths_over_limit(3)
         assert len(paths) >= 1
+
+
+class TestBatchSaveSingleStats:
+    """批量保存时缓存与统计增量只执行一次（防 MySQL/SQLite 双路径重复计数）。"""
+
+    def _make_db(self):
+        db = Database("test", {})
+        db._pool = _BatchFakePool()
+        db._mysql_ready = True
+        db.redis_cache = _CountingRedis()
+        return db
+
+    @pytest.mark.asyncio
+    async def test_batch_save_applies_stats_once(self):
+        db = self._make_db()
+        batch = [
+            _make_record(message_id=f"once_{i}", message_type="group")
+            for i in range(3)
+        ]
+        saved, skipped = await db.save_messages_batch(batch)
+        assert saved == 3 and skipped == 0
+        assert db.redis_cache.delta_calls == 1
+        assert db.redis_cache.recent_calls == 3  # 每条消息推入一次最近消息
+        assert db.redis_cache.delta_total == 3
+
+
+class _BatchFakePool:
+    """批量写路径的极简 pool：INSERT IGNORE 总是成功。"""
+
+    def acquire(self):
+        return _BatchFakeConn()
+
+    def release(self, conn):
+        pass
+
+
+class _BatchFakeConn:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def commit(self):
+        return None
+
+    def cursor(self):
+        return _BatchFakeCursor()
+
+
+class _BatchFakeCursor:
+    rowcount = 1
+    lastrowid = 1
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def execute(self, *a, **k):
+        return None
+
+
+class _CountingRedis:
+    available = True
+    delta_calls = 0
+    delta_total = 0
+    recent_calls = 0
+
+    async def apply_stats_deltas(self, deltas):
+        self.delta_calls += 1
+        self.delta_total += sum(int(d.get("count", 1) or 0) for d in deltas)
+        return True
+
+    async def get_stats(self):
+        return None
+
+    async def set_stats(self, stats):
+        return None
+
+    async def push_recent_message(self, record, prune=True):
+        self.recent_calls += 1
+
+    async def trim_recent_window(self):
+        return None

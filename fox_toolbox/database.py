@@ -2,6 +2,7 @@
 
 import asyncio
 import aiomysql
+import contextlib
 import json
 import time
 from dataclasses import asdict
@@ -401,6 +402,27 @@ class Database:
                 pass
             self._pool = None
 
+    @contextlib.asynccontextmanager
+    async def _read_conn(self):
+        """获取 MySQL 连接执行只读查询，退出时提交以关闭事务。
+
+        连接池使用 ``autocommit=False``，SELECT 会开启一个事务并保持到
+        commit/rollback。若不主动提交，连接归还池后仍持有旧快照，
+        后续复用该连接会读到过期数据（脏快照）。只读查询统一在退出时
+        commit 即可关闭事务，无需改动各查询语句。
+        """
+        if self._pool is None:
+            raise RuntimeError("MySQL 连接池未初始化")
+        conn = await self._pool.acquire()
+        try:
+            yield conn
+        finally:
+            try:
+                await conn.commit()
+            except Exception:
+                pass
+            self._pool.release(conn)
+
     async def close(self) -> None:
         """关闭数据库连接池与后台任务"""
         if self._recovery_task is not None:
@@ -433,7 +455,7 @@ class Database:
                 return await self._sqlite.ping()
             return False
         try:
-            async with self._pool.acquire() as conn:
+            async with self._read_conn() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute("SELECT 1")
                     await cur.fetchone()
@@ -453,7 +475,7 @@ class Database:
         if self._mysql_version:
             return self._mysql_version
         try:
-            async with self._pool.acquire() as conn:
+            async with self._read_conn() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute("SELECT VERSION()")
                     row = await cur.fetchone()
@@ -471,7 +493,7 @@ class Database:
                 return await self._sqlite.get_table_count()
             return -1
         try:
-            async with self._pool.acquire() as conn:
+            async with self._read_conn() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute("SHOW TABLES")
                     rows = await cur.fetchall()
@@ -492,7 +514,7 @@ class Database:
         if self._mysql_db_size is not None:
             return self._mysql_db_size
         try:
-            async with self._pool.acquire() as conn:
+            async with self._read_conn() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute(
                         "SELECT COALESCE(SUM(DATA_LENGTH + INDEX_LENGTH), 0) "
@@ -802,7 +824,6 @@ class Database:
 
         saved = 0
         skipped = 0
-        cached_records: List[MessageRecord] = []
         async with self._write_lock:
             async with self._pool.acquire() as conn:
                 try:
@@ -834,7 +855,6 @@ class Database:
                                     record.id = cur.lastrowid
                                 except Exception:
                                     record.id = None
-                                cached_records.append(record)
                             else:
                                 skipped += 1
                         await conn.commit()
@@ -843,9 +863,8 @@ class Database:
                     logger.error(f"[FoxToolbox] 批量保存消息失败: {e}")
                     raise
 
-        if cached_records:
-            await self._cache_recent_messages(cached_records)
-            await self._apply_stats_deltas(cached_records)
+        # 缓存与统计增量统一由外层 save_messages_batch 处理，
+        # 避免 MySQL 与 SQLite 双路径各执行一次造成重复计数
         return saved, skipped
 
     async def _cache_recent_message(self, record: MessageRecord) -> None:
@@ -900,7 +919,7 @@ class Database:
             push = self.redis_cache.push_recent_message
             for record in records:
                 await push(self._record_cache_payload(record), prune=False)
-            await self.redis_cache._trim_recent_window()
+            await self.redis_cache.trim_recent_window()
         except Exception as e:
             logger.debug(f"[FoxToolbox] 批量写入最近消息缓存失败: {e}")
 
@@ -1023,7 +1042,7 @@ class Database:
                     .replace("%", "\\%")
                     .replace("_", "\\_")
                 )
-                conditions.append("message_str LIKE %s")
+                conditions.append("message_str LIKE %s ESCAPE '\\\\'")
                 params.append(f"%{escaped}%")
 
         where_clause = " AND ".join(conditions) if conditions else "1=1"
@@ -1034,7 +1053,7 @@ class Database:
         if self._fts_available_cache is not None:
             return self._fts_available_cache
         try:
-            async with self._pool.acquire() as conn:
+            async with self._read_conn() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute("""
                         SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
@@ -1100,7 +1119,7 @@ class Database:
                 ORDER BY {order_clause}
             """
 
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(sql, params)
                 rows = await cur.fetchall()
@@ -1182,7 +1201,7 @@ class Database:
             """
             batch_params = params + [current_batch_size, current_offset]
 
-            async with self._pool.acquire() as conn:
+            async with self._read_conn() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute(sql, batch_params)
                     rows = await cur.fetchall()
@@ -1206,7 +1225,7 @@ class Database:
         )
 
     async def _get_message_by_id_mysql(self, message_id: int) -> Optional[MessageRecord]:
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
                     f"SELECT {_SELECT_COLUMNS} FROM messages WHERE id = %s",
@@ -1248,7 +1267,7 @@ class Database:
             """
             params = (platform_message_id,)
 
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(sql, params)
                 row = await cur.fetchone()
@@ -1274,7 +1293,7 @@ class Database:
             WHERE message_id IN ({placeholders}) AND platform = %s
         """
         params = list(message_ids) + [platform]
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(sql, params)
                 rows = await cur.fetchall()
@@ -1340,7 +1359,7 @@ class Database:
         """
         after_params = scope_params + [target.timestamp, after]
 
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(before_sql, before_params)
                 before_rows = await cur.fetchall()
@@ -1371,7 +1390,7 @@ class Database:
         )
 
         sql = f"SELECT COUNT(*) FROM messages WHERE {where_clause}"
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(sql, params)
                 result = await cur.fetchone()
@@ -1408,7 +1427,7 @@ class Database:
     async def _get_stats_mysql(self) -> MessageStats:
         stats = MessageStats()
 
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 # 聚合统计在 MySQL 端完成，避免将整表拉入 Python 内存
                 await cur.execute("SELECT COUNT(*) FROM messages")
@@ -1460,7 +1479,7 @@ class Database:
     async def _get_content_type_stats_mysql(self) -> List[Dict]:
         # ponytail: 全表拉取 content_types/message_str 到内存统计，
         # 百万级消息时会产生瞬时内存峰值；若数据量过大应改为 SQL 聚合或分批扫描
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("SELECT content_types, message_str FROM messages")
                 rows = await cur.fetchall()
@@ -1572,7 +1591,7 @@ class Database:
     async def _get_platform_detail_stats_mysql(self) -> List[Dict]:
         # ponytail: 全表拉取统计，百万级消息时内存峰值明显；
         # 若数据量过大应改为按平台分组 SQL 聚合
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
                     "SELECT platform, message_type, group_id, channel_id, content_types, message_str, timestamp FROM messages"
@@ -1831,7 +1850,7 @@ class Database:
         from collections import OrderedDict
         from datetime import datetime as _dt
 
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(sql, params)
                 rows = await cur.fetchall()
@@ -1924,7 +1943,7 @@ class Database:
             LIMIT %s
         """
         params.append(limit)
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(sql, params)
                 rows = await cur.fetchall()
@@ -1985,7 +2004,7 @@ class Database:
             FROM messages
             WHERE {where_clause}
         """
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(sql, params)
                 rows = await cur.fetchall()
@@ -2024,7 +2043,7 @@ class Database:
         )
 
     async def _get_distinct_platforms_mysql(self) -> List[str]:
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
                     "SELECT DISTINCT platform FROM messages "
@@ -2066,7 +2085,7 @@ class Database:
             ORDER BY sender_name, sender_id LIMIT %s
         """
         params.append(limit)
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(sql, params)
                 rows = await cur.fetchall()
@@ -2106,7 +2125,7 @@ class Database:
             ORDER BY group_id LIMIT %s
         """
         params.append(limit)
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(sql, params)
                 rows = await cur.fetchall()
@@ -2124,7 +2143,7 @@ class Database:
     async def _get_media_paths_before_mysql(
         self, cutoff_timestamp: int
     ) -> List[str]:
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
                     "SELECT message_chain FROM messages "
@@ -2150,7 +2169,7 @@ class Database:
     async def _get_media_paths_over_limit_mysql(
         self, max_records: int
     ) -> List[str]:
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("SELECT COUNT(*) FROM messages")
                 result = await cur.fetchone()
@@ -2190,7 +2209,7 @@ class Database:
         BATCH_SIZE = 50
         unreferenced = []
 
-        async with self._pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 for i in range(0, len(candidates), BATCH_SIZE):
                     batch = candidates[i:i + BATCH_SIZE]
