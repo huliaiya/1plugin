@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import time
 from typing import Any, Optional, List, Dict
 
 from astrbot.api import logger
@@ -16,6 +17,7 @@ except Exception:  # pragma: no cover - 依赖未安装时的降级路径
 RECENT_MESSAGES_KEY = "fox_toolbox:recent_messages"
 STATS_KEY = "fox_toolbox:stats"
 RECENT_MESSAGES_CAP = 200
+RECENT_WINDOW_SECONDS = 1800
 
 
 class RedisCache:
@@ -33,6 +35,7 @@ class RedisCache:
         db: int = 0,
         ttl: int = 300,
         max_retries: int = 5,
+        recent_window: int = RECENT_WINDOW_SECONDS,
     ) -> None:
         self._host = host
         self._port = port
@@ -40,6 +43,7 @@ class RedisCache:
         self._db = db
         self._ttl = ttl
         self._max_retries = max(1, int(max_retries or 5))
+        self._recent_window = max(60, int(recent_window or RECENT_WINDOW_SECONDS))
         self._client: Optional[Any] = None
         self._available: bool = False
         self._checked: bool = False
@@ -347,17 +351,78 @@ class RedisCache:
             logger.debug(f"[FoxToolbox] 增量更新统计缓存失败: {e}")
             return False
 
-    async def push_recent_message(self, record: dict) -> None:
-        """将新消息推入最近消息列表（保留最近 RECENT_MESSAGES_CAP 条）。"""
+    async def push_recent_message(self, record: dict, prune: bool = True) -> None:
+        """将新消息推入最近消息列表（保留窗口内 + 最近 RECENT_MESSAGES_CAP 条）。
+
+        基于消息时间戳裁剪：超出``recent_window``窗口（默认 30 分钟）的旧记录
+        会被清除，列表只保留窗口内的最新消息。
+
+        :param record: 消息缓存载荷（需含 ``created_at`` 毫秒时间戳）
+        :param prune: 是否在推送后立即裁剪窗口；批量推送场景可置 False，
+            全部推完后统一调用一次 ``_trim_recent_window`` 提升效率
+        """
         if not self._available or self._client is None:
             return
         try:
-            await self._client.lpush(
-                RECENT_MESSAGES_KEY, json.dumps(record, ensure_ascii=False)
-            )
-            await self._client.ltrim(RECENT_MESSAGES_KEY, 0, RECENT_MESSAGES_CAP - 1)
+            async with self._delta_lock:
+                await self._client.lpush(
+                    RECENT_MESSAGES_KEY, json.dumps(record, ensure_ascii=False)
+                )
+                await self._client.ltrim(
+                    RECENT_MESSAGES_KEY, 0, RECENT_MESSAGES_CAP - 1
+                )
+                if prune:
+                    await self._trim_recent_window()
         except Exception as e:
             logger.debug(f"[FoxToolbox] 写入最近消息缓存失败: {e}")
+
+    async def rebuild_recent_messages(self, records: List[dict]) -> None:
+        """整体重建最近消息缓存（用于每窗口周期从数据库刷新）。
+
+        清空列表后按时间窗口过滤，将窗口内的消息以倒序写回；
+        传入空列表会清空缓存。
+        """
+        if not self._available or self._client is None:
+            return
+        try:
+            async with self._delta_lock:
+                await self._client.delete(RECENT_MESSAGES_KEY)
+                cutoff = int(time.time() * 1000) - self._recent_window * 1000
+                kept = [
+                    r for r in records
+                    if (r.get("timestamp") or r.get("created_at") or 0) >= cutoff
+                ][:RECENT_MESSAGES_CAP]
+                for record in reversed(kept):
+                    await self._client.lpush(
+                        RECENT_MESSAGES_KEY,
+                        json.dumps(record, ensure_ascii=False),
+                    )
+        except Exception as e:
+            logger.debug(f"[FoxToolbox] 重建最近消息缓存失败: {e}")
+
+    async def _trim_recent_window(self) -> None:
+        """清除列表中超出时间窗口的旧消息（窗口由 recent 配置决定）。
+
+        基于时间倒序的 List 结构，从尾部扫描逐条剔除过期记录，
+        直到遇到第一条窗口内的记录或列表为空。
+        """
+        if not self._available or self._client is None:
+            return
+        cutoff = int(time.time() * 1000) - self._recent_window * 1000
+        while True:
+            tail = await self._client.lrange(RECENT_MESSAGES_KEY, -1, -1)
+            if not tail:
+                break
+            try:
+                rec = json.loads(tail[0])
+            except (json.JSONDecodeError, TypeError):
+                break
+            created_at = rec.get("created_at")
+            if created_at is None:
+                break
+            if created_at >= cutoff:
+                break
+            await self._client.rpop(RECENT_MESSAGES_KEY)
 
     async def get_recent_messages(self, limit: int = 50) -> List[dict]:
         """读取最近消息列表（按时间倒序）。"""

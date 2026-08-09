@@ -124,6 +124,8 @@ class Database:
         connection_max_retries: int = 5,
         backfill_batch_size: int = 500,
         sqlite_max_retention_days: int = 30,
+        recent_window_seconds: int = 1800,
+        cache_refresh_interval: int = 1800,
     ):
         self.plugin_name = plugin_name
         self.mysql_config = mysql_config
@@ -138,12 +140,15 @@ class Database:
         self._connection_max_retries = max(1, int(connection_max_retries or 5))
         self._backfill_batch_size = max(1, int(backfill_batch_size or 500))
         self._sqlite_max_retention_days = max(1, int(sqlite_max_retention_days or 30))
+        self._recent_window_seconds = max(60, int(recent_window_seconds or 1800))
+        self._cache_refresh_interval = max(60, int(cache_refresh_interval or 1800))
         self._sqlite: Optional[SQLiteStore] = None
         self._mysql_ready: bool = False
         self._degraded: bool = False
         self._mysql_version: Optional[str] = None
         self._mysql_db_size: Optional[int] = None
         self._recovery_task: Optional[asyncio.Task] = None
+        self._cache_refresh_task: Optional[asyncio.Task] = None
 
     def _sqlite_db_path(self) -> Path:
         data_dir = Path(get_astrbot_plugin_data_path()) / PLUGIN_DIR_NAME
@@ -170,6 +175,11 @@ class Database:
         """启动 MySQL 恢复检测后台任务（无论当前是否可用）。"""
         if self._recovery_task is None or self._recovery_task.done():
             self._recovery_task = asyncio.create_task(self._recovery_loop())
+
+    async def _start_cache_refresh_loop(self) -> None:
+        """启动周期缓存刷新后台任务（最近消息缓存 + 统计缓存对齐）。"""
+        if self._cache_refresh_task is None or self._cache_refresh_task.done():
+            self._cache_refresh_task = asyncio.create_task(self._cache_refresh_loop())
 
     async def _recovery_loop(self) -> None:
         """周期检测 MySQL 是否恢复；恢复后切回并补写降级期间的消息。
@@ -206,6 +216,65 @@ class Database:
                 raise
             except Exception as e:
                 logger.debug(f"[FoxToolbox] 恢复检测异常: {e}")
+
+    async def _cache_refresh_loop(self) -> None:
+        """周期从数据库刷新 Redis 缓存，保证缓存与主存储长期对齐。
+
+        每 ``cache_refresh_interval``（默认 30 分钟）执行一次：
+        - 重建最近消息缓存为``recent_window_seconds``时间窗口内的最新消息
+        - 强制回源刷新统计缓存，修正长期增量累积可能产生的漂移
+        仅当 Redis 可用且数据库就绪时执行；任何异常不阻断循环。
+        """
+        while True:
+            await asyncio.sleep(self._cache_refresh_interval)
+            try:
+                if self.redis_cache is None or not self.redis_cache.available:
+                    continue
+                await self._refresh_redis_caches()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.debug(f"[FoxToolbox] 缓存刷新异常: {e}")
+
+    async def _refresh_redis_caches(self) -> None:
+        """刷新 Redis 最近消息缓存与统计缓存（可独立于后台循环复用）。
+
+        最近消息缓存以``recent_window_seconds``为时间窗口、按时间倒序取最新
+        重建；统计缓存通过 ``get_stats_refresh`` 强制回源重建，消除增量漂移。
+        """
+        if self.redis_cache is None or not self.redis_cache.available:
+            return
+        try:
+            now_ms = int(time.time() * 1000)
+            recent = await self.query_messages(
+                QueryFilter(
+                    start_time=now_ms - self._recent_window_seconds * 1000,
+                    end_time=now_ms,
+                    limit=200,
+                    order="desc",
+                )
+            )
+            payloads = [self._record_cache_payload(r) for r in recent]
+            await self.redis_cache.rebuild_recent_messages(payloads)
+            await self.get_stats_refresh()
+        except Exception as e:
+            logger.debug(f"[FoxToolbox] 刷新 Redis 缓存失败: {e}")
+
+    async def get_stats_refresh(self) -> MessageStats:
+        """强制回源数据库重建统计并回填 Redis 缓存（跳过缓存命中）。
+
+        供周期缓存刷新与测试使用；保证统计缓存与数据库最终一致。
+        """
+        stats = await self._run(
+            lambda: self._get_stats_mysql(),
+            lambda: self._sqlite.get_stats(),
+        )
+        if self.redis_cache is not None:
+            try:
+                await self.redis_cache.set_stats(asdict(stats))
+            except Exception as e:
+                logger.debug(f"[FoxToolbox] 写入统计缓存失败: {e}")
+        return stats
 
     async def _try_reconnect_mysql(self) -> bool:
         """重新建立 MySQL 连接池并初始化表结构。
@@ -320,6 +389,7 @@ class Database:
             )
 
         await self._start_recovery_loop()
+        await self._start_cache_refresh_loop()
 
     async def _close_pool(self) -> None:
         """关闭 MySQL 连接池（若存在）。"""
@@ -340,6 +410,13 @@ class Database:
             except (asyncio.CancelledError, Exception):
                 pass
             self._recovery_task = None
+        if self._cache_refresh_task is not None:
+            self._cache_refresh_task.cancel()
+            try:
+                await self._cache_refresh_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._cache_refresh_task = None
         await self._close_pool()
         if self._pool is None:
             logger.info("[FoxToolbox] 数据库已关闭")
@@ -811,16 +888,21 @@ class Database:
             logger.debug(f"[FoxToolbox] 增量更新统计缓存失败: {e}")
 
     async def _cache_recent_messages(self, records: List[MessageRecord]) -> None:
-        """将批量新消息推入 Redis 最近消息缓存（倒序逐条推送保持顺序）。"""
+        """将批量新消息写入 Redis 最近消息缓存（逐条追加，不丢记录）。
+
+        历史实现仅取最后 20 条会丢失中间部分消息；改为全部推入，
+        由 Redis 端负责窗口裁剪与条数上限。批量场景先禁掉逐条裁剪，
+        全部推完后统一裁剪一次窗口，避免 N 次窗口扫描。
+        """
         if self.redis_cache is None or not records:
             return
         try:
-            for record in reversed(records[-20:]):
-                await self.redis_cache.push_recent_message(
-                    self._record_cache_payload(record)
-                )
+            push = self.redis_cache.push_recent_message
+            for record in records:
+                await push(self._record_cache_payload(record), prune=False)
+            await self.redis_cache._trim_recent_window()
         except Exception as e:
-            logger.debug(f"[FoxToolbox] 批量推送最近消息缓存失败: {e}")
+            logger.debug(f"[FoxToolbox] 批量写入最近消息缓存失败: {e}")
 
     @staticmethod
     def _record_cache_payload(record: MessageRecord) -> dict:

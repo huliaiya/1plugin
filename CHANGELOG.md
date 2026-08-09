@@ -14,9 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Redis 服务器版本展示**：WebUI 与快照的 Redis 缓存卡新增「服务器版本」显示（连接时通过 INFO server 获取并缓存，断连自动清空），便于核对 Redis 实例版本
 - **MySQL 表数量与占用大小展示**：快照与 WebUI 的 MySQL 存储卡新增「数据表数量」与「数据库大小」（通过 information_schema 统计当前库数据+索引总字节数并格式化显示），实时反映存储规模；Redis 缓存卡同步新增「键数量」（DBSIZE）与「内存占用」（INFO memory 的 used_memory_human）展示
 - **配置项按模块分组整理**：`_conf_schema.json` 与 README 配置章节统一按「功能配置 → MySQL → SQLite 兜底 → 爱发电 → Redis」分组排列，方便查阅与配置
+- **Redis 缓存周期对齐**：新增后台缓存刷新循环（间隔 `redis_cache_refresh_interval`，默认 1800 秒即 30 分钟），每次从数据库重建最近消息缓存并强制回源刷新统计缓存，消除长期增量累积导致的数据漂移
 
 ### Fixed
 - **状态连接判定误报**：此前用 `using_fallback` 反推连接状态，在"MySQL 故障但未启用兜底"场景会误报「已连接」；现改用连接池真实就绪状态判定，三态（已连接/已降级/未连接）准确反映 MySQL 实际可用性
+- **最近消息缓存无时间窗口**：此前最近消息缓存固定保留 200 条、无时间维度限制，消息量大的会话中长期持有过期数据；现按 `redis_recent_window_seconds`（默认 1800 秒即 30 分钟）时间窗口裁剪，只保留窗口内的最新消息
+- **批量保存丢失中间消息**：此前 `_cache_recent_messages` 逐条推送时仅取最后 20 条，批量保存超过 20 条时中间部分消息不会进入缓存；现改为全部推入，由 Redis 端负责窗口裁剪与条数上限
 - **MySQL 恢复循环无限重试**：此前 `_recovery_loop` 无限周期重连，MySQL 长时间不可用时持续占用后台资源；现达到 `connection_max_retries` 上限后停止自动重连，保持降级模式
 - **帮助文本精简**：移除帮助中英文别名提示等冗余文案，统一为中文展示
 - 版本号 bump 至 2.7.9

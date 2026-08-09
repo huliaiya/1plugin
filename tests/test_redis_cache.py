@@ -2,6 +2,7 @@
 
 import asyncio
 import sys
+import time
 import types
 
 import pytest
@@ -42,7 +43,21 @@ class _FakeRedisClient:
 
     async def lrange(self, key, start, stop):
         items = self._data.get(key, [])
+        if start < 0 and stop < 0:
+            return items[start : stop + 1] if stop != -1 else items[start:]
         return items[start : stop + 1]
+
+    async def rpop(self, key):
+        items = self._data.get(key, [])
+        if not items:
+            return None
+        return items.pop()
+
+    async def delete(self, key):
+        if key in self._data:
+            del self._data[key]
+            return 1
+        return 0
 
     async def info(self, section=None):
         if section == "memory":
@@ -392,4 +407,173 @@ class TestRecordCachePayload:
         await db._cache_recent_message(record)
         await db._cache_recent_messages([record])
         assert db.redis_cache.available is False
+
+
+class TestRecentMessageWindow:
+    """最近消息缓存：近 30 分钟窗口裁剪 + 批量重建。"""
+
+    @pytest.mark.asyncio
+    async def test_push_trims_out_of_window(self):
+        _install_fake_aioredis()
+        try:
+            cache = RedisCache(ttl=60)
+            await cache.connect()
+            now = int(time.time() * 1000)
+            # 先推旧消息（40 分钟前，超出 30 分钟窗口），再推新消息（窗口内）
+            await cache.push_recent_message(
+                {"id": 2, "message_str": "stale", "created_at": now - 40 * 60 * 1000}
+            )
+            await cache.push_recent_message(
+                {"id": 1, "message_str": "fresh", "created_at": now}
+            )
+            recent = await cache.get_recent_messages(limit=50)
+            assert len(recent) == 1
+            assert recent[0]["id"] == 1
+        finally:
+            _uninstall_fake_aioredis()
+
+    @pytest.mark.asyncio
+    async def test_push_keeps_within_window(self):
+        _install_fake_aioredis()
+        try:
+            cache = RedisCache(ttl=60)
+            await cache.connect()
+            now = int(time.time() * 1000)
+            # 按时间顺序推送三条，均在 30 分钟内
+            for i in range(3):
+                await cache.push_recent_message(
+                    {
+                        "id": i,
+                        "message_str": f"m{i}",
+                        "created_at": now - (2 - i) * 60 * 1000,
+                    }
+                )
+            recent = await cache.get_recent_messages(limit=50)
+            # 3 条都在 30 分钟窗口内
+            assert len(recent) == 3
+            # 最新的在前面
+            assert recent[0]["id"] == 2
+        finally:
+            _uninstall_fake_aioredis()
+
+    @pytest.mark.asyncio
+    async def test_rebuild_filters_by_window(self):
+        _install_fake_aioredis()
+        try:
+            cache = RedisCache(ttl=60)
+            await cache.connect()
+            now = int(time.time() * 1000)
+            records = [
+                {"id": 1, "created_at": now},
+                {"id": 2, "created_at": now - 29 * 60 * 1000},
+                {"id": 3, "created_at": now - 45 * 60 * 1000},
+            ]
+            await cache.rebuild_recent_messages(records)
+            recent = await cache.get_recent_messages(limit=50)
+            ids = [r["id"] for r in recent]
+            # 窗口内两条保留，且最新在前
+            assert ids == [1, 2]
+        finally:
+            _uninstall_fake_aioredis()
+
+    @pytest.mark.asyncio
+    async def test_rebuild_empty_clears(self):
+        _install_fake_aioredis()
+        try:
+            cache = RedisCache(ttl=60)
+            await cache.connect()
+            now = int(time.time() * 1000)
+            await cache.push_recent_message({"id": 1, "created_at": now})
+            await cache.rebuild_recent_messages([])
+            assert await cache.get_recent_messages() == []
+        finally:
+            _uninstall_fake_aioredis()
+
+
+class TestRecentCacheRefreshLoop:
+    """Database 层周期缓存刷新：重建最近消息缓存并强制对齐统计缓存。"""
+
+    @pytest.mark.asyncio
+    async def test_refresh_rebuilds_recent_and_stats(self):
+        _install_fake_aioredis()
+        try:
+            from astrbot_plugin_fox_toolbox.fox_toolbox.database import Database
+
+            cache = RedisCache(ttl=60)
+            await cache.connect()
+            db = Database("test", {}, redis_cache=cache, recent_window_seconds=1800)
+            now = int(time.time() * 1000)
+
+            # 记录 query_messages 接收到的过滤器
+            captured = {}
+
+            async def fake_query(qf):
+                captured["filter"] = qf
+                return [
+                    type(
+                        "R",
+                        (),
+                        {
+                            "id": 1,
+                            "platform": "telegram",
+                            "sender_id": "u",
+                            "sender_name": "A",
+                            "message_type": "group",
+                            "message_str": "hi",
+                            "timestamp": now,
+                            "created_at": now,
+                        },
+                    )(),
+                ]
+
+            db.query_messages = fake_query
+
+            # 强制重建统计缓存（验证调用）
+            stats_updated = []
+
+            async def fake_stats_refresh():
+                stats_updated.append(1)
+                return None
+
+            db.get_stats_refresh = fake_stats_refresh
+            await db._refresh_redis_caches()
+            recent = await cache.get_recent_messages(limit=10)
+            assert len(recent) == 1
+            assert recent[0]["id"] == 1
+            # 统计缓存确实被强制刷新
+            assert len(stats_updated) == 1
+            # 查询过滤器携带了正确的时间窗口
+            qf = captured.get("filter")
+            assert qf is not None
+            assert qf.start_time == now - 1800 * 1000
+            assert qf.end_time == now
+            assert qf.limit == 200
+            assert qf.order == "desc"
+        finally:
+            _uninstall_fake_aioredis()
+
+    @pytest.mark.asyncio
+    async def test_refresh_noop_without_redis(self):
+        from astrbot_plugin_fox_toolbox.fox_toolbox.database import Database
+
+        db = Database("test", {})  # redis_cache=None
+        await db._refresh_redis_caches()  # 不应抛异常
+
+    @pytest.mark.asyncio
+    @pytest.mark.asyncio
+    async def test_cache_refresh_loop_stops_on_close(self):
+        _install_fake_aioredis()
+        try:
+            from astrbot_plugin_fox_toolbox.fox_toolbox.database import Database
+
+            cache = RedisCache(ttl=60)
+            await cache.connect()
+            db = Database("test", {}, redis_cache=cache, cache_refresh_interval=60)
+            await db._start_cache_refresh_loop()
+            assert db._cache_refresh_task is not None
+            assert not db._cache_refresh_task.done()
+            await db.close()
+            assert db._cache_refresh_task is None
+        finally:
+            _uninstall_fake_aioredis()
 

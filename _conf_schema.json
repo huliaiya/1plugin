@@ -256,5 +256,17 @@
     "description": "统计缓存有效期（秒）",
     "default": 300,
     "hint": "消息统计结果在 Redis 中的缓存时长；消息落库后即时更新最近消息缓存，统计缓存按此刷新"
+  },
+  "redis_recent_window_seconds": {
+    "type": "int",
+    "description": "最近消息缓存时间窗口（秒）",
+    "default": 1800,
+    "hint": "最近消息缓存只保留最近这段时间内的消息（默认 1800 秒即 30 分钟），超出窗口的旧消息会被清除；与缓存刷新间隔配合使用"
+  },
+  "redis_cache_refresh_interval": {
+    "type": "int",
+    "description": "Redis 缓存周期刷新间隔（秒）",
+    "default": 1800,
+    "hint": "每隔此周期（默认 1800 秒即 30 分钟）从数据库重建最近消息缓存并强制对齐统计缓存，避免长期增量累积导致的数据漂移"
   }
 }

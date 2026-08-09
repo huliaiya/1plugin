@@ -364,7 +364,11 @@ class TestRecoveryLoopMaxRetries:
         assert db._recovery_task is not None
         assert not db._recovery_task.done()
 
-        await asyncio.sleep(0.08)
+        # 轮询等待后台循环在 3 次失败后自行停止，避免固定 sleep 对负载抖动敏感
+        for _ in range(100):
+            if db._recovery_task.done():
+                break
+            await asyncio.sleep(0.01)
         assert db._recovery_task.done()  # 3 次失败后停止
         assert calls["n"] == 3
         assert db._degraded is True

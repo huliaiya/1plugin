@@ -251,6 +251,12 @@ class MessageRecorder(Star, AfdianFeature):
                 sqlite_max_retention_days=_safe_int(
                     self.config.get("sqlite_max_retention_days"), 30
                 ),
+                recent_window_seconds=_safe_int(
+                    self.config.get("redis_recent_window_seconds"), 1800
+                ),
+                cache_refresh_interval=_safe_int(
+                    self.config.get("redis_cache_refresh_interval"), 1800
+                ),
             )
             await self._db.init()
 
@@ -303,6 +309,7 @@ class MessageRecorder(Star, AfdianFeature):
             password=self.config.get("redis_password", "") or None,
             db=int(self.config.get("redis_db", 0)),
             ttl=int(self.config.get("redis_cache_ttl", 300)),
+            recent_window=int(self.config.get("redis_recent_window_seconds", 1800)),
             max_retries=_safe_int(self.config.get("connection_max_retries"), 5),
         )
         available = await redis_cache.connect()
