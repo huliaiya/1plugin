@@ -918,7 +918,20 @@ def _draw_platform_donut(img, xy, platform_stats: Dict[str, int]):
     legend_w = inner_w - donut_d - _PX(60)
     f_name = _get_font(_PX(15))
     f_count = _get_font(_PX(15))
-    
+
+    # 数值文字宽度（右对齐到卡片边缘），进度条需让出该区域避免遮挡
+    max_val_w = 0
+    for idx, (plat, val) in enumerate(items):
+        if idx >= 5:
+            break
+        pct = val * 100 / total
+        txt = f"{val:,} ({pct:.1f}%)"
+        max_val_w = max(max_val_w, _text_width(draw, txt, f_count))
+
+    # 进度条宽度 = 图例可用宽度 - 数值文字区 - 间距（保证高占比也不遮挡）
+    bar_w = legend_w - _PX(100) - max_val_w - _PX(16)
+    bar_w = max(bar_w, _PX(20))
+
     for idx, (plat, val) in enumerate(items):
         if idx >= 5:  # 最多显示5个
             break
@@ -938,10 +951,9 @@ def _draw_platform_donut(img, xy, platform_stats: Dict[str, int]):
         # 平台名称
         _draw_text(draw, (legend_x + _PX(20), ry + _PX(8)), label, f_name, _TEXT_DARK, img)
 
-        # 进度条
+        # 进度条（宽度已为右侧数值区让位）
         bar_x = legend_x + _PX(100)
         bar_y = ry + _PX(12)
-        bar_w = legend_w - _PX(100)
         bar_bg = Image.new("RGBA", (bar_w, _PX(4)), (0, 0, 0, 0))
         bar_bg_draw = ImageDraw.Draw(bar_bg)
         _round_rect(bar_bg_draw, (0, 0, bar_w, _PX(4)), _PX(2), fill=(229, 231, 235, 100))

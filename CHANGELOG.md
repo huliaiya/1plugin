@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.3] - 2026-08-09
+
+### Fixed
+- **修复快照平台分布图例进度条遮挡数值**：高占比平台（如 90%+）的进度条此前会延伸到右侧数值/百分比文字区域造成遮挡；现进度条宽度按各平台数值文字最大宽度预留让位区，保证进度条末端始终在数值文字左侧，占比再高也不会重叠
+- 版本号 bump 至 2.8.3
+
 ## [2.8.2] - 2026-08-09
 
 ### Changed

@@ -132,3 +132,52 @@ def test_snapshot_card_order():
     assert ordered.index("平台分布") < ordered.index("平台消息详情")
     assert ordered.index("平台消息详情") < ordered.index("消息内容类型分布")
     assert ordered.index("消息内容类型分布") < ordered.index("发送者排行 Top 8")
+
+
+def test_platform_donut_legend_no_overlap():
+    """平台分布图例：高占比平台的进度条不得延伸到右侧数值文字区域。"""
+    import astrbot_plugin_fox_toolbox.fox_toolbox.snapshot_renderer as sr
+    from astrbot_plugin_fox_toolbox.fox_toolbox.models import MessageStats
+
+    platform_stats = {"qq_official": 2724, "telegram": 195, "webchat": 52,
+                      "weixin_oc": 25, "kook": 10}
+
+    stats = MessageStats(total_count=3006, group_message_count=2800,
+                         private_message_count=200, channel_message_count=6)
+    sr.render_snapshot(
+        stats, 6,
+        timeline=[{"date": "01", "count": 10}],
+        sender_ranking=[{"sender_id": "u1", "sender_name": "A", "platform": "tg", "count": 50}],
+        group_ranking=[{"group_id": "g1", "platform": "tg", "count": 40, "sender_count": 5}],
+        content_types=[{"type": "text", "label": "文本", "count": 80}],
+        platform_stats=platform_stats,
+        platform_detail=[],
+    )
+
+    # 复现 _draw_platform_donut 图例几何，校验进度条右端不越过数值文字左端
+    img = sr.Image.new("RGBA", (100, 100))
+    draw = sr.ImageDraw.Draw(img)
+    x0 = sr._PX(34) + sr._PX(24)
+    x1 = sr._W_FULL - sr._PX(34) - sr._PX(24)
+    inner_w = x1 - x0
+    inner_h = sr._PX(280) - sr._PX(24) * 2
+    donut_d = min(inner_h, inner_w * 0.5)
+    legend_x = x0 + donut_d + sr._PX(40)
+    legend_w = inner_w - donut_d - sr._PX(60)
+    f_count = sr._get_font(sr._PX(15))
+
+    total = sum(platform_stats.values())
+    items = sorted(platform_stats.items(), key=lambda kv: kv[1], reverse=True)
+    max_val_w = max(
+        sr._text_width(draw, f"{v:,} ({v * 100 / total:.1f}%)", f_count)
+        for _, v in items[:5]
+    )
+    bar_w = max(legend_w - sr._PX(100) - max_val_w - sr._PX(16), sr._PX(20))
+    bar_right = legend_x + sr._PX(100) + bar_w
+
+    for _, val in items[:5]:
+        tw = sr._text_width(draw, f"{val:,} ({val * 100 / total:.1f}%)", f_count)
+        val_left = x1 - tw - sr._PX(8)
+        assert bar_right <= val_left, (
+            f"进度条末端({bar_right}) 遮挡数值文字起点({val_left})"
+        )
