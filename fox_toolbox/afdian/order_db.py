@@ -76,14 +76,81 @@ class OrderDB:
         self._pool = None  # aiomysql.Pool
         self._sqlite_path = str(sqlite_path) if sqlite_path else None
         self._mysql_ready = False
+        self._pool_provider = None  # async 可调用：返回宿主主库当前连接池
+        self._recovery_task: Optional[asyncio.Task] = None
+        self._recovery_interval = 30.0
         if self._sqlite_path:
             Path(self._sqlite_path).parent.mkdir(parents=True, exist_ok=True)
             self._init_sqlite()
 
+    # ---- 恢复机制 ----
+
+    def set_pool_provider(self, provider) -> None:
+        """注册宿主主库连接池提供者（async 可调用，返回当前 aiomysql.Pool 或 None）。"""
+        self._pool_provider = provider
+
+    def start_recovery_loop(self, interval: float = 30.0) -> None:
+        """启动周期恢复检测：MySQL 恢复后自动重新绑定并回写 SQLite 积累的订单。"""
+        self._recovery_interval = interval
+        if self._recovery_task is None or self._recovery_task.done():
+            self._recovery_task = asyncio.create_task(self._recovery_loop())
+
+    def stop_recovery_loop(self) -> None:
+        if self._recovery_task and not self._recovery_task.done():
+            self._recovery_task.cancel()
+        self._recovery_task = None
+
+    async def _recovery_loop(self) -> None:
+        while True:
+            await asyncio.sleep(self._recovery_interval)
+            try:
+                if self._mysql_ready and not self._pool_is_closed():
+                    continue
+                if not self._pool_provider:
+                    continue
+                pool = await self._pool_provider()
+                if pool is None:
+                    continue
+                if await self.bind_mysql_pool(pool):
+                    logger.info("[Afdian] MySQL 已恢复，重新绑定订单存储并回写降级期订单")
+                    await self._backfill_sqlite_to_mysql()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.debug(f"[Afdian] 订单存储恢复检测异常: {e}")
+
+    async def _backfill_sqlite_to_mysql(self) -> int:
+        """把 SQLite 中积累的订单回写 MySQL（INSERT IGNORE 幂等），返回回写条数。"""
+        if not self._mysql_ready:
+            return 0
+        try:
+            orders = await asyncio.to_thread(
+                self._query_sqlite, "SELECT * FROM afdian_orders"
+            )
+        except Exception:
+            return 0
+        count = 0
+        for order in orders:
+            try:
+                if await self._save_mysql_if_new(order):
+                    count += 1
+            except Exception as e:
+                logger.warning(f"[Afdian] 回写订单到 MySQL 失败: {e}")
+                break
+        return count
+
     # ---- 初始化 ----
 
+    def _sqlite_connect(self) -> sqlite3.Connection:
+        """建立带 WAL 与忙等待超时的 SQLite 连接，降低并发写锁失败概率。"""
+        conn = sqlite3.connect(self._sqlite_path, timeout=30)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=30000")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        return conn
+
     def _init_sqlite(self):
-        with sqlite3.connect(self._sqlite_path) as conn:
+        with self._sqlite_connect() as conn:
             conn.execute(self._SQLITE_DDL)
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_user_id ON afdian_orders(user_id)"
@@ -179,14 +246,18 @@ class OrderDB:
         fields = self._build_fields(order)
         columns = ", ".join(fields.keys())
         placeholders = ", ".join("?" * len(fields))
-        with sqlite3.connect(self._sqlite_path) as conn:
-            cur = conn.execute(
-                f"INSERT OR IGNORE INTO afdian_orders "
-                f"({columns}) VALUES ({placeholders})",
-                tuple(fields.values()),
-            )
-            conn.commit()
-            return cur.rowcount > 0
+        try:
+            with self._sqlite_connect() as conn:
+                cur = conn.execute(
+                    f"INSERT OR IGNORE INTO afdian_orders "
+                    f"({columns}) VALUES ({placeholders})",
+                    tuple(fields.values()),
+                )
+                conn.commit()
+                return cur.rowcount > 0
+        except sqlite3.OperationalError as e:
+            logger.warning(f"[Afdian] SQLite 写入订单失败（存储已锁定或损坏）: {e}")
+            return False
 
     def _build_fields(self, order) -> dict:
         return {
@@ -248,11 +319,15 @@ class OrderDB:
             return []
 
     def _query_sqlite(self, sql: str, params: tuple = ()) -> list:
-        with sqlite3.connect(self._sqlite_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            cursor.execute(sql, params)
-            return [dict(row) for row in cursor.fetchall()]
+        try:
+            with self._sqlite_connect() as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute(sql, params)
+                return [dict(row) for row in cursor.fetchall()]
+        except sqlite3.OperationalError as e:
+            logger.warning(f"[Afdian] SQLite 查询订单失败: {e}")
+            return []
 
     @staticmethod
     def _safe_float(value):

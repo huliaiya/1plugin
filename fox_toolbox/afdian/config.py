@@ -99,6 +99,14 @@ class AfdianConfig:
         except (TypeError, ValueError):
             return 300
 
+    @property
+    def recovery_check_interval(self) -> float:
+        """MySQL 恢复检测间隔（秒）。"""
+        try:
+            return max(5.0, float(self._cfg.get("afdian_recovery_check_interval", 30.0)))
+        except (TypeError, ValueError):
+            return 30.0
+
     # ---- 通知会话 ----
     @property
     def notice_sessions(self) -> list:

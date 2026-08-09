@@ -181,9 +181,18 @@ class AfdianFeature:
         return total, added
 
     async def _afdian_bind_mysql(self):
-        """尝试将爱发电订单存储绑定到主插件的 MySQL 连接池（同库）。"""
+        """尝试将爱发电订单存储绑定到主插件的 MySQL 连接池（同库）。
+
+        同时注册主库连接池提供者，供 MySQL 恢复后 OrderDB 自动重绑并回写。
+        """
         try:
             host_db = getattr(self, "_db", None)
+
+            async def _pool_provider():
+                db = getattr(self, "_db", None)
+                return getattr(db, "_pool", None) if db else None
+
+            self.afdian_db.set_pool_provider(_pool_provider)
             pool = getattr(host_db, "_pool", None) if host_db else None
             if pool is None:
                 logger.warning("[Afdian] 主数据库未就绪，订单存储使用 SQLite 兜底")
@@ -205,6 +214,10 @@ class AfdianFeature:
             return
         # 优先绑定主库 MySQL，失败时回退 SQLite（已在 OrderDB 内兜底）
         await self._afdian_bind_mysql()
+        # 启动 MySQL 恢复检测：恢复后自动重绑连接池并回写降级期订单
+        self.afdian_db.start_recovery_loop(
+            interval=self.afdian_cfg.recovery_check_interval
+        )
         try:
             self.afdian_server.register_order_callback(self.on_afdian_new_order)
             await self.afdian_server.start()
@@ -226,6 +239,7 @@ class AfdianFeature:
             except (asyncio.CancelledError, Exception):
                 pass
             self.afdian_poll_task = None
+        self.afdian_db.stop_recovery_loop()
         if self.afdian_sync_task and not self.afdian_sync_task.done():
             self.afdian_sync_task.cancel()
             try:
