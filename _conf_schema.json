@@ -239,6 +239,12 @@
     "default": 30,
     "hint": "降级模式下每隔指定秒数检测一次 MySQL 是否恢复，最小 5 秒"
   },
+  "connection_max_retries": {
+    "type": "int",
+    "description": "断连后最大自动重连次数",
+    "default": 5,
+    "hint": "MySQL 与 Redis 断连后自动重试重连的最大连续次数（最小 1）；达到上限后停止自动重连，分别进入 SQLite 降级 / 无缓存模式，需重启插件或重新触发连接才会恢复自动重连"
+  },
   "backfill_batch_size": {
     "type": "int",
     "description": "单批补写消息条数",

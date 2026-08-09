@@ -130,6 +130,38 @@ class TestPing:
         assert await db.ping() is False
 
 
+class TestGetMysqlVersion:
+    @pytest.mark.asyncio
+    async def test_returns_none_when_not_ready(self):
+        db = Database("test", {})
+        assert await db.get_mysql_version() is None
+
+    @pytest.mark.asyncio
+    async def test_returns_version_when_ready(self):
+        db = Database("test", {})
+        db._mysql_ready = True
+        db._pool = _FakePool()
+        version = await db.get_mysql_version()
+        assert version is not None
+        assert version == "1"
+
+    @pytest.mark.asyncio
+    async def test_cached_version_no_second_query(self):
+        db = Database("test", {})
+        db._mysql_ready = True
+        db._pool = _FakePool()
+        db._mysql_version = "8.0.36"
+        version = await db.get_mysql_version()
+        assert version == "8.0.36"
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_query_failure(self):
+        db = Database("test", {})
+        db._mysql_ready = True
+        db._pool = _FailingPool()
+        assert await db.get_mysql_version() is None
+
+
 class TestSaveMessage:
     @pytest.mark.asyncio
     async def test_save_and_retrieve(self, mysql_db):

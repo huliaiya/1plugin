@@ -32,16 +32,20 @@ class RedisCache:
         password: Optional[str] = None,
         db: int = 0,
         ttl: int = 300,
+        max_retries: int = 5,
     ) -> None:
         self._host = host
         self._port = port
         self._password = password
         self._db = db
         self._ttl = ttl
+        self._max_retries = max(1, int(max_retries or 5))
         self._client: Optional[Any] = None
         self._available: bool = False
         self._checked: bool = False
         self._delta_lock = asyncio.Lock()
+        self._reconnect_task: Optional[asyncio.Task] = None
+        self._reconnect_interval: float = 30.0
 
     @property
     def available(self) -> bool:
@@ -82,10 +86,17 @@ class RedisCache:
         return info
 
     async def connect(self) -> bool:
-        """建立连接并做连通性检测；失败则进入降级模式。"""
+        """建立连接并做连通性检测；失败则进入降级模式。
+
+        首次调用后若失败，可配合 ``start_reconnect_loop`` 在运行中自动重试。
+        """
         if self._checked:
             return self._available
         self._checked = True
+        return await self._establish()
+
+    async def _establish(self) -> bool:
+        """真正建立连接与连通性检测（首次连接与运行中重连共用）。"""
         if not _REDIS_AVAILABLE:
             logger.warning(
                 "[FoxToolbox] 检测到启用 Redis 缓存，但未安装 redis 包，"
@@ -109,6 +120,11 @@ class RedisCache:
                 socket_timeout=3,
             )
             await asyncio.wait_for(client.ping(), timeout=3)
+            if self._client is not None and self._client is not client:
+                try:
+                    await self._client.aclose()
+                except Exception:
+                    pass
             self._client = client
             self._available = True
             logger.info(
@@ -118,13 +134,82 @@ class RedisCache:
             return True
         except Exception as e:
             self._available = False
+            if self._client is not None:
+                try:
+                    await self._client.aclose()
+                except Exception:
+                    pass
+                self._client = None
             logger.warning(
                 f"[FoxToolbox] Redis 缓存连接失败，已自动禁用缓存功能: {e}"
             )
             return False
 
+    async def start_reconnect_loop(
+        self, interval: Optional[float] = None, max_retries: Optional[int] = None
+    ) -> None:
+        """启动运行中断连自动重连的后台循环。
+
+        :param interval: 检测间隔（秒），默认 30，最小 5
+        :param max_retries: 连续重连失败上限，默认使用构造时的 max_retries
+        """
+        if interval is not None:
+            self._reconnect_interval = max(0.05, float(interval or 30))
+        if max_retries is not None:
+            self._max_retries = max(1, int(max_retries or 5))
+        if self._reconnect_task is None or self._reconnect_task.done():
+            self._reconnect_task = asyncio.create_task(self._reconnect_loop())
+
+    async def stop_reconnect_loop(self) -> None:
+        """停止重连循环（幂等）。"""
+        if self._reconnect_task is not None:
+            self._reconnect_task.cancel()
+            try:
+                await self._reconnect_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._reconnect_task = None
+
+    async def _reconnect_loop(self) -> None:
+        """周期检测连接；断连后自动重连，连续失败达上限后停止。
+
+        运行中断连（ping 失败 / 读写抛异常）时自动重新建立连接，
+        连续 ``_max_retries`` 次失败后退出循环，保持降级模式。
+        """
+        consecutive_failures = 0
+        while True:
+            await asyncio.sleep(self._reconnect_interval)
+            try:
+                connected = False
+                if self._client is not None and self._available:
+                    try:
+                        await self._client.ping()
+                        connected = True
+                    except Exception:
+                        # 连接已断开：标记降级并尝试重连
+                        self._available = False
+                        logger.warning("[FoxToolbox] Redis 连接断开，开始自动重连")
+
+                if not connected:
+                    if await self._establish():
+                        consecutive_failures = 0
+                        logger.info("[FoxToolbox] Redis 已恢复连接")
+                    else:
+                        consecutive_failures += 1
+                        if consecutive_failures >= self._max_retries:
+                            logger.warning(
+                                f"[FoxToolbox] Redis 连续 {consecutive_failures} 次 "
+                                f"重连失败，已达上限，停止自动重连，保持无缓存模式"
+                            )
+                            break
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.debug(f"[FoxToolbox] Redis 重连检测异常: {e}")
+
     async def close(self) -> None:
         """关闭连接（幂等）。"""
+        await self.stop_reconnect_loop()
         if self._client is not None:
             try:
                 await self._client.aclose()

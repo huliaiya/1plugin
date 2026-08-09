@@ -5,7 +5,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E4.16%2C%3C5-blue?style=for-the-badge)](https://github.com/Soulter/astrbot)
 [![Python](https://img.shields.io/badge/Python-3.12+-green?style=for-the-badge)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.7.8-orange?style=for-the-badge)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.7.9-orange?style=for-the-badge)](CHANGELOG.md)
 
 **全平台聊天消息自动记录 | MySQL 5.7 存储 | Web 管理面板 | 全文搜索 | 插件 API**
 
@@ -157,7 +157,7 @@ git clone https://github.com/leafliber/astrbot_plugin_fox_toolbox.git
 
 ### Redis 缓存（可选）
 
-通过 Redis 缓存消息统计与最近消息，可显著降低 WebUI 首页加载时对数据库的查询压力。未启用、未安装依赖或连接失败时，插件自动以无缓存模式运行，不影响任何功能。
+通过 Redis 缓存消息统计与最近消息，可显著降低 WebUI 首页加载时对数据库的查询压力。未启用、未安装依赖或连接失败时，插件自动以无缓存模式运行，不影响任何功能。运行中若 Redis 断连，插件会按 `connection_max_retries`（默认 5 次）自动重连，期间自动以无缓存模式运行，恢复后自动切回缓存；达到上限仍未恢复则保持降级，需重启插件后重新建立自动重连。
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
@@ -178,6 +178,7 @@ MySQL 不可用、故障或连接中断时，插件自动降级到本地 SQLite 
 |--------|--------|------|
 | `storage_fallback_enabled` | `true` | 是否启用本地 SQLite 自动兜底存储；关闭后故障行为与旧版一致（消息无法记录） |
 | `recovery_check_interval` | `30` | MySQL 恢复检测间隔（秒），最小 5 秒 |
+| `connection_max_retries` | `5` | MySQL 与 Redis 断连后自动重连的最大连续次数（最小 1）；达到上限后停止自动重连，分别进入 SQLite 降级 / 无缓存模式 |
 | `backfill_batch_size` | `500` | MySQL 恢复后单批补写消息条数，按批推进避免大事务 |
 | `sqlite_max_retention_days` | `30` | 已补写进 MySQL 的消息在本地 SQLite 中的保留天数，超过后自动清理以控制文件增长 |
 
@@ -212,6 +213,7 @@ Web 面板采用 **Liquid Glass** 液态玻璃设计风格，通过现代 CSS �
 ### 仪表盘
 
 - **统计卡片** — 总消息数、群聊消息、私聊消息、平台数
+- **MySQL 存储状态卡** — 显示 MySQL 连接状态（运行中 / SQLite 降级 / 未连接）、存储后端、MySQL 服务器版本、降级时的待同步消息数
 - **Redis 缓存状态卡** — 显示 Redis 缓存运行状态（未启用 / 运行中 / 已降级）、连接地址、库编号、缓存 TTL、统计缓存与最近消息缓存条目数
 - **时间趋势图** — 消息数量随时间变化的趋势（总消息/群聊/私聊/频道四条数据线，颜色区分）
 - **平台分布图** — 各平台消息占比饼图
@@ -258,16 +260,21 @@ Web 面板采用 **Liquid Glass** 液态玻璃设计风格，通过现代 CSS �
 
 ### 基础指令
 
+> 主命令均为中文；旧英文指令（如 `/huli_record stats`）仍可作为别名使用。
+
 | 指令 | 说明 | 示例 |
 |------|------|------|
-| `/huli_record stats` | 查看消息统计信息 | `/huli_record stats` |
-| `/huli_record cleanup` | 手动触发清理 | `/huli_record cleanup` |
-| `/huli_record query [sender_id] [limit]` | 查询消息记录 | `/huli_record query 123456 20` |
-| `/huli_record search <关键词> [limit]` | 搜索消息内容 | `/huli_record search hello 10` |
-| `/huli_record help` | 查看帮助信息 | `/huli_record help` |
-| `/huli_record today` | 查看今天的消息 | `/huli_record today` |
-| `/huli_record yesterday` | 查看昨天的消息 | `/huli_record yesterday` |
-| `/huli_record history <时间范围>` | 按时间范围查询 | `/huli_record history last7d` |
+| `/狐狸记录 统计` | 查看消息统计信息 | `/狐狸记录 统计` |
+| `/狐狸记录 清理` | 手动触发清理 | `/狐狸记录 清理` |
+| `/狐狸记录 查询 [发送者ID] [limit]` | 查询消息记录 | `/狐狸记录 查询 123456 20` |
+| `/狐狸记录 搜索 <关键词> [limit]` | 搜索消息内容 | `/狐狸记录 搜索 hello 10` |
+| `/狐狸记录 帮助` | 查看帮助信息 | `/狐狸记录 帮助` |
+| `/狐狸记录 今日` | 查看今天的消息 | `/狐狸记录 今日` |
+| `/狐狸记录 昨日` | 查看昨天的消息 | `/狐狸记录 昨日` |
+| `/狐狸记录 历史 <时间范围>` | 按时间范围查询 | `/狐狸记录 历史 last7d` |
+| `/狐狸记录 快照` | 生成 WebUI 仪表盘快照图 | `/狐狸记录 快照` |
+| `/狐狸记录 表列表` | 查看数据库中的业务表列表 | `/狐狸记录 表列表` |
+| `/狐狸菜单` | 查看全部可用指令（旧 `/hulihelp` 仍可用） | `/狐狸菜单` |
 
 **时间范围格式支持：**
 

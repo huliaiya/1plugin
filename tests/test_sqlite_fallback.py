@@ -339,3 +339,70 @@ class TestDatabaseDegradedMode:
         assert db.using_fallback is False
 
         await db.close()
+
+
+class TestRecoveryLoopMaxRetries:
+    """恢复循环连续失败达到上限后停止自动重连。"""
+
+    @pytest.mark.asyncio
+    async def test_loop_stops_after_max_retries(self, tmp_path, monkeypatch):
+        db = Database("test_plugin", {"host": "127.0.0.1"})
+        db._mysql_ready = False
+        db._degraded = True
+        db._recovery_check_interval = 0.001
+        db._connection_max_retries = 3
+
+        calls = {"n": 0}
+
+        async def _fail_reconnect(self):
+            calls["n"] += 1
+            return False
+
+        monkeypatch.setattr(Database, "_try_reconnect_mysql", _fail_reconnect)
+
+        await db._start_recovery_loop()
+        assert db._recovery_task is not None
+        assert not db._recovery_task.done()
+
+        await asyncio.sleep(0.08)
+        assert db._recovery_task.done()  # 3 次失败后停止
+        assert calls["n"] == 3
+        assert db._degraded is True
+        assert db._mysql_ready is False
+
+        await db.close()
+
+    @pytest.mark.asyncio
+    async def test_loop_resets_counter_on_success(self, tmp_path, monkeypatch):
+        db = Database("test_plugin", {"host": "127.0.0.1"})
+        db._mysql_ready = False
+        db._degraded = True
+        db._recovery_check_interval = 0.005
+        db._connection_max_retries = 3
+
+        state = {"fail": True}
+
+        async def _flaky_reconnect(self):
+            if state["fail"]:
+                return False
+            self._pool = object()
+            return True
+
+        monkeypatch.setattr(Database, "_try_reconnect_mysql", _flaky_reconnect)
+
+        await db._start_recovery_loop()
+
+        # 等第一次重连尝试失败后，立即让 MySQL 恢复
+        await asyncio.sleep(0.01)
+        assert state["fail"] is True
+        assert db._recovery_task is not None and not db._recovery_task.done()
+        state["fail"] = False
+
+        # 下一次尝试应成功并复位就绪标志，循环继续运行
+        await asyncio.sleep(0.03)
+        assert db._mysql_ready is True
+        assert db._degraded is False
+        assert not db._recovery_task.done()  # 成功后继续运行
+
+        await db.close()
+        state["fail"] = True

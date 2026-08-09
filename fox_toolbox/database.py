@@ -121,6 +121,7 @@ class Database:
         redis_cache: Optional["RedisCache"] = None,
         fallback_enabled: bool = True,
         recovery_check_interval: int = 30,
+        connection_max_retries: int = 5,
         backfill_batch_size: int = 500,
         sqlite_max_retention_days: int = 30,
     ):
@@ -134,11 +135,13 @@ class Database:
         # SQLite 兜底
         self._fallback_enabled = fallback_enabled
         self._recovery_check_interval = max(5, int(recovery_check_interval or 30))
+        self._connection_max_retries = max(1, int(connection_max_retries or 5))
         self._backfill_batch_size = max(1, int(backfill_batch_size or 500))
         self._sqlite_max_retention_days = max(1, int(sqlite_max_retention_days or 30))
         self._sqlite: Optional[SQLiteStore] = None
         self._mysql_ready: bool = False
         self._degraded: bool = False
+        self._mysql_version: Optional[str] = None
         self._recovery_task: Optional[asyncio.Task] = None
 
     def _sqlite_db_path(self) -> Path:
@@ -157,22 +160,42 @@ class Database:
         """当前是否处于 SQLite 降级模式。"""
         return self._degraded and self._sqlite is not None
 
+    @property
+    def mysql_ready(self) -> bool:
+        """MySQL 连接池是否就绪（主存储可用）。"""
+        return self._mysql_ready and self._pool is not None
+
     async def _start_recovery_loop(self) -> None:
         """启动 MySQL 恢复检测后台任务（无论当前是否可用）。"""
         if self._recovery_task is None or self._recovery_task.done():
             self._recovery_task = asyncio.create_task(self._recovery_loop())
 
     async def _recovery_loop(self) -> None:
-        """周期检测 MySQL 是否恢复；恢复后切回并补写降级期间的消息。"""
+        """周期检测 MySQL 是否恢复；恢复后切回并补写降级期间的消息。
+
+        连续重连失败达到 ``connection_max_retries`` 上限后停止自动重连，
+        保持 SQLite 降级模式，避免无限循环消耗资源。
+        """
+        consecutive_failures = 0
         while True:
             await asyncio.sleep(self._recovery_check_interval)
             try:
                 if not self._mysql_ready:
                     if await self._try_reconnect_mysql():
+                        consecutive_failures = 0
                         self._mysql_ready = True
                         self._degraded = False
+                        self._mysql_version = None
                         logger.info("[FoxToolbox] MySQL 已恢复，切回主存储并开始补写")
                         await self._backfill_unsynced()
+                    else:
+                        consecutive_failures += 1
+                        if consecutive_failures >= self._connection_max_retries:
+                            logger.warning(
+                                f"[FoxToolbox] MySQL 连续 {consecutive_failures} 次 "
+                                f"重连失败，已达上限，停止自动重连，保持 SQLite 降级模式"
+                            )
+                            break
                 else:
                     # 主存储可用时也周期性清理已同步的兜底数据
                     if self._sqlite is not None:
@@ -276,6 +299,7 @@ class Database:
             await self._cleanup_deprecated_tables()
             self._mysql_ready = True
             self._degraded = False
+            self._mysql_version = None
             logger.info(
                 f"[FoxToolbox] MySQL 数据库初始化完成: "
                 f"{host}:{port}/{database}"
@@ -337,6 +361,28 @@ class Database:
         except Exception as e:
             logger.warning(f"[FoxToolbox] 数据库 ping 失败: {e}")
             return False
+
+    async def get_mysql_version(self) -> Optional[str]:
+        """返回 MySQL 服务器版本字符串；MySQL 不可用时返回 None。
+
+        查询结果缓存到 self._mysql_version，避免每次状态轮询重复查询。
+        """
+        if not self._mysql_ready or not self._pool:
+            self._mysql_version = None
+            return None
+        if self._mysql_version:
+            return self._mysql_version
+        try:
+            async with self._pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT VERSION()")
+                    row = await cur.fetchone()
+            self._mysql_version = str(row[0]) if row else None
+            return self._mysql_version
+        except Exception as e:
+            logger.warning(f"[FoxToolbox] 获取 MySQL 版本失败: {e}")
+            self._mysql_version = None
+            return None
 
     async def get_table_count(self) -> int:
         """返回当前数据库内已创建的数据表数量；查询失败返回 -1。"""

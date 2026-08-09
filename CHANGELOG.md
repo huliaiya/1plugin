@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.9] - 2026-08-09
+
+### Added
+- **快照与 WebUI 展示 MySQL 版本与连接状态**：快照图新增「MySQL 存储」卡片，Web 仪表盘新增 MySQL 存储状态卡，实时展示连接状态（已连接/已降级/未连接）、MySQL 服务器版本、存储后端与待同步消息数；连接判定基于真实连接池就绪状态，兼容未启用兜底时的降级场景
+- **插件指令全面中文化**：命令组改为 `/狐狸记录`（`/huli_record` 保留为别名），子命令（统计/清理/查询/搜索/帮助/今日/昨日/历史/表列表/快照）与爱发电指令均改为中文主命令，旧英文指令仍可作为别名使用；帮助菜单同步更新并增加别名提示
+- **MySQL 与 Redis 运行中断连自动重连**：MySQL 与 Redis 断连后由后台循环周期检测并自动重连（Redis 此前连接失败即永久禁用，无任何运行中恢复机制）；连续重试次数由新配置项 `connection_max_retries` 控制（默认 5，最小 1），达到上限后停止自动重连，分别进入 SQLite 降级 / 无缓存模式，并记录日志提示；运行中 Redis 断连期间自动以无缓存模式运行，恢复后自动切回缓存
+
+### Fixed
+- **状态连接判定误报**：此前用 `using_fallback` 反推连接状态，在"MySQL 故障但未启用兜底"场景会误报「已连接」；现改用连接池真实就绪状态判定，三态（已连接/已降级/未连接）准确反映 MySQL 实际可用性
+- **MySQL 恢复循环无限重试**：此前 `_recovery_loop` 无限周期重连，MySQL 长时间不可用时持续占用后台资源；现达到 `connection_max_retries` 上限后停止自动重连，保持降级模式
+- 版本号 bump 至 2.7.9
+
 ## [2.7.8] - 2026-08-09
 
 ### Added

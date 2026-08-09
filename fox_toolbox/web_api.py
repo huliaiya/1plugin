@@ -66,13 +66,31 @@ _background_tasks: set = set()
 async def _build_db_status_payload(db: Optional[Database], error: str = "") -> Dict[str, Any]:
     """构造数据库状态数据。以表数量查询结果为准，不依赖额外 ping。"""
     if not db:
-        return {"running": False, "table_count": 0, "error": error or "数据库未初始化"}
+        return {
+            "running": False,
+            "table_count": 0,
+            "error": error or "数据库未初始化",
+            "mysql_version": None,
+            "mysql_connected": False,
+        }
     table_count = await db.get_table_count()
     payload = {
         "running": table_count >= 0,
         "table_count": int(table_count) if table_count >= 0 else 0,
         "error": error,
     }
+    # MySQL 版本与连接状态（快照与 WebUI 共用）
+    mysql_version = None
+    mysql_connected = getattr(db, "mysql_ready", False)
+    if mysql_connected:
+        try:
+            mysql_version = await db.get_mysql_version()
+        except Exception:
+            mysql_version = None
+    payload.update({
+        "mysql_version": mysql_version,
+        "mysql_connected": mysql_connected,
+    })
     # 展示当前存储后端与未同步消息数（SQLite 降级模式）
     if db.using_fallback:
         unsynced = 0

@@ -54,6 +54,31 @@
         </div>
       </div>
 
+      <div class="redis-card" id="mysqlCard">
+        <div class="redis-card-header">
+          <span class="redis-title">🗄️ MySQL 存储</span>
+          <span class="redis-status-badge" id="mysqlBadge">检测中...</span>
+        </div>
+        <div class="redis-card-body">
+          <div class="redis-detail">
+            <span class="redis-k">连接状态</span>
+            <span class="redis-v" id="mysqlConnected">-</span>
+          </div>
+          <div class="redis-detail">
+            <span class="redis-k">存储后端</span>
+            <span class="redis-v" id="mysqlBackend">-</span>
+          </div>
+          <div class="redis-detail">
+            <span class="redis-k">服务器版本</span>
+            <span class="redis-v" id="mysqlVersion">-</span>
+          </div>
+          <div class="redis-detail">
+            <span class="redis-k">待同步消息</span>
+            <span class="redis-v" id="mysqlUnsynced">-</span>
+          </div>
+        </div>
+      </div>
+
       <div class="redis-card" id="redisCard">
         <div class="redis-card-header">
           <span class="redis-title">🗄️ Redis 缓存</span>

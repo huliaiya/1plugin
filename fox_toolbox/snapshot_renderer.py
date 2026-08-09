@@ -1,7 +1,7 @@
 """WebUI 仪表盘快照渲染器 - 现代优雅版
 
 用 Pillow 把数据库统计数据渲染成一张与 WebUI 风格一致的 PNG，
-供 /huli_record snapshot 指令直接发到聊天。
+供 /狐狸记录 快照 指令直接发到聊天。
 
 视觉设计：
 1. 渐变背景 - 淡蓝到淡紫的优雅渐变
@@ -170,7 +170,7 @@ def _get_plugin_version() -> str:
                         return version
     except Exception:
         pass
-    return "2.7.8"
+    return "2.7.9"
 
 
 def _search_font_path(name_keywords: List[str]) -> Optional[str]:
@@ -502,6 +502,70 @@ def _draw_stat_cards(img, y, stats: MessageStats, db_table_count: int):
         _draw_text(draw, (cx + (card_w - lw) // 2, cy + _PX(56)), label, f_lbl, _TEXT_MEDIUM, img)
     
     return y + 2 * card_h + gap + _PX(20)
+
+
+def _draw_mysql_card(img, y, mysql_status: Optional[Dict] = None) -> int:
+    """绘制 MySQL 连接状态卡片（单列信息布局）。
+
+    展示 MySQL 连接状态、服务器版本与当前存储后端；
+    卡片高度按信息行数动态计算，避免文字溢出卡片底部。
+    """
+    x0 = _PX(_PADDING)
+    x1 = _W_FULL - _PX(_PADDING)
+    draw = ImageDraw.Draw(img)
+
+    status = mysql_status or {}
+    connected = bool(status.get("connected"))
+    fallback = bool(status.get("fallback_active"))
+    version = status.get("version") or None
+
+    if connected:
+        title = "MySQL 存储"
+        state_text = "运行中"
+        accent = _SUCCESS
+    elif fallback:
+        title = "MySQL 存储"
+        state_text = "SQLite 降级"
+        accent = _WARNING
+    else:
+        title = "MySQL 存储"
+        state_text = "未连接"
+        accent = (176, 190, 197)
+
+    f_val = _get_font(_PX(18), bold=True)
+    parts = []
+    if connected:
+        parts.append(("服务器版本", version or "未知"))
+        parts.append(("存储后端", "MySQL"))
+        parts.append(("连接状态", "已连接"))
+    elif fallback:
+        unsynced = status.get("unsynced_count")
+        parts.append(("存储后端", "本地 SQLite"))
+        if unsynced is not None:
+            parts.append(("待同步消息", f"{unsynced} 条"))
+        parts.append(("连接状态", "MySQL 不可用，降级中"))
+    else:
+        parts.append(("存储后端", "未知"))
+        parts.append(("连接状态", "未连接"))
+
+    line_h = _PX(40)
+    card_h = _PX(52) + line_h * len(parts) + _PX(16)
+
+    _draw_glass_card(img, (x0, y, x1, y + card_h), title=title, accent=accent)
+
+    f_state = _get_font(_PX(20), bold=True)
+    sw = _text_width(draw, state_text, f_state)
+    sx = x1 - sw - _PX(24)
+    sy = y + _PX(10)
+    _draw_text(draw, (sx, sy), state_text, f_state, accent, img)
+
+    cx = x0 + _PX(24)
+    cy = y + _PX(52)
+    for k, v in parts:
+        _draw_text(draw, (cx, cy), f"{k}: {v}", f_val, _TEXT_DARK, img)
+        cy += line_h
+
+    return y + card_h + _PX(12)
 
 
 def _draw_redis_card(img, y, redis_status: Optional[Dict] = None) -> int:
@@ -1110,6 +1174,7 @@ def render_snapshot(
     platform_detail: Optional[List[Dict]] = None,
     generated_at: Optional[float] = None,
     redis_status: Optional[Dict] = None,
+    mysql_status: Optional[Dict] = None,
 ) -> bytes:
     """渲染简洁现代的仪表盘快照 PNG。
 
@@ -1124,6 +1189,7 @@ def render_snapshot(
         platform_detail: 平台消息详情统计 [{"platform","platform_name","total","group_count","private_count","channel_count",...}]，默认取数据库查询结果
         generated_at: 生成时间戳，默认当前
         redis_status: Redis 缓存状态摘要（未启用时为空 dict），默认 None
+        mysql_status: MySQL 连接状态摘要（连接状态/服务器版本/存储后端），默认 None
     """
     if generated_at is None:
         generated_at = time.time()
@@ -1143,6 +1209,10 @@ def render_snapshot(
     # 2. 绘制统计卡片
     y = _draw_stat_cards(img, y, stats, db_table_count)
     y += _PX(30)
+
+    # 2.2 绘制 MySQL 连接状态卡片
+    y = _draw_mysql_card(img, y, mysql_status)
+    y += _PX(10)
 
     # 2.5 绘制 Redis 缓存状态卡片
     y = _draw_redis_card(img, y, redis_status)
@@ -1221,7 +1291,7 @@ def render_snapshot(
     # 8. 底部水印
     draw = ImageDraw.Draw(img)
     watermark_text = (
-        f"由狐狸插件 /huli_record snapshot 生成 · "
+        f"由狐狸插件 /狐狸记录 快照 生成 · "
         f"天空蓝清新风格 v{_get_plugin_version()}"
     )
     f_watermark = _get_font(_PX(14))

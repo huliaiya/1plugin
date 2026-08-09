@@ -1,5 +1,6 @@
 """redis_cache.py 单元测试 - 使用 mock 模拟 redis.asyncio"""
 
+import asyncio
 import sys
 import types
 
@@ -200,6 +201,91 @@ class TestRedisCacheApplyStatsDeltas:
     async def test_apply_noop_when_disabled(self):
         cache = RedisCache(ttl=60)  # 未连接
         assert await cache.apply_stats_deltas([{"count": 1}]) is False
+
+
+class TestRedisReconnectLoop:
+    """运行中断连后自动重连，连续失败达上限后停止。"""
+
+    @pytest.mark.asyncio
+    async def test_reconnects_after_disconnect(self, monkeypatch):
+        _install_fake_aioredis()
+        try:
+            cache = RedisCache(ttl=60, max_retries=5)
+            await cache.connect()
+            assert cache.available is True
+            assert cache._client is not None
+
+            # 缩短检测间隔并启动重连循环
+            await cache.start_reconnect_loop(interval=0.05)
+            assert cache._reconnect_interval == 0.05
+
+            # 模拟运行中断连：清空 client 并强制 available=False
+            cache._client = None
+            cache._available = False
+
+            # 等循环重连（from_url 恒成功）
+            await asyncio.sleep(0.2)
+            assert cache.available is True
+            assert cache._client is not None
+
+            await cache.close()
+        finally:
+            _uninstall_fake_aioredis()
+
+    @pytest.mark.asyncio
+    async def test_reconnect_loop_stops_after_max_retries(self, monkeypatch):
+        _install_fake_aioredis(client_factory=_FakePingFailClient)
+        try:
+            cache = RedisCache(ttl=60, max_retries=3)
+            await cache.connect()
+            assert cache.available is False
+
+            await cache.start_reconnect_loop(interval=0.05)
+
+            # 初次连接失败（_client=None），循环重试；3 次失败后停止
+            await asyncio.sleep(0.5)
+            assert cache._reconnect_task is not None
+            assert cache._reconnect_task.done()
+            assert cache.available is False
+
+            await cache.close()
+        finally:
+            _uninstall_fake_aioredis()
+
+    @pytest.mark.asyncio
+    async def test_reconnect_loop_resets_after_recovery(self, monkeypatch):
+        """循环检测到断开后自动重连成功并继续运行。"""
+        _install_fake_aioredis()
+        try:
+            cache = RedisCache(ttl=60, max_retries=3)
+            await cache.connect()
+            await cache.start_reconnect_loop(interval=0.05)
+
+            # 模拟断连后恢复：先断开，再让 from_url 继续成功
+            cache._client = None
+            cache._available = False
+            await asyncio.sleep(0.2)
+
+            assert cache.available is True
+            assert not cache._reconnect_task.done()  # 成功后循环继续
+
+            await cache.close()
+        finally:
+            _uninstall_fake_aioredis()
+
+    @pytest.mark.asyncio
+    async def test_close_stops_reconnect_loop(self):
+        _install_fake_aioredis()
+        try:
+            cache = RedisCache(ttl=60, max_retries=3)
+            await cache.connect()
+            await cache.start_reconnect_loop(interval=0.05)
+            assert cache._reconnect_task is not None
+            await cache.close()
+            assert cache._reconnect_task is None
+            assert cache.available is False
+        finally:
+            _uninstall_fake_aioredis()
 
 
 class TestRecordCachePayload:

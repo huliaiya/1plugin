@@ -242,6 +242,9 @@ class MessageRecorder(Star, AfdianFeature):
                 recovery_check_interval=_safe_int(
                     self.config.get("recovery_check_interval"), 30
                 ),
+                connection_max_retries=_safe_int(
+                    self.config.get("connection_max_retries"), 5
+                ),
                 backfill_batch_size=_safe_int(
                     self.config.get("backfill_batch_size"), 500
                 ),
@@ -300,12 +303,17 @@ class MessageRecorder(Star, AfdianFeature):
             password=self.config.get("redis_password", "") or None,
             db=int(self.config.get("redis_db", 0)),
             ttl=int(self.config.get("redis_cache_ttl", 300)),
+            max_retries=_safe_int(self.config.get("connection_max_retries"), 5),
         )
         available = await redis_cache.connect()
         if not available:
             logger.warning(
                 "[FoxToolbox] Redis 未就绪，插件将继续以无缓存模式运行"
             )
+        # 运行中断连自动重连：始终启动后台检测循环
+        await redis_cache.start_reconnect_loop(
+            interval=_safe_int(self.config.get("recovery_check_interval"), 30)
+        )
         self._redis_cache = redis_cache
         return redis_cache
 
@@ -769,7 +777,7 @@ class MessageRecorder(Star, AfdianFeature):
         return self.config.get("enable_commands", True)
 
     # ========== 管理指令 ==========
-    @filter.command_group("huli_record")
+    @filter.command_group("狐狸记录", alias={"huli_record"})
     def huli_record():
         pass
 
@@ -786,7 +794,7 @@ class MessageRecorder(Star, AfdianFeature):
             lines.append(f"[{ts}] {msg.sender_name or msg.sender_id}: {c}")
         return "\n".join(lines)
 
-    @huli_record.command("stats")
+    @huli_record.command("统计", alias={"stats"})
     async def cmd_stats(self, event: AstrMessageEvent):
         if not self._cmd_check(event):
             if not self._api: yield event.plain_result("数据库未初始化")
@@ -809,7 +817,7 @@ class MessageRecorder(Star, AfdianFeature):
             lines.append("最新消息: " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(newest_ts / 1000)))
         yield event.plain_result("\n".join(lines))
 
-    @huli_record.command("cleanup")
+    @huli_record.command("清理", alias={"cleanup"})
     async def cmd_cleanup(self, event: AstrMessageEvent):
         if not self._cmd_check(event):
             if not self._api: yield event.plain_result("数据库未初始化")
@@ -821,7 +829,7 @@ class MessageRecorder(Star, AfdianFeature):
             return
         yield event.plain_result(f"✅ 已清理 {result['by_age'] + result['by_limit']} 条消息记录")
 
-    @huli_record.command("query")
+    @huli_record.command("查询", alias={"query"})
     async def cmd_query(self, event: AstrMessageEvent, sender_id: str = "", limit: int = 10):
         if not self._cmd_check(event):
             if not self._api: yield event.plain_result("数据库未初始化")
@@ -837,7 +845,7 @@ class MessageRecorder(Star, AfdianFeature):
             return
         yield event.plain_result(self._fmt_msgs(msgs, f"📝 查询到 {len(msgs)} 条消息:"))
 
-    @huli_record.command("search")
+    @huli_record.command("搜索", alias={"search"})
     async def cmd_search(self, event: AstrMessageEvent, keyword: str, limit: int = 10):
         if not self._cmd_check(event):
             if not self._api: yield event.plain_result("数据库未初始化")
@@ -858,19 +866,19 @@ class MessageRecorder(Star, AfdianFeature):
         return """🦊 狐狸插件 可用指令
 
 📊 统计与管理:
-/huli_record stats - 查看统计信息
-/huli_record snapshot - 生成 WebUI 仪表盘快照图
-/huli_record cleanup - 手动清理过期消息
-/huli_record tables - 查看数据库中的业务表列表
+/狐狸记录 统计 - 查看统计信息
+/狐狸记录 快照 - 生成 WebUI 仪表盘快照图
+/狐狸记录 清理 - 手动清理过期消息
+/狐狸记录 表列表 - 查看数据库中的业务表列表
 
 📅 按时间查询:
-/huli_record today [limit] - 查看今天的消息
-/huli_record yesterday [limit] - 查看昨天的消息
-/huli_record history [time_range] [limit] - 按时间查询 (day/week/month/all)
+/狐狸记录 今日 [limit] - 查看今天的消息
+/狐狸记录 昨日 [limit] - 查看昨天的消息
+/狐狸记录 历史 [时间范围] [limit] - 按时间查询 (day/week/month/all)
 
 🔍 消息检索:
-/huli_record query [sender_id] [limit] - 按发送者查询消息
-/huli_record search <keyword> [limit] - 全文搜索消息
+/狐狸记录 查询 [发送者ID] [limit] - 按发送者查询消息
+/狐狸记录 搜索 <关键词> [limit] - 全文搜索消息
 
 ⚡ 爱发电:
 /发电 [金额] - 生成爱发电支付跳转链接（支持 /赞助）
@@ -881,25 +889,26 @@ class MessageRecorder(Star, AfdianFeature):
 [管理员] /开启发电通知 - 在当前会话接收爱发电订单通知
 
 🆘 帮助:
-/huli_record help - 查看本帮助
-/hulihelp 或 /狐狸菜单 - 查看本帮助
+/狐狸记录 帮助 - 查看本帮助
+/狐狸菜单 或 /hulihelp - 查看本帮助
 
+提示: 旧英文指令（如 /huli_record stats）仍可用作别名。
 选项: limit 默认 10，最大 50"""
 
-    @huli_record.command("help")
+    @huli_record.command("帮助", alias={"help"})
     async def cmd_help(self, event: AstrMessageEvent):
         if not self._check_commands_enabled(event):
             return
         yield event.plain_result(self._build_help_text())
 
-    @filter.command("hulihelp", alias={"狐狸菜单", "狐狸help", "狐狸帮助"})
+    @filter.command("狐狸菜单", alias={"hulihelp", "狐狸help", "狐狸帮助"})
     async def cmd_hulihelp(self, event: AstrMessageEvent):
-        """狐狸插件帮助菜单（顶层命令，支持 /hulihelp 或 /狐狸菜单）"""
+        """狐狸插件帮助菜单（顶层命令，支持 /狐狸菜单 或 /hulihelp）"""
         if not self._check_commands_enabled(event):
             return
         yield event.plain_result(self._build_help_text())
 
-    @huli_record.command("today")
+    @huli_record.command("今日", alias={"today"})
     async def cmd_today(self, event: AstrMessageEvent, limit: int = 20):
         if not self._cmd_check(event):
             if not self._api: yield event.plain_result("数据库未初始化")
@@ -915,7 +924,7 @@ class MessageRecorder(Star, AfdianFeature):
             return
         yield event.plain_result(self._fmt_msgs(msgs, f"📅 今天共 {len(msgs)} 条消息:"))
 
-    @huli_record.command("yesterday")
+    @huli_record.command("昨日", alias={"yesterday"})
     async def cmd_yesterday(self, event: AstrMessageEvent, limit: int = 20):
         if not self._cmd_check(event):
             if not self._api: yield event.plain_result("数据库未初始化")
@@ -931,7 +940,7 @@ class MessageRecorder(Star, AfdianFeature):
             return
         yield event.plain_result(self._fmt_msgs(msgs, f"📅 昨天共 {len(msgs)} 条消息:"))
 
-    @huli_record.command("history")
+    @huli_record.command("历史", alias={"history"})
     async def cmd_history(self, event: AstrMessageEvent, time_range: str = "week", limit: int = 30):
         if not self._cmd_check(event):
             if not self._api: yield event.plain_result("数据库未初始化")
@@ -949,7 +958,7 @@ class MessageRecorder(Star, AfdianFeature):
             return
         yield event.plain_result(self._fmt_msgs(msgs, f"📅 {time_desc} 共 {len(msgs)} 条消息:"))
 
-    @huli_record.command("tables")
+    @huli_record.command("表列表", alias={"tables"})
     async def cmd_tables(self, event: AstrMessageEvent):
         """查看数据库中已创建的数据表（只读浏览）
 
@@ -973,7 +982,7 @@ class MessageRecorder(Star, AfdianFeature):
             lines.append(f"  - {t['name']}（{row_text}）")
         yield event.plain_result("\n".join(lines))
 
-    @huli_record.command("snapshot")
+    @huli_record.command("快照", alias={"snapshot"})
     async def cmd_snapshot(self, event: AstrMessageEvent):
         """生成 WebUI 仪表盘快照图片并发送。
 
@@ -1009,6 +1018,23 @@ class MessageRecorder(Star, AfdianFeature):
             except Exception:
                 redis_status = {"configured": True, "enabled": False, "available": False}
 
+        mysql_status = {
+            "connected": self._db.mysql_ready,
+            "fallback_active": self._db.using_fallback,
+            "version": None,
+            "unsynced_count": 0,
+        }
+        if self._db.mysql_ready:
+            try:
+                mysql_status["version"] = await self._db.get_mysql_version()
+            except Exception:
+                mysql_status["version"] = None
+        else:
+            try:
+                mysql_status["unsynced_count"] = await self._db.get_unsynced_count()
+            except Exception:
+                mysql_status["unsynced_count"] = 0
+
         try:
             png_data = await asyncio.to_thread(
                 render_snapshot,
@@ -1021,6 +1047,7 @@ class MessageRecorder(Star, AfdianFeature):
                 stats.platform_stats or {},
                 platform_detail,
                 redis_status=redis_status,
+                mysql_status=mysql_status,
             )
         except Exception as e:
             logger.error(f"[FoxToolbox] 快照渲染失败: {e}", exc_info=True)

@@ -404,6 +404,38 @@ function updateDbStatusCard(dbStatus) {
   showDbErrorBanner(running, dbError);
 }
 
+function updateMysqlCard(dbStatus) {
+  const badge = document.getElementById('mysqlBadge');
+  if (!badge) return;
+  const connectedEl = document.getElementById('mysqlConnected');
+  const backendEl = document.getElementById('mysqlBackend');
+  const versionEl = document.getElementById('mysqlVersion');
+  const unsyncedEl = document.getElementById('mysqlUnsynced');
+
+  const fallbackActive = dbStatus && !!dbStatus.fallback_active;
+  const mysqlConnected = dbStatus && !!dbStatus.mysql_connected && !fallbackActive;
+  const version = dbStatus && dbStatus.mysql_version ? String(dbStatus.mysql_version) : '';
+  const unsynced = dbStatus && Number.isFinite(Number(dbStatus.unsynced_count)) ? Number(dbStatus.unsynced_count) : 0;
+
+  if (mysqlConnected) {
+    badge.textContent = '运行中';
+    badge.style.color = '#03a9f4';
+    badge.style.borderColor = 'rgba(3,169,244,0.4)';
+  } else if (fallbackActive) {
+    badge.textContent = 'SQLite 降级';
+    badge.style.color = '#f57c00';
+    badge.style.borderColor = 'rgba(245,124,0,0.4)';
+  } else {
+    badge.textContent = '未连接';
+    badge.style.color = '#b0bec5';
+    badge.style.borderColor = 'rgba(176,190,197,0.4)';
+  }
+  if (connectedEl) connectedEl.textContent = mysqlConnected ? '已连接' : (fallbackActive ? '已降级' : '未连接');
+  if (backendEl) backendEl.textContent = mysqlConnected ? 'MySQL' : (fallbackActive ? '本地 SQLite' : '未知');
+  if (versionEl) versionEl.textContent = version || '-';
+  if (unsyncedEl) unsyncedEl.textContent = fallbackActive ? `${unsynced} 条` : '-';
+}
+
 function updateRedisCard(redisStatus) {
   const badge = document.getElementById('redisBadge');
   if (!badge) return;
@@ -493,6 +525,7 @@ async function loadDbStatus() {
     if (!data) return;
     dataCache.dbStatus = data;
     updateDbStatusCard(data);
+    updateMysqlCard(data);
   } catch (e) {
     logError('loadDbStatus failed:', e);
     valueEl.textContent = '--';
@@ -573,6 +606,7 @@ async function loadDashboardData(force = false) {
           dataCache.dbStatus = statsData.db_status;
         }
         updateDbStatusCard(dataCache.dbStatus || statsData.db_status);
+        updateMysqlCard(dataCache.dbStatus || statsData.db_status);
         updateRedisCard(statsData.redis_status);
         if (!dataCache.dbStatus) {
           loadDbStatus().catch(() => {});
