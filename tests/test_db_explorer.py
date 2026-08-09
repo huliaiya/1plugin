@@ -197,6 +197,22 @@ class TestEnsureLimit:
         )
         assert dangerous is True
 
+    def test_system_variable_read_flagged(self, explorer):
+        # SELECT @@version / @@datadir 会泄露服务器敏感信息，应被拦截
+        dangerous, reason = explorer.check_dangerous(
+            "SELECT @@version"
+        )
+        assert dangerous is True
+        assert "系统变量" in reason
+
+    def test_system_variable_inside_string_allowed(self, explorer):
+        # 字符串字面量中的 '@@' 属于数据内容，不应误判
+        dangerous, reason = explorer.check_dangerous(
+            "SELECT message_str FROM messages WHERE message_str = 'use @@version here'"
+        )
+        assert dangerous is False
+        assert reason == ""
+
     def test_sleep_in_string_literal_allowed(self, explorer):
         # 字符串字面量中的 SLEEP 不应被误判
         dangerous, reason = explorer.check_dangerous(
@@ -234,6 +250,9 @@ class TestListTablesCompatibility:
                 return None
 
         class FakeConn:
+            async def commit(self):
+                return None
+
             def cursor(self, *a, **k):
                 return FakeCursor()
 
@@ -244,8 +263,11 @@ class TestListTablesCompatibility:
                 return False
 
         class FakePool:
-            def acquire(self):
+            async def acquire(self):
                 return FakeConn()
+
+            def release(self, conn):
+                pass
 
         class FakeDb:
             _pool = FakePool()

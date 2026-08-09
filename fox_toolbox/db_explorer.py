@@ -14,6 +14,7 @@
 
 import re
 import asyncio
+import contextlib
 from typing import Any, Dict, List, Optional, Tuple
 
 import aiomysql
@@ -45,6 +46,8 @@ _DANGEROUS_PATTERNS = [
     r"\bBENCHMARK\s*\(",
     r"\bINFORMATION_SCHEMA\.CHARACTER",
     r"\bLOAD\s+DATA\b",
+    # 系统变量读取（@@version / @@datadir 等）可能泄露服务器敏感信息，
+    # 在 check_dangerous 中单独处理以返回更明确的 reason
     r"--",
     r"/\*",
     r"\*/",
@@ -76,6 +79,20 @@ class DbExplorer:
             raise RuntimeError("数据库连接池未初始化")
         return pool
 
+    @contextlib.asynccontextmanager
+    async def _read_conn(self):
+        """获取连接执行只读查询，退出时提交以关闭事务（防悬空快照）。"""
+        pool = self._pool()
+        conn = await pool.acquire()
+        try:
+            yield conn
+        finally:
+            try:
+                await conn.commit()
+            except Exception:
+                pass
+            pool.release(conn)
+
     def _validate_table_name(self, table_name: str) -> bool:
         """表名安全校验：仅允许字母、数字、下划线"""
         return bool(table_name) and all(
@@ -97,6 +114,9 @@ class DbExplorer:
         if not sql or not sql.strip():
             return True, "SQL 语句为空"
         stripped_sql = self._strip_string_literals(sql)
+        sysvar = re.search(r"@@\w*", stripped_sql)
+        if sysvar:
+            return True, f"包含危险操作: 系统变量读取 {sysvar.group()}"
         for pattern in self._dangerous:
             match = pattern.search(stripped_sql)
             if match:
@@ -144,7 +164,7 @@ class DbExplorer:
         """列出数据库所有业务表及其行数概览"""
         pool = self._pool()
         tables: List[str] = []
-        async with pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("SHOW TABLES")
                 rows = await cur.fetchall()
@@ -170,7 +190,7 @@ class DbExplorer:
             return -1
         pool = self._pool()
         try:
-            async with pool.acquire() as conn:
+            async with self._read_conn() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute(f"SELECT COUNT(*) FROM `{table_name}`")
                     row = await cur.fetchone()
@@ -184,7 +204,7 @@ class DbExplorer:
         if not self._validate_table_name(table_name):
             raise ValueError("非法的表名")
         pool = self._pool()
-        async with pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(f"DESCRIBE `{table_name}`")
                 rows = await cur.fetchall()
@@ -202,7 +222,7 @@ class DbExplorer:
         limit = max(1, min(int(limit), ABSOLUTE_MAX_ROWS))
         offset = max(0, int(offset))
         pool = self._pool()
-        async with pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(
                     f"SELECT * FROM `{table_name}` LIMIT %s OFFSET %s",
@@ -249,7 +269,7 @@ class DbExplorer:
     async def _run_query(
         self, pool, sql: str
     ) -> Tuple[List[str], List[Dict[str, Any]]]:
-        async with pool.acquire() as conn:
+        async with self._read_conn() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(sql)
                 rows = await cur.fetchall()
