@@ -1,17 +1,23 @@
-"""MySQL 5.7 数据库操作模块"""
+"""MySQL 5.7 数据库操作模块（MySQL 优先 + SQLite 自动兜底）"""
 
 import asyncio
 import aiomysql
 import json
 import time
 from dataclasses import asdict
+from pathlib import Path
 from typing import Optional, List, Dict, Any, AsyncGenerator, TYPE_CHECKING
 
 from astrbot.api import logger
+from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 
-from .models import MessageRecord, QueryFilter, MessageStats, SCHEMA_VERSION, DEPRECATED_TABLES
+from .models import (
+    MessageRecord, QueryFilter, MessageStats, SCHEMA_VERSION,
+    DEPRECATED_TABLES, PLUGIN_DIR_NAME,
+)
 from .time_utils import parse_time_range
 from .serializer import compute_content_hash, extract_media_paths
+from .sqlite_store import SQLiteStore
 
 if TYPE_CHECKING:  # pragma: no cover
     from .redis_cache import RedisCache
@@ -113,6 +119,10 @@ class Database:
         plugin_name: str,
         mysql_config: dict,
         redis_cache: Optional["RedisCache"] = None,
+        fallback_enabled: bool = True,
+        recovery_check_interval: int = 30,
+        backfill_batch_size: int = 500,
+        sqlite_max_retention_days: int = 30,
     ):
         self.plugin_name = plugin_name
         self.mysql_config = mysql_config
@@ -121,45 +131,202 @@ class Database:
         self._write_lock = asyncio.Lock()
         self._fts_available_cache: Optional[bool] = None
 
+        # SQLite 兜底
+        self._fallback_enabled = fallback_enabled
+        self._recovery_check_interval = max(5, int(recovery_check_interval or 30))
+        self._backfill_batch_size = max(1, int(backfill_batch_size or 500))
+        self._sqlite_max_retention_days = max(1, int(sqlite_max_retention_days or 30))
+        self._sqlite: Optional[SQLiteStore] = None
+        self._mysql_ready: bool = False
+        self._degraded: bool = False
+        self._recovery_task: Optional[asyncio.Task] = None
+
+    def _sqlite_db_path(self) -> Path:
+        data_dir = Path(get_astrbot_plugin_data_path()) / PLUGIN_DIR_NAME
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir / "messages_fallback.db"
+
+    def _ensure_sqlite(self) -> SQLiteStore:
+        """懒创建 SQLite 兜底后端。"""
+        if self._sqlite is None:
+            self._sqlite = SQLiteStore(self._sqlite_db_path())
+        return self._sqlite
+
+    @property
+    def using_fallback(self) -> bool:
+        """当前是否处于 SQLite 降级模式。"""
+        return self._degraded and self._sqlite is not None
+
+    async def _start_recovery_loop(self) -> None:
+        """启动 MySQL 恢复检测后台任务（无论当前是否可用）。"""
+        if self._recovery_task is None or self._recovery_task.done():
+            self._recovery_task = asyncio.create_task(self._recovery_loop())
+
+    async def _recovery_loop(self) -> None:
+        """周期检测 MySQL 是否恢复；恢复后切回并补写降级期间的消息。"""
+        while True:
+            await asyncio.sleep(self._recovery_check_interval)
+            try:
+                if not self._mysql_ready:
+                    if await self._try_reconnect_mysql():
+                        self._mysql_ready = True
+                        self._degraded = False
+                        logger.info("[FoxToolbox] MySQL 已恢复，切回主存储并开始补写")
+                        await self._backfill_unsynced()
+                else:
+                    # 主存储可用时也周期性清理已同步的兜底数据
+                    if self._sqlite is not None:
+                        await self._sqlite.cleanup_synced(self._sqlite_max_retention_days)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.debug(f"[FoxToolbox] 恢复检测异常: {e}")
+
+    async def _try_reconnect_mysql(self) -> bool:
+        """重新建立 MySQL 连接池并初始化表结构。
+
+        仅当真正连接成功才返回 True；失败时保持 SQLite 降级状态。
+        """
+        host = self.mysql_config.get("host", "127.0.0.1")
+        port = int(self.mysql_config.get("port", 3306))
+        user = self.mysql_config.get("user", "root")
+        password = self.mysql_config.get("password", "")
+        database = self.mysql_config.get("database", "fox_toolbox")
+        try:
+            await self._close_pool()
+            self._pool = await aiomysql.create_pool(
+                host=host,
+                port=port,
+                user=user,
+                password=password,
+                db=database,
+                charset="utf8mb4",
+                autocommit=False,
+                minsize=1,
+                maxsize=10,
+            )
+            await self._create_tables()
+            await self._ensure_schema_version()
+            await self._cleanup_deprecated_tables()
+            return True
+        except Exception as e:
+            await self._close_pool()
+            logger.debug(f"[FoxToolbox] MySQL 恢复连接失败: {e}")
+            return False
+
+    async def _backfill_unsynced(self) -> None:
+        """分批将 SQLite 中未同步消息补写进 MySQL。"""
+        if self._sqlite is None or not self._pool:
+            return
+        while True:
+            ids = await self._sqlite.get_unsynced_ids(self._backfill_batch_size)
+            if not ids:
+                break
+            records = await self._sqlite.get_records_by_ids(ids)
+            if not records:
+                # 记录被并发清理，直接标记清空
+                await self._sqlite.mark_synced(ids)
+                continue
+            try:
+                saved, skipped = await self._save_messages_batch_mysql(records)
+                # 幂等：已存在（skipped）也视为同步成功
+                await self._sqlite.mark_synced(ids)
+                logger.info(
+                    f"[FoxToolbox] 补写批次完成: {len(ids)} 条 "
+                    f"(新增 {saved}, 已存在 {skipped})"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"[FoxToolbox] 补写批次失败，保留未同步待下轮重试: {e}"
+                )
+                # MySQL 再次故障：回到降级状态，等待下轮恢复检测
+                self._mysql_ready = False
+                self._degraded = True
+                return
+            if len(ids) < self._backfill_batch_size:
+                break
+
     async def init(self) -> None:
-        """初始化数据库连接池和表结构"""
+        """初始化数据库连接池和表结构。
+
+        MySQL 初始化失败且启用了兜底时，自动降级到本地 SQLite，
+        不再抛出异常，插件保持可记录消息。
+        """
         host = self.mysql_config.get("host", "127.0.0.1")
         port = int(self.mysql_config.get("port", 3306))
         user = self.mysql_config.get("user", "root")
         password = self.mysql_config.get("password", "")
         database = self.mysql_config.get("database", "fox_toolbox")
 
-        self._pool = await aiomysql.create_pool(
-            host=host,
-            port=port,
-            user=user,
-            password=password,
-            db=database,
-            charset="utf8mb4",
-            autocommit=False,
-            minsize=1,
-            maxsize=10,
-        )
+        try:
+            self._pool = await aiomysql.create_pool(
+                host=host,
+                port=port,
+                user=user,
+                password=password,
+                db=database,
+                charset="utf8mb4",
+                autocommit=False,
+                minsize=1,
+                maxsize=10,
+            )
 
-        await self._create_tables()
-        await self._ensure_schema_version()
-        await self._cleanup_deprecated_tables()
-        logger.info(
-            f"[FoxToolbox] MySQL 数据库初始化完成: "
-            f"{host}:{port}/{database}"
-        )
+            await self._create_tables()
+            await self._ensure_schema_version()
+            await self._cleanup_deprecated_tables()
+            self._mysql_ready = True
+            self._degraded = False
+            logger.info(
+                f"[FoxToolbox] MySQL 数据库初始化完成: "
+                f"{host}:{port}/{database}"
+            )
+        except Exception as e:
+            await self._close_pool()
+            self._mysql_ready = False
+            if not self._fallback_enabled:
+                self._degraded = False
+                raise
+            self._ensure_sqlite()
+            self._degraded = True
+            logger.warning(
+                f"[FoxToolbox] MySQL 不可用，已降级到本地 SQLite 存储: {e}"
+            )
+
+        await self._start_recovery_loop()
+
+    async def _close_pool(self) -> None:
+        """关闭 MySQL 连接池（若存在）。"""
+        if self._pool:
+            try:
+                self._pool.close()
+                await self._pool.wait_closed()
+            except Exception:
+                pass
+            self._pool = None
 
     async def close(self) -> None:
-        """关闭数据库连接池"""
-        if self._pool:
-            self._pool.close()
-            await self._pool.wait_closed()
-            self._pool = None
+        """关闭数据库连接池与后台任务"""
+        if self._recovery_task is not None:
+            self._recovery_task.cancel()
+            try:
+                await self._recovery_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._recovery_task = None
+        await self._close_pool()
+        if self._pool is None:
+            logger.info("[FoxToolbox] 数据库已关闭")
+        else:
             logger.info("[FoxToolbox] MySQL 连接池已关闭")
 
     async def ping(self) -> bool:
-        """轻量数据库连通性检测（供 WebUI 状态卡片使用）"""
+        """轻量数据库连通性检测（供 WebUI 状态卡片使用）。
+
+        主存储不可用时回落到 SQLite ping，保证降级模式下状态卡片仍为「运行中」。
+        """
         if not self._pool:
+            if self._sqlite is not None:
+                return await self._sqlite.ping()
             return False
         try:
             async with self._pool.acquire() as conn:
@@ -174,6 +341,8 @@ class Database:
     async def get_table_count(self) -> int:
         """返回当前数据库内已创建的数据表数量；查询失败返回 -1。"""
         if not self._pool:
+            if self._sqlite is not None:
+                return await self._sqlite.get_table_count()
             return -1
         try:
             async with self._pool.acquire() as conn:
@@ -184,6 +353,12 @@ class Database:
         except Exception as e:
             logger.warning(f"[FoxToolbox] 获取数据表数量失败: {e}")
             return -1
+
+    async def get_unsynced_count(self) -> int:
+        """返回 SQLite 中尚未补写进 MySQL 的消息数量。"""
+        if self._sqlite is None:
+            return 0
+        return await self._sqlite.get_unsynced_count()
 
     async def _create_tables(self) -> None:
         """创建数据表和索引"""
@@ -326,6 +501,30 @@ class Database:
                     await conn.rollback()
                     logger.error(f"[FoxToolbox] 清理弃用表失败: {e}")
 
+    async def _run(self, mysql_fn, sqlite_fn):
+        """MySQL 优先执行，故障时降级 SQLite 后端。
+
+        :param mysql_fn: 无参异步可调用，MySQL 后端实现
+        :param sqlite_fn: 无参异步可调用，SQLite 兜底实现
+        """
+        if self._mysql_ready and self._pool is not None:
+            try:
+                return await mysql_fn()
+            except Exception as e:
+                self._mysql_ready = False
+                self._degraded = True
+                logger.warning(f"[FoxToolbox] MySQL 故障，降级 SQLite: {e}")
+                try:
+                    self._ensure_sqlite()
+                except Exception:
+                    pass
+                if self._sqlite is not None:
+                    return await sqlite_fn()
+                raise
+        if self._sqlite is not None:
+            return await sqlite_fn()
+        raise RuntimeError("数据库后端不可用")
+
     async def save_message(self, record: MessageRecord) -> int:
         """保存消息记录，返回记录 ID（重复消息返回 -1）"""
         record.created_at = int(time.time() * 1000)
@@ -336,6 +535,25 @@ class Database:
                 record.message_str, record.timestamp,
             )
 
+        record_id = await self._run(
+            lambda: self._save_message_mysql(record),
+            lambda: self._sqlite.save_message(record),
+        )
+
+        if record_id == -1:
+            logger.debug(
+                f"[FoxToolbox] 消息已存在，跳过: "
+                f"platform={record.platform}, "
+                f"message_id={record.message_id or record.content_hash}"
+            )
+        else:
+            record.id = record_id  # 回填 id，供缓存载荷使用
+            await self._cache_recent_message(record)
+            await self._apply_stats_deltas([record])
+
+        return record_id
+
+    async def _save_message_mysql(self, record: MessageRecord) -> int:
         # MySQL 唯一索引允许 NULL 但不允许空字符串重复，
         # 因此将空 message_id 转为 None
         message_id = record.message_id if record.message_id else None
@@ -383,17 +601,6 @@ class Database:
                     logger.error(f"[FoxToolbox] 保存消息失败: {e}")
                     raise
 
-        if record_id == -1:
-            logger.debug(
-                f"[FoxToolbox] 消息已存在，跳过: "
-                f"platform={record.platform}, "
-                f"message_id={record.message_id or record.content_hash}"
-            )
-        else:
-            record.id = record_id  # 回填 id，供缓存载荷使用
-            await self._cache_recent_message(record)
-            await self._apply_stats_deltas([record])
-
         return record_id
 
     async def save_messages_batch(
@@ -404,6 +611,33 @@ class Database:
             return 0, 0
 
         now_ms = int(time.time() * 1000)
+        for record in records:
+            record.created_at = now_ms
+            if not record.content_hash:
+                record.content_hash = compute_content_hash(
+                    record.platform, record.session_id,
+                    record.sender_id, record.message_str,
+                    record.timestamp,
+                )
+
+        saved, skipped = await self._run(
+            lambda: self._save_messages_batch_mysql(records),
+            lambda: self._sqlite.save_messages_batch(records),
+        )
+
+        cached_records = [r for r in records if r.id is not None]
+        if cached_records:
+            await self._cache_recent_messages(cached_records)
+            await self._apply_stats_deltas(cached_records)
+
+        logger.debug(
+            f"[FoxToolbox] 批量保存完成: {saved} 成功, {skipped} 跳过"
+        )
+        return saved, skipped
+
+    async def _save_messages_batch_mysql(
+        self, records: List[MessageRecord]
+    ) -> tuple:
         insert_sql = """
             INSERT IGNORE INTO messages (
                 platform, message_id, session_id, group_id, channel_id,
@@ -421,13 +655,6 @@ class Database:
                 try:
                     async with conn.cursor() as cur:
                         for record in records:
-                            record.created_at = now_ms
-                            if not record.content_hash:
-                                record.content_hash = compute_content_hash(
-                                    record.platform, record.session_id,
-                                    record.sender_id, record.message_str,
-                                    record.timestamp,
-                                )
                             message_id = record.message_id if record.message_id else None
                             params = (
                                 record.platform,
@@ -466,10 +693,6 @@ class Database:
         if cached_records:
             await self._cache_recent_messages(cached_records)
             await self._apply_stats_deltas(cached_records)
-
-        logger.debug(
-            f"[FoxToolbox] 批量保存完成: {saved} 成功, {skipped} 跳过"
-        )
         return saved, skipped
 
     async def _cache_recent_message(self, record: MessageRecord) -> None:
@@ -670,6 +893,12 @@ class Database:
 
     async def query_messages(self, query_filter: QueryFilter) -> List[MessageRecord]:
         """根据过滤器查询消息"""
+        return await self._run(
+            lambda: self._query_messages_mysql(query_filter),
+            lambda: self._sqlite.query_messages(query_filter),
+        )
+
+    async def _query_messages_mysql(self, query_filter: QueryFilter) -> List[MessageRecord]:
         use_fts = (
             bool(query_filter.keyword)
             and len(query_filter.keyword) >= 2
@@ -727,7 +956,32 @@ class Database:
         query_filter: QueryFilter,
         batch_size: int = 500,
     ) -> AsyncGenerator[MessageRecord, None]:
-        """分批查询消息，返回异步生成器"""
+        """分批查询消息，返回异步生成器（MySQL 故障时降级 SQLite）"""
+        if self._mysql_ready and self._pool is not None:
+            yielded = False
+            try:
+                async for rec in self._query_messages_batch_mysql(query_filter, batch_size):
+                    yielded = True
+                    yield rec
+                return
+            except Exception as e:
+                self._mysql_ready = False
+                self._degraded = True
+                logger.warning(f"[FoxToolbox] MySQL 批量查询故障，降级 SQLite: {e}")
+                try:
+                    self._ensure_sqlite()
+                except Exception:
+                    pass
+                if self._sqlite is None or yielded:
+                    return
+        async for rec in self._sqlite.query_messages_batch(query_filter, batch_size):
+            yield rec
+
+    async def _query_messages_batch_mysql(
+        self,
+        query_filter: QueryFilter,
+        batch_size: int = 500,
+    ) -> AsyncGenerator[MessageRecord, None]:
         use_fts = (
             bool(query_filter.keyword)
             and len(query_filter.keyword) >= 2
@@ -788,6 +1042,12 @@ class Database:
 
     async def get_message_by_id(self, message_id: int) -> Optional[MessageRecord]:
         """根据数据库 ID 获取单条消息"""
+        return await self._run(
+            lambda: self._get_message_by_id_mysql(message_id),
+            lambda: self._sqlite.get_message_by_id(message_id),
+        )
+
+    async def _get_message_by_id_mysql(self, message_id: int) -> Optional[MessageRecord]:
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
@@ -803,6 +1063,16 @@ class Database:
         platform: Optional[str] = None,
     ) -> Optional[MessageRecord]:
         """根据平台原始消息 ID 获取消息"""
+        return await self._run(
+            lambda: self._get_message_by_platform_id_mysql(platform_message_id, platform),
+            lambda: self._sqlite.get_message_by_platform_id(platform_message_id, platform),
+        )
+
+    async def _get_message_by_platform_id_mysql(
+        self,
+        platform_message_id: str,
+        platform: Optional[str] = None,
+    ) -> Optional[MessageRecord]:
         if platform:
             sql = f"""
                 SELECT {_SELECT_COLUMNS}
@@ -832,6 +1102,14 @@ class Database:
         """批量查询已存在的消息ID"""
         if not message_ids:
             return set()
+        return await self._run(
+            lambda: self._get_existing_message_ids_mysql(message_ids, platform),
+            lambda: self._sqlite.get_existing_message_ids(message_ids, platform),
+        )
+
+    async def _get_existing_message_ids_mysql(
+        self, message_ids: List[str], platform: str
+    ) -> set:
         placeholders = ",".join(["%s"] * len(message_ids))
         sql = f"""
             SELECT message_id FROM messages
@@ -851,7 +1129,18 @@ class Database:
         after: int = 5,
     ) -> Dict[str, List[MessageRecord]]:
         """获取某条消息的上下文消息"""
-        target = await self.get_message_by_id(message_id)
+        return await self._run(
+            lambda: self._get_context_messages_mysql(message_id, before, after),
+            lambda: self._sqlite.get_context_messages(message_id, before, after),
+        )
+
+    async def _get_context_messages_mysql(
+        self,
+        message_id: int,
+        before: int = 5,
+        after: int = 5,
+    ) -> Dict[str, List[MessageRecord]]:
+        target = await self._get_message_by_id_mysql(message_id)
         if not target:
             return {"before": [], "after": []}
 
@@ -908,6 +1197,12 @@ class Database:
 
     async def count_messages(self, query_filter: QueryFilter) -> int:
         """统计符合条件的消息数量"""
+        return await self._run(
+            lambda: self._count_messages_mysql(query_filter),
+            lambda: self._sqlite.count_messages(query_filter),
+        )
+
+    async def _count_messages_mysql(self, query_filter: QueryFilter) -> int:
         use_fts = (
             bool(query_filter.keyword)
             and len(query_filter.keyword) >= 2
@@ -939,6 +1234,20 @@ class Database:
                 except (TypeError, ValueError):
                     logger.debug("[FoxToolbox] 统计缓存数据损坏，回源数据库")
 
+        stats = await self._run(
+            lambda: self._get_stats_mysql(),
+            lambda: self._sqlite.get_stats(),
+        )
+
+        if self.redis_cache is not None:
+            try:
+                await self.redis_cache.set_stats(asdict(stats))
+            except Exception as e:
+                logger.debug(f"[FoxToolbox] 写入统计缓存失败: {e}")
+
+        return stats
+
+    async def _get_stats_mysql(self) -> MessageStats:
         stats = MessageStats()
 
         async with self._pool.acquire() as conn:
@@ -981,16 +1290,16 @@ class Database:
                     stats.first_record_time = time_row[2]
                     stats.last_record_time = time_row[3]
 
-        if self.redis_cache is not None:
-            try:
-                await self.redis_cache.set_stats(asdict(stats))
-            except Exception as e:
-                logger.debug(f"[FoxToolbox] 写入统计缓存失败: {e}")
-
         return stats
 
     async def get_content_type_stats(self) -> List[Dict]:
         """获取消息内容类型统计（文字/图片/文件/视频/语音/文档/音频/压缩包等）"""
+        return await self._run(
+            lambda: self._get_content_type_stats_mysql(),
+            lambda: self._sqlite.get_content_type_stats(),
+        )
+
+    async def _get_content_type_stats_mysql(self) -> List[Dict]:
         # ponytail: 全表拉取 content_types/message_str 到内存统计，
         # 百万级消息时会产生瞬时内存峰值；若数据量过大应改为 SQL 聚合或分批扫描
         async with self._pool.acquire() as conn:
@@ -1097,6 +1406,12 @@ class Database:
 
     async def get_platform_detail_stats(self) -> List[Dict]:
         """获取各平台的详细统计（消息数、群聊数、私聊数等）"""
+        return await self._run(
+            lambda: self._get_platform_detail_stats_mysql(),
+            lambda: self._sqlite.get_platform_detail_stats(),
+        )
+
+    async def _get_platform_detail_stats_mysql(self) -> List[Dict]:
         # ponytail: 全表拉取统计，百万级消息时内存峰值明显；
         # 若数据量过大应改为按平台分组 SQL 聚合
         async with self._pool.acquire() as conn:
@@ -1190,6 +1505,12 @@ class Database:
         """清理超过保留天数的消息，返回 (删除数量, 被删记录的媒体路径列表)"""
         if retention_days <= 0:
             return 0, []
+        return await self._run(
+            lambda: self._cleanup_by_age_mysql(retention_days),
+            lambda: self._sqlite.cleanup_by_age(retention_days),
+        )
+
+    async def _cleanup_by_age_mysql(self, retention_days: int) -> tuple:
         cutoff_time = int(
             (time.time() - retention_days * 86400) * 1000
         )
@@ -1244,6 +1565,12 @@ class Database:
         """清理超出数量限制的旧消息，返回 (删除数量, 被删记录的媒体路径列表)"""
         if max_records <= 0:
             return 0, []
+        return await self._run(
+            lambda: self._cleanup_by_limit_mysql(max_records),
+            lambda: self._sqlite.cleanup_by_limit(max_records),
+        )
+
+    async def _cleanup_by_limit_mysql(self, max_records: int) -> tuple:
         media_paths: List[str] = []
         async with self._write_lock:
             async with self._pool.acquire() as conn:
@@ -1302,6 +1629,23 @@ class Database:
         group_id: Optional[str] = None,
     ) -> List[Dict]:
         """按时间间隔统计消息数量（Python 端分组，彻底兼容 MySQL 5.7）"""
+        return await self._run(
+            lambda: self._get_timeline_stats_mysql(
+                interval, start_time, end_time, platform, group_id
+            ),
+            lambda: self._sqlite.get_timeline_stats(
+                interval, start_time, end_time, platform, group_id
+            ),
+        )
+
+    async def _get_timeline_stats_mysql(
+        self,
+        interval: str = "day",
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        platform: Optional[str] = None,
+        group_id: Optional[str] = None,
+    ) -> List[Dict]:
         # ponytail: 无 LIMIT 全表拉取时间列，百万级消息时内存峰值明显；
         # 若数据量过大应改为 SQL 按日/周/月聚合
         conditions = []
@@ -1338,8 +1682,8 @@ class Database:
         for row in rows:
             ts_ms = row[0]
             msg_type = row[1] or ""
-            group_id = row[2]
-            channel_id = row[3]
+            grp_id = row[2]
+            ch_id = row[3]
             dt = _dt.fromtimestamp(ts_ms / 1000)
 
             if interval == "week":
@@ -1359,7 +1703,7 @@ class Database:
                     "channel_count": 0,
                 }
             groups[key]["count"] += 1
-            bucket = _infer_message_bucket(msg_type, group_id, channel_id)
+            bucket = _infer_message_bucket(msg_type, grp_id, ch_id)
             if bucket == "group":
                 groups[key]["group_count"] += 1
             elif bucket == "private":
@@ -1378,6 +1722,23 @@ class Database:
         group_id: Optional[str] = None,
     ) -> List[Dict]:
         """获取发送者排行榜"""
+        return await self._run(
+            lambda: self._get_sender_ranking_mysql(
+                limit, start_time, end_time, platform, group_id
+            ),
+            lambda: self._sqlite.get_sender_ranking(
+                limit, start_time, end_time, platform, group_id
+            ),
+        )
+
+    async def _get_sender_ranking_mysql(
+        self,
+        limit: int = 20,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        platform: Optional[str] = None,
+        group_id: Optional[str] = None,
+    ) -> List[Dict]:
         conditions = []
         params: List[Any] = []
         if start_time:
@@ -1427,6 +1788,22 @@ class Database:
         platform: Optional[str] = None,
     ) -> List[Dict]:
         """获取群组活跃度排行"""
+        return await self._run(
+            lambda: self._get_group_ranking_mysql(
+                limit, start_time, end_time, platform
+            ),
+            lambda: self._sqlite.get_group_ranking(
+                limit, start_time, end_time, platform
+            ),
+        )
+
+    async def _get_group_ranking_mysql(
+        self,
+        limit: int = 20,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        platform: Optional[str] = None,
+    ) -> List[Dict]:
         # ponytail: 全表拉取后 Python 端分组，百万级消息时内存峰值明显；
         # 若数据量过大应改为 SQL GROUP BY
         conditions = [
@@ -1455,14 +1832,14 @@ class Database:
                 await cur.execute(sql, params)
                 rows = await cur.fetchall()
         grouped: Dict[tuple, Dict[str, Any]] = {}
-        for group_id, platform, message_type, channel_id, sender_id in rows:
-            bucket = _infer_message_bucket(message_type, group_id, channel_id)
+        for grp_id, grp_platform, message_type, channel_id, sender_id in rows:
+            bucket = _infer_message_bucket(message_type, grp_id, channel_id)
             if bucket not in {"group", "channel"}:
                 continue
-            key = (group_id, platform)
+            key = (grp_id, grp_platform)
             item = grouped.setdefault(
                 key,
-                {"group_id": group_id, "platform": platform, "count": 0, "senders": set()},
+                {"group_id": grp_id, "platform": grp_platform, "count": 0, "senders": set()},
             )
             item["count"] += 1
             if sender_id:
@@ -1483,6 +1860,12 @@ class Database:
 
     async def get_distinct_platforms(self) -> List[str]:
         """获取所有平台列表"""
+        return await self._run(
+            lambda: self._get_distinct_platforms_mysql(),
+            lambda: self._sqlite.get_distinct_platforms(),
+        )
+
+    async def _get_distinct_platforms_mysql(self) -> List[str]:
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
@@ -1499,6 +1882,17 @@ class Database:
         limit: int = 50,
     ) -> List[Dict]:
         """获取发送者列表"""
+        return await self._run(
+            lambda: self._get_distinct_senders_mysql(platform, group_id, limit),
+            lambda: self._sqlite.get_distinct_senders(platform, group_id, limit),
+        )
+
+    async def _get_distinct_senders_mysql(
+        self,
+        platform: Optional[str] = None,
+        group_id: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict]:
         conditions = []
         params: List[Any] = []
         if platform:
@@ -1529,6 +1923,16 @@ class Database:
         limit: int = 50,
     ) -> List[Dict]:
         """获取群组列表"""
+        return await self._run(
+            lambda: self._get_distinct_groups_mysql(platform, limit),
+            lambda: self._sqlite.get_distinct_groups(platform, limit),
+        )
+
+    async def _get_distinct_groups_mysql(
+        self,
+        platform: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict]:
         conditions = [
             "message_type IN ('group', 'channel')",
             "group_id IS NOT NULL",
@@ -1554,6 +1958,14 @@ class Database:
         self, cutoff_timestamp: int
     ) -> List[str]:
         """获取指定时间戳之前的消息中包含的媒体文件路径"""
+        return await self._run(
+            lambda: self._get_media_paths_before_mysql(cutoff_timestamp),
+            lambda: self._sqlite.get_media_paths_before(cutoff_timestamp),
+        )
+
+    async def _get_media_paths_before_mysql(
+        self, cutoff_timestamp: int
+    ) -> List[str]:
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
@@ -1572,6 +1984,14 @@ class Database:
         self, max_records: int
     ) -> List[str]:
         """获取超出数量限制的旧消息中包含的媒体文件路径"""
+        return await self._run(
+            lambda: self._get_media_paths_over_limit_mysql(max_records),
+            lambda: self._sqlite.get_media_paths_over_limit(max_records),
+        )
+
+    async def _get_media_paths_over_limit_mysql(
+        self, max_records: int
+    ) -> List[str]:
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("SELECT COUNT(*) FROM messages")
@@ -1601,7 +2021,14 @@ class Database:
         """
         if not candidates:
             return []
+        return await self._run(
+            lambda: self._get_unreferenced_media_paths_mysql(candidates),
+            lambda: self._sqlite.get_unreferenced_media_paths(candidates),
+        )
 
+    async def _get_unreferenced_media_paths_mysql(
+        self, candidates: List[str]
+    ) -> List[str]:
         BATCH_SIZE = 50
         unreferenced = []
 

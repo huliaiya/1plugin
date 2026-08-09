@@ -68,11 +68,32 @@ async def _build_db_status_payload(db: Optional[Database], error: str = "") -> D
     if not db:
         return {"running": False, "table_count": 0, "error": error or "数据库未初始化"}
     table_count = await db.get_table_count()
-    return {
+    payload = {
         "running": table_count >= 0,
         "table_count": int(table_count) if table_count >= 0 else 0,
         "error": error,
     }
+    # 展示当前存储后端与未同步消息数（SQLite 降级模式）
+    if db.using_fallback:
+        unsynced = 0
+        try:
+            unsynced = await db.get_unsynced_count()
+        except Exception:
+            unsynced = 0
+        payload.update({
+            "storage_backend": "sqlite",
+            "storage_backend_label": "SQLite 降级",
+            "fallback_active": True,
+            "unsynced_count": int(unsynced),
+        })
+    else:
+        payload.update({
+            "storage_backend": "mysql",
+            "storage_backend_label": "MySQL",
+            "fallback_active": False,
+            "unsynced_count": 0,
+        })
+    return payload
 
 
 async def _build_redis_status_payload(db: Optional[Database]) -> Dict[str, Any]:

@@ -381,11 +381,24 @@ function updateDbStatusCard(dbStatus) {
   const running = dbStatus ? (dbStatus.running !== undefined ? !!dbStatus.running : (dbStatus.database === 'ok')) : false;
   const tableCount = dbStatus && Number.isFinite(Number(dbStatus.table_count)) ? Number(dbStatus.table_count) : 0;
   const dbError = dbStatus && dbStatus.error ? String(dbStatus.error) : '';
+  const fallbackActive = dbStatus && !!dbStatus.fallback_active;
+  const unsynced = dbStatus && Number.isFinite(Number(dbStatus.unsynced_count)) ? Number(dbStatus.unsynced_count) : 0;
 
   valueEl.textContent = running ? `${tableCount}` : '--';
   labelEl.textContent = running ? '数据表数量' : '数据库未连接';
   valueEl.classList.remove('loading');
   valueEl.style.color = running ? '#03a9f4' : '#0288d1';
+
+  const subEl = document.getElementById('dbStatusSub');
+  if (subEl) {
+    if (fallbackActive) {
+      subEl.textContent = unsynced > 0 ? `SQLite 降级中 · ${unsynced} 条待同步` : 'SQLite 降级中';
+      subEl.style.color = '#f57c00';
+    } else {
+      subEl.textContent = '';
+    }
+  }
+
   valueEl.setAttribute('title', running ? `当前已创建 ${tableCount} 张数据表` : (dbError || '数据库未连接'));
 
   showDbErrorBanner(running, dbError);

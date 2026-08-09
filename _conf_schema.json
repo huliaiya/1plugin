@@ -220,5 +220,29 @@
     "description": "统计缓存有效期（秒）",
     "default": 300,
     "hint": "消息统计结果在 Redis 中的缓存时长；消息落库后会即时更新最近消息缓存，统计缓存则按此 TTL 刷新"
+  },
+  "storage_fallback_enabled": {
+    "type": "bool",
+    "description": "是否启用本地 SQLite 自动兜底存储",
+    "default": true,
+    "hint": "MySQL 不可用时自动降级到本地 SQLite 文件存储消息，MySQL 恢复后自动切回并补写；关闭后故障行为与旧版一致（消息无法记录）"
+  },
+  "recovery_check_interval": {
+    "type": "int",
+    "description": "MySQL 恢复检测间隔（秒）",
+    "default": 30,
+    "hint": "降级模式下每隔指定秒数检测一次 MySQL 是否恢复，最小 5 秒"
+  },
+  "backfill_batch_size": {
+    "type": "int",
+    "description": "单批补写消息条数",
+    "default": 500,
+    "hint": "MySQL 恢复后每次向 MySQL 补写的消息条数，按批推进避免大事务"
+  },
+  "sqlite_max_retention_days": {
+    "type": "int",
+    "description": "已同步消息在 SQLite 中的保留天数",
+    "default": 30,
+    "hint": "已补写进 MySQL 的消息在本地 SQLite 中的保留期限，超过后自动清理以控制文件增长"
   }
 }

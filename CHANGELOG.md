@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.7] - 2026-08-09
+
+### Added
+- **本地 SQLite 兜底存储（MySQL 自动降级）**：MySQL 不可用/故障/连接中断时自动降级到本地 SQLite 文件继续记录消息与爱发电订单，MySQL 恢复后自动切回并分批幂等补写降级期间消息（`INSERT IGNORE` + `content_hash` 唯一索引去重，默认每 30 秒检测一次、单批 500 条）。降级期间查询、统计、排行、时间线、导出、快照全部保持可用，Web 面板状态卡片展示当前存储后端与未同步消息数；新增 `storage_fallback_enabled`（默认开启，零配置兜底）、`recovery_check_interval`、`backfill_batch_size`、`sqlite_max_retention_days` 四个配置项（SQLite 兜底库自动清理已同步旧消息控制文件增长）
+- 版本号 bump 至 2.7.7
+
+### Fixed
+- **SQLite 兜底库清理保留未同步数据**：降级期间的自动清理（保留天数/条数）此前会删除 SQLite 中尚未补写进 MySQL 的消息，导致 MySQL 恢复补写时数据永久丢失；现仅清理已同步（`synced=1`）数据，未同步消息完整保留至补写成功
+- **MySQL 恢复检测真正重建连接池**：初始化阶段 MySQL 故障降级后，恢复检测此前仅对已存在的连接池做 `SELECT 1` 探测，无法重建已失效的连接池，导致 MySQL 恢复后永不切回；现每次恢复检测重新建立连接池并初始化表结构，成功后才切回主存储并补写
+- **`storage_fallback_enabled=false` 配置项容错**：`main.py` 读取新增数值配置项时改用 `_safe_int` 容错，用户填非法值时回退默认值，避免插件初始化崩溃
+- 快照水印兜底版本号同步更新至 2.7.7
+
 ## [2.7.6] - 2026-08-09
 
 ### Security

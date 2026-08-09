@@ -39,6 +39,16 @@ MAX_CONCURRENT_SAVES = 8
 MAX_CONCURRENT_DOWNLOADS = 4
 MAX_PENDING_TASKS = 200
 
+
+def _safe_int(value: Any, default: int) -> int:
+    """容错解析整数配置，非法值（None/空/非数字）返回默认值。"""
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
 # 内容类型 -> 摘要文本的映射
 _CONTENT_TYPE_LABELS = {
     "Plain": "",
@@ -224,7 +234,21 @@ class MessageRecorder(Star, AfdianFeature):
                 f"{mysql_config['database']} (user={mysql_config['user']})"
             )
             redis_cache = await self._init_redis_cache()
-            self._db = Database("astrbot_plugin_fox_toolbox", mysql_config, redis_cache=redis_cache)
+            self._db = Database(
+                "astrbot_plugin_fox_toolbox",
+                mysql_config,
+                redis_cache=redis_cache,
+                fallback_enabled=bool(self.config.get("storage_fallback_enabled", True)),
+                recovery_check_interval=_safe_int(
+                    self.config.get("recovery_check_interval"), 30
+                ),
+                backfill_batch_size=_safe_int(
+                    self.config.get("backfill_batch_size"), 500
+                ),
+                sqlite_max_retention_days=_safe_int(
+                    self.config.get("sqlite_max_retention_days"), 30
+                ),
+            )
             await self._db.init()
 
             if self.config.get("save_media_files", False):

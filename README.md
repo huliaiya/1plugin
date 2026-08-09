@@ -5,7 +5,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E4.16%2C%3C5-blue?style=for-the-badge)](https://github.com/Soulter/astrbot)
 [![Python](https://img.shields.io/badge/Python-3.12+-green?style=for-the-badge)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.7.6-orange?style=for-the-badge)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.7.7-orange?style=for-the-badge)](CHANGELOG.md)
 
 **全平台聊天消息自动记录 | MySQL 5.7 存储 | Web 管理面板 | 全文搜索 | 插件 API**
 
@@ -168,6 +168,21 @@ git clone https://github.com/leafliber/astrbot_plugin_fox_toolbox.git
 | `redis_cache_ttl` | `300` | 统计缓存有效期（秒）；消息落库后会即时更新最近消息缓存，统计缓存按此 TTL 刷新 |
 
 > **依赖安装**：使用 Redis 缓存需安装 `redis` 包。在 AstrBot 容器内执行 `pip install redis` 或在插件依赖中声明；未安装时插件会打印提示并自动降级为无缓存模式。
+
+### 本地 SQLite 兜底存储（自动降级）
+
+MySQL 不可用、故障或连接中断时，插件自动降级到本地 SQLite 文件继续记录消息与爱发电订单，避免消息丢失；MySQL 恢复后自动切回并分批补写降级期间的消息（默认每 30 秒检测一次，单批 500 条幂等写入）。降级期间全部查询、统计、排行、导出功能保持可用，Web 面板状态卡片会标注当前存储后端与未同步消息数。
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `storage_fallback_enabled` | `true` | 是否启用本地 SQLite 自动兜底存储；关闭后故障行为与旧版一致（消息无法记录） |
+| `recovery_check_interval` | `30` | MySQL 恢复检测间隔（秒），最小 5 秒 |
+| `backfill_batch_size` | `500` | MySQL 恢复后单批补写消息条数，按批推进避免大事务 |
+| `sqlite_max_retention_days` | `30` | 已补写进 MySQL 的消息在本地 SQLite 中的保留天数，超过后自动清理以控制文件增长 |
+
+> **存储位置**：SQLite 兜底库位于插件数据目录下 `astrbot_plugin_fox_toolbox/messages_fallback.db`（如 `data/plugins/astrbot_plugin_fox_toolbox/messages_fallback.db`），无需额外安装依赖。降级与恢复全程自动，无需人工干预。
+>
+> **数据安全**：降级期间按保留天数/条数执行的自动清理只针对**已补写进 MySQL 的同步数据**，未同步（待补写）的消息会完整保留，确保 MySQL 恢复补写时不丢失任何消息。
 
 ---
 

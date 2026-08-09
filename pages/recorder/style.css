@@ -572,6 +572,14 @@ body::after {
   z-index: 1;
 }
 
+.stat-sub {
+  font-size: 0.75rem;
+  color: var(--text-on-glass-light);
+  position: relative;
+  z-index: 1;
+  margin-top: 2px;
+}
+
 @media (max-width: 1024px) {
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
