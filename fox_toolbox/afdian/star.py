@@ -337,7 +337,7 @@ class AfdianFeature:
         except (TypeError, ValueError):
             price = float(self.afdian_cfg.default_price)
 
-        if not 0 < price <= 100000:
+        if not 0.01 <= price <= 100000:
             return "金额无效：请输入 0.01 ~ 100000 之间的金额"
 
         # 防刷限流：检查拉黑状态

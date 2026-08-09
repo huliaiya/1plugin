@@ -6,6 +6,7 @@
 
 import asyncio
 import errno
+import hmac
 import json
 
 from aiohttp import web
@@ -37,11 +38,12 @@ class AfdianWebhookServer:
 
         未配置令牌时返回 True（向后兼容）；配置后要求 URL query 中的
         ``token`` 与配置值一致。爱发电回调 URL 可携带 query 参数。
+        令牌比较使用恒定时间算法，避免时序侧信道泄露。
         """
         if not self._token:
             return True
         request_token = request.query.get("token", "")
-        return request_token == self._token
+        return hmac.compare_digest(request_token, self._token)
 
     def register_order_callback(self, callback):
         """注册订单回调函数（异步或同步函数均可）。"""

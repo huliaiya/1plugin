@@ -507,11 +507,33 @@ async def test_afdian_create_order_rejects_invalid_price():
     """/发电 金额为 0/负数/超上限时拒绝，且不登记待确认订单。"""
     feature = _make_feature_with_rate_limit()
     event = _FakeEvent()
-    for bad in (0, -1, 100001):
+    for bad in (0, -1, 100001, 0.005):
         feature.afdian_pending_orders = {}
         msg = await feature.afdian_create_order(event, price=bad)
         assert "金额无效" in msg
         assert feature.afdian_pending_orders == {}
+
+
+@pytest.mark.asyncio
+async def test_webhook_token_constant_time_compare():
+    """令牌校验使用恒定时间比较：正确令牌通过，错误令牌拒绝。"""
+    from aiohttp.test_utils import make_mocked_request
+    from fox_toolbox.afdian.afdian_webhook import AfdianWebhookServer
+
+    server = AfdianWebhookServer("127.0.0.1", 6500, db=_FakeDb(), token="secret-token")
+    req = make_mocked_request("GET", "/orders?token=secret-token", app=server.app)
+    assert server._auth_ok(req) is True
+
+    req = make_mocked_request("GET", "/orders?token=wrong", app=server.app)
+    assert server._auth_ok(req) is False
+
+    req = make_mocked_request("GET", "/orders?token=", app=server.app)
+    assert server._auth_ok(req) is False
+
+    req = make_mocked_request(
+        "GET", "/orders?token=secret-token%20with%20spaces", app=server.app
+    )
+    assert server._auth_ok(req) is False
 
 
 @pytest.mark.asyncio

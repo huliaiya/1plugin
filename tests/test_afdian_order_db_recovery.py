@@ -247,3 +247,18 @@ async def test_stop_recovery_loop_cancels_task(tmp_path):
     assert task is not None and not task.done()
     db.stop_recovery_loop()
     assert db._recovery_task is None
+
+
+async def test_build_fields_create_time_defensive(tmp_path):
+    """create_time 为非法值时容错解析为 0，不抛出异常导致订单保存失败。"""
+    db = OrderDB(tmp_path / "orders.db")
+    for bad in (None, "", "not-a-number", "2024-01-01T10:00:00Z", [], {}):
+        order = _order("ORD_CT_" + str(hash(str(bad)) % 100000))
+        order["create_time"] = bad
+        fields = db._build_fields(order)
+        assert fields["create_time"] == 0
+
+    order = _order("ORD_CT_OK")
+    order["create_time"] = "1700000000"
+    fields = db._build_fields(order)
+    assert fields["create_time"] == 1700000000

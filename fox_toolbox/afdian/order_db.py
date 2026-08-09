@@ -279,8 +279,16 @@ class OrderDB:
             "address_person": order.get("address_person") or "",
             "address_phone": order.get("address_phone") or "",
             "address_address": order.get("address_address") or "",
-            "create_time": int(order.get("create_time") or 0),
+            "create_time": self._safe_int(order.get("create_time")),
         }
+
+    @staticmethod
+    def _safe_int(value):
+        """容错解析整数，非法值（None/空/非数字）返回 0。"""
+        try:
+            return int(value or 0)
+        except (ValueError, TypeError):
+            return 0
 
     # ---- 查询 ----
 
@@ -307,11 +315,15 @@ class OrderDB:
             return []
         try:
             async with self._pool.acquire() as conn:
-                async with conn.cursor() as cur:
-                    await cur.execute(sql, params)
-                    rows = await cur.fetchall()
-                    columns = [d[0] for d in cur.description]
-                    return [dict(zip(columns, row)) for row in rows]
+                try:
+                    async with conn.cursor() as cur:
+                        await cur.execute(sql, params)
+                        rows = await cur.fetchall()
+                        columns = [d[0] for d in cur.description]
+                        return [dict(zip(columns, row)) for row in rows]
+                finally:
+                    # 连接池 autocommit=False，只读查询需提交以关闭事务快照
+                    await conn.commit()
         except Exception as e:
             self._degrade_to_sqlite(str(e))
             if sqlite_sql and self._sqlite_path:
