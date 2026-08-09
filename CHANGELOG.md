@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.1] - 2026-08-09
+
+### Fixed
+- **批量保存统计双倍计数**：此前 `_save_messages_batch_mysql` 内层与外层 `save_messages_batch` 对同一批记录重复执行最近消息缓存与统计增量，导致 MySQL 批量保存时统计翻倍；现批量路径下缓存与统计增量仅由外层入口执行一次
+- **MySQL 只读查询悬挂事务**：只读查询返回连接池前未提交事务，连接复用会读到旧快照数据；现只读查询（含 DbExplorer）统一在退出时提交关闭事务
+- **媒体下载 SSRF 绕过**：`/查询记录` 等触发媒体解析时，http(s) 链接此前仅经 MediaResolver 直接下载、无内网地址校验；现解析器路径增加与普通下载一致的 SSRF 前置校验，封堵内网探测（169.254.169.254 等）
+- **`/狐狸记录` 管理命令未鉴权**：清理/查询/搜索/表列表/快照子命令此前任何会话成员均可触发，现统一要求管理员权限，帮助文本同步标注 `[管理员]`
+- **媒体文件类型未过滤**：`/media` 接口与 zip 导入的媒体文件按 Content-Type 白名单过滤（仅图片/音频/视频），拦截 html/svg/xml 等脚本载体，防止存储型 XSS
+- **爱发电 webhook 时序侧信道**：token 校验改用 `hmac.compare_digest` 恒定时间比较（留空表示不校验的既有行为不变）；`0.00` 元订单（金额下限 <0.01）被拒绝
+- **DB 浏览系统变量泄露**：`/狐狸记录 表列表` 的 SQL 查询拦截 `@@version`/`@@datadir` 等系统变量读取，避免泄露服务器敏感信息
+- **MySQL LIKE 通配符未转义**：LIKE 查询补 `ESCAPE '\\'`，与 SQLite 行为对齐，避免 `%`/`_` 通配符绕过精确匹配
+- 版本号 bump 至 2.8.1
+
 ## [2.8.0] - 2026-08-09
 
 ### Added

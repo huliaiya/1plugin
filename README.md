@@ -5,7 +5,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E4.16%2C%3C5-blue?style=for-the-badge)](https://github.com/Soulter/astrbot)
 [![Python](https://img.shields.io/badge/Python-3.12+-green?style=for-the-badge)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.8.0-orange?style=for-the-badge)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.8.1-orange?style=for-the-badge)](CHANGELOG.md)
 
 **全平台聊天消息自动记录 | MySQL 5.7 存储 | Web 管理面板 | 全文搜索 | 插件 API**
 
@@ -263,6 +263,8 @@ Web 面板采用 **Liquid Glass** 液态玻璃设计风格，通过现代 CSS �
 ### 基础指令
 
 > 主命令均为中文；旧英文指令（如 `/huli_record stats`）仍可作为别名使用。
+>
+> 权限说明：`清理`、`查询`、`搜索`、`表列表`、`快照` 为管理类命令，仅管理员可执行。
 
 | 指令 | 说明 | 示例 |
 |------|------|------|
