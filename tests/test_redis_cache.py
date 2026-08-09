@@ -413,6 +413,38 @@ class TestRecentMessageWindow:
     """最近消息缓存：近 30 分钟窗口裁剪 + 批量重建。"""
 
     @pytest.mark.asyncio
+    async def test_public_trim_recent_window(self):
+        """公共 trim_recent_window 方法可裁剪超窗消息（内部加锁调用）。"""
+        _install_fake_aioredis()
+        try:
+            cache = RedisCache(ttl=60)
+            await cache.connect()
+            now = int(time.time() * 1000)
+            # 推入旧消息（prune=False 不裁剪），再通过公共方法统一裁剪
+            await cache.push_recent_message(
+                {"id": 2, "message_str": "stale", "created_at": now - 40 * 60 * 1000},
+                prune=False,
+            )
+            await cache.push_recent_message(
+                {"id": 1, "message_str": "fresh", "created_at": now},
+                prune=False,
+            )
+            recent = await cache.get_recent_messages(limit=50)
+            assert len(recent) == 2
+            await cache.trim_recent_window()
+            recent = await cache.get_recent_messages(limit=50)
+            assert len(recent) == 1
+            assert recent[0]["id"] == 1
+        finally:
+            _uninstall_fake_aioredis()
+
+    @pytest.mark.asyncio
+    async def test_public_trim_noop_without_redis(self):
+        """Redis 未连接时公共 trim 方法无副作用。"""
+        cache = RedisCache(ttl=60)
+        await cache.trim_recent_window()
+
+    @pytest.mark.asyncio
     async def test_push_trims_out_of_window(self):
         _install_fake_aioredis()
         try:

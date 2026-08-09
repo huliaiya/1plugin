@@ -400,11 +400,24 @@ class RedisCache:
         except Exception as e:
             logger.debug(f"[FoxToolbox] 重建最近消息缓存失败: {e}")
 
+    async def trim_recent_window(self) -> None:
+        """裁剪最近消息缓存至时间窗口内（带锁，供外部调用）。"""
+        if not self._available or self._client is None:
+            return
+        try:
+            async with self._delta_lock:
+                await self._trim_recent_window()
+        except Exception as e:
+            logger.debug(f"[FoxToolbox] 裁剪最近消息缓存失败: {e}")
+
     async def _trim_recent_window(self) -> None:
         """清除列表中超出时间窗口的旧消息（窗口由 recent 配置决定）。
 
         基于时间倒序的 List 结构，从尾部扫描逐条剔除过期记录，
         直到遇到第一条窗口内的记录或列表为空。
+
+        注意：本方法假定调用方已持有 ``_delta_lock``（``push_recent_message``
+        与 ``trim_recent_window`` 均在锁内调用）；请勿在未加锁路径直接调用。
         """
         if not self._available or self._client is None:
             return
