@@ -872,6 +872,14 @@ class MessageRecorder(Star, AfdianFeature):
 /huli_record query [sender_id] [limit] - 按发送者查询消息
 /huli_record search <keyword> [limit] - 全文搜索消息
 
+⚡ 爱发电:
+/发电 [金额] - 生成爱发电支付跳转链接（支持 /赞助）
+[管理员] /爱发电测试 - 模拟一笔订单并通知推送群
+[管理员] /同步历史订单 - 通过 API 拉取全部历史订单入库
+[管理员] /查询订单 <订单号> - 查询指定订单详情
+[管理员] /查询发电 [用户ID] - 查询收到的赞助记录（支持 /查询赞助）
+[管理员] /开启发电通知 - 在当前会话接收爱发电订单通知
+
 🆘 帮助:
 /huli_record help - 查看本帮助
 /hulihelp 或 /狐狸菜单 - 查看本帮助
