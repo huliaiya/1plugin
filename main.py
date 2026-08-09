@@ -223,7 +223,7 @@ class MessageRecorder(Star, AfdianFeature):
         try:
             mysql_config = {
                 "host": self.config.get("mysql_host", "127.0.0.1"),
-                "port": int(self.config.get("mysql_port", 3306)),
+                "port": _safe_int(self.config.get("mysql_port", 3306), 3306),
                 "user": self.config.get("mysql_user", "root"),
                 "password": self.config.get("mysql_password", ""),
                 "database": self.config.get("mysql_database", "fox_toolbox"),
@@ -305,11 +305,11 @@ class MessageRecorder(Star, AfdianFeature):
             return None
         redis_cache = RedisCache(
             host=self.config.get("redis_host", "127.0.0.1"),
-            port=int(self.config.get("redis_port", 6379)),
+            port=_safe_int(self.config.get("redis_port", 6379), 6379),
             password=self.config.get("redis_password", "") or None,
-            db=int(self.config.get("redis_db", 0)),
-            ttl=int(self.config.get("redis_cache_ttl", 300)),
-            recent_window=int(self.config.get("redis_recent_window_seconds", 1800)),
+            db=_safe_int(self.config.get("redis_db", 0), 0),
+            ttl=_safe_int(self.config.get("redis_cache_ttl", 300), 300),
+            recent_window=_safe_int(self.config.get("redis_recent_window_seconds", 1800), 1800),
             max_retries=_safe_int(self.config.get("connection_max_retries"), 5),
         )
         available = await redis_cache.connect()
@@ -824,6 +824,7 @@ class MessageRecorder(Star, AfdianFeature):
             lines.append("最新消息: " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(newest_ts / 1000)))
         yield event.plain_result("\n".join(lines))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @huli_record.command("清理", alias={"cleanup"})
     async def cmd_cleanup(self, event: AstrMessageEvent):
         if not self._cmd_check(event):
@@ -836,6 +837,7 @@ class MessageRecorder(Star, AfdianFeature):
             return
         yield event.plain_result(f"✅ 已清理 {result['by_age'] + result['by_limit']} 条消息记录")
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @huli_record.command("查询", alias={"query"})
     async def cmd_query(self, event: AstrMessageEvent, sender_id: str = "", limit: int = 10):
         if not self._cmd_check(event):
@@ -852,6 +854,7 @@ class MessageRecorder(Star, AfdianFeature):
             return
         yield event.plain_result(self._fmt_msgs(msgs, f"📝 查询到 {len(msgs)} 条消息:"))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @huli_record.command("搜索", alias={"search"})
     async def cmd_search(self, event: AstrMessageEvent, keyword: str, limit: int = 10):
         if not self._cmd_check(event):
@@ -870,13 +873,13 @@ class MessageRecorder(Star, AfdianFeature):
 
     def _build_help_text(self) -> str:
         """构建完整的可用指令帮助文本。"""
-        return """🦊 狐狸插件 可用指令
+        return         """🦊 狐狸插件 可用指令
 
 📊 统计与管理:
 /狐狸记录 统计 - 查看统计信息
-/狐狸记录 快照 - 生成 WebUI 仪表盘快照图
-/狐狸记录 清理 - 手动清理过期消息
-/狐狸记录 表列表 - 查看数据库中的业务表列表
+[管理员] /狐狸记录 快照 - 生成 WebUI 仪表盘快照图
+[管理员] /狐狸记录 清理 - 手动清理过期消息
+[管理员] /狐狸记录 表列表 - 查看数据库中的业务表列表
 
 📅 按时间查询:
 /狐狸记录 今日 [limit] - 查看今天的消息
@@ -884,8 +887,8 @@ class MessageRecorder(Star, AfdianFeature):
 /狐狸记录 历史 [时间范围] [limit] - 按时间查询 (day/week/month/all)
 
 🔍 消息检索:
-/狐狸记录 查询 [发送者ID] [limit] - 按发送者查询消息
-/狐狸记录 搜索 <关键词> [limit] - 全文搜索消息
+[管理员] /狐狸记录 查询 [发送者ID] [limit] - 按发送者查询消息
+[管理员] /狐狸记录 搜索 <关键词> [limit] - 全文搜索消息
 
 ⚡ 爱发电:
 /发电 [金额] - 生成爱发电支付跳转链接（支持 /赞助）
@@ -964,6 +967,7 @@ class MessageRecorder(Star, AfdianFeature):
             return
         yield event.plain_result(self._fmt_msgs(msgs, f"📅 {time_desc} 共 {len(msgs)} 条消息:"))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @huli_record.command("表列表", alias={"tables"})
     async def cmd_tables(self, event: AstrMessageEvent):
         """查看数据库中已创建的数据表（只读浏览）
@@ -988,6 +992,7 @@ class MessageRecorder(Star, AfdianFeature):
             lines.append(f"  - {t['name']}（{row_text}）")
         yield event.plain_result("\n".join(lines))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @huli_record.command("快照", alias={"snapshot"})
     async def cmd_snapshot(self, event: AstrMessageEvent):
         """生成 WebUI 仪表盘快照图片并发送。
