@@ -72,6 +72,8 @@ async def _build_db_status_payload(db: Optional[Database], error: str = "") -> D
             "error": error or "数据库未初始化",
             "mysql_version": None,
             "mysql_connected": False,
+            "mysql_table_count": None,
+            "mysql_db_size": None,
         }
     table_count = await db.get_table_count()
     payload = {
@@ -81,15 +83,22 @@ async def _build_db_status_payload(db: Optional[Database], error: str = "") -> D
     }
     # MySQL 版本与连接状态（快照与 WebUI 共用）
     mysql_version = None
+    mysql_db_size = None
     mysql_connected = getattr(db, "mysql_ready", False)
     if mysql_connected:
         try:
             mysql_version = await db.get_mysql_version()
         except Exception:
             mysql_version = None
+        try:
+            mysql_db_size = await db.get_mysql_db_size()
+        except Exception:
+            mysql_db_size = None
     payload.update({
         "mysql_version": mysql_version,
         "mysql_connected": mysql_connected,
+        "mysql_table_count": int(table_count) if table_count >= 0 else None,
+        "mysql_db_size": mysql_db_size,
     })
     # 展示当前存储后端与未同步消息数（SQLite 降级模式）
     if db.using_fallback:
@@ -127,6 +136,8 @@ async def _build_redis_status_payload(db: Optional[Database]) -> Dict[str, Any]:
             "db": None,
             "ttl": None,
             "version": None,
+            "key_count": None,
+            "memory_human": None,
             "keys": {"stats": None, "recent_messages": None},
         }
     try:
@@ -140,6 +151,8 @@ async def _build_redis_status_payload(db: Optional[Database]) -> Dict[str, Any]:
                 "db": redis_cache._db,
                 "ttl": redis_cache._ttl,
                 "version": None,
+                "key_count": None,
+                "memory_human": None,
                 "keys": {"stats": None, "recent_messages": None},
             }
         return {"configured": True, **await redis_cache.status()}
@@ -154,6 +167,8 @@ async def _build_redis_status_payload(db: Optional[Database]) -> Dict[str, Any]:
             "db": getattr(redis_cache, "_db", None),
             "ttl": getattr(redis_cache, "_ttl", None),
             "version": None,
+            "key_count": None,
+            "memory_human": None,
             "keys": {"stats": None, "recent_messages": None},
         }
 

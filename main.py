@@ -1021,6 +1021,8 @@ class MessageRecorder(Star, AfdianFeature):
             "connected": self._db.mysql_ready,
             "fallback_active": self._db.using_fallback,
             "version": None,
+            "table_count": table_count,
+            "db_size": None,
             "unsynced_count": 0,
         }
         if self._db.mysql_ready:
@@ -1028,6 +1030,10 @@ class MessageRecorder(Star, AfdianFeature):
                 mysql_status["version"] = await self._db.get_mysql_version()
             except Exception:
                 mysql_status["version"] = None
+            try:
+                mysql_status["db_size"] = await self._db.get_mysql_db_size()
+            except Exception:
+                mysql_status["db_size"] = None
         else:
             try:
                 mysql_status["unsynced_count"] = await self._db.get_unsynced_count()

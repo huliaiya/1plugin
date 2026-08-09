@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **插件指令全面中文化**：命令组改为 `/狐狸记录`（`/huli_record` 保留为别名），子命令（统计/清理/查询/搜索/帮助/今日/昨日/历史/表列表/快照）与爱发电指令均改为中文主命令，旧英文指令仍可作为别名使用；帮助菜单同步更新并增加别名提示
 - **MySQL 与 Redis 运行中断连自动重连**：MySQL 与 Redis 断连后由后台循环周期检测并自动重连（Redis 此前连接失败即永久禁用，无任何运行中恢复机制）；连续重试次数由新配置项 `connection_max_retries` 控制（默认 5，最小 1），达到上限后停止自动重连，分别进入 SQLite 降级 / 无缓存模式，并记录日志提示；运行中 Redis 断连期间自动以无缓存模式运行，恢复后自动切回缓存
 - **Redis 服务器版本展示**：WebUI 与快照的 Redis 缓存卡新增「服务器版本」显示（连接时通过 INFO server 获取并缓存，断连自动清空），便于核对 Redis 实例版本
+- **MySQL 表数量与占用大小展示**：快照与 WebUI 的 MySQL 存储卡新增「数据表数量」与「数据库大小」（通过 information_schema 统计当前库数据+索引总字节数并格式化显示），实时反映存储规模；Redis 缓存卡同步新增「键数量」（DBSIZE）与「内存占用」（INFO memory 的 used_memory_human）展示
 - **配置项按模块分组整理**：`_conf_schema.json` 与 README 配置章节统一按「功能配置 → MySQL → SQLite 兜底 → 爱发电 → Redis」分组排列，方便查阅与配置
 
 ### Fixed

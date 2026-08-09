@@ -162,6 +162,38 @@ class TestGetMysqlVersion:
         assert await db.get_mysql_version() is None
 
 
+class TestGetMysqlDbSize:
+    @pytest.mark.asyncio
+    async def test_returns_none_when_not_ready(self):
+        db = Database("test", {})
+        assert await db.get_mysql_db_size() is None
+
+    @pytest.mark.asyncio
+    async def test_returns_size_when_ready(self):
+        db = Database("test", {})
+        db._mysql_ready = True
+        db._pool = _FakePool()
+        size = await db.get_mysql_db_size()
+        assert size == 1
+        assert db._mysql_db_size == 1
+
+    @pytest.mark.asyncio
+    async def test_cached_size(self):
+        db = Database("test", {})
+        db._mysql_ready = True
+        db._pool = _FakePool()
+        db._mysql_db_size = 2048
+        size = await db.get_mysql_db_size()
+        assert size == 2048
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_query_failure(self):
+        db = Database("test", {})
+        db._mysql_ready = True
+        db._pool = _FailingPool()
+        assert await db.get_mysql_db_size() is None
+
+
 class TestSaveMessage:
     @pytest.mark.asyncio
     async def test_save_and_retrieve(self, mysql_db):

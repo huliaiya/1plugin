@@ -69,6 +69,21 @@ def _sanitize_label(value, default="未知") -> str:
     return sanitized or default
 
 
+def _fmt_bytes(value) -> str:
+    """把字节数格式化为人类可读的容量字符串（B/KB/MB/GB）。"""
+    try:
+        size = float(value)
+    except (ValueError, TypeError):
+        return "-"
+    if size < 1024:
+        return f"{int(size)} B"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.1f} KB"
+    if size < 1024 * 1024 * 1024:
+        return f"{size / (1024 * 1024):.1f} MB"
+    return f"{size / (1024 * 1024 * 1024):.1f} GB"
+
+
 # ========== 布局常量 ==========
 
 _PADDING = 34
@@ -518,6 +533,8 @@ def _draw_mysql_card(img, y, mysql_status: Optional[Dict] = None) -> int:
     connected = bool(status.get("connected"))
     fallback = bool(status.get("fallback_active"))
     version = status.get("version") or None
+    table_count = status.get("table_count")
+    db_size = status.get("db_size")
 
     if connected:
         title = "MySQL 存储"
@@ -536,7 +553,8 @@ def _draw_mysql_card(img, y, mysql_status: Optional[Dict] = None) -> int:
     parts = []
     if connected:
         parts.append(("服务器版本", version or "未知"))
-        parts.append(("存储后端", "MySQL"))
+        parts.append(("数据表", "-" if table_count is None else f"{table_count} 张"))
+        parts.append(("数据库大小", _fmt_bytes(db_size) if db_size is not None else "-"))
         parts.append(("连接状态", "已连接"))
     elif fallback:
         unsynced = status.get("unsynced_count")
@@ -607,6 +625,12 @@ def _draw_redis_card(img, y, redis_status: Optional[Dict] = None) -> int:
         version = status.get("version")
         if version:
             parts.insert(1, ("版本", str(version)))
+        key_count = status.get("key_count")
+        if key_count is not None:
+            parts.append(("键数量", f"{key_count} 个"))
+        memory_human = status.get("memory_human")
+        if memory_human:
+            parts.append(("内存占用", str(memory_human)))
         keys = status.get("keys") or {}
         stats_n = keys.get("stats")
         recent_n = keys.get("recent_messages")
@@ -1199,8 +1223,8 @@ def render_snapshot(
     if platform_stats is None:
         platform_stats = stats.platform_stats or {}
 
-    # 画布高度
-    canvas_h = _PX(2800)
+    # 画布高度（预留卡片内容增长的余量，避免文字溢出底部）
+    canvas_h = _PX(3200)
     img = _make_background((_W_FULL, canvas_h))
 
     y = _PX(_PADDING)

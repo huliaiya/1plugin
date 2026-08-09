@@ -52,6 +52,8 @@ class TestToInt:
             "db": 0,
             "ttl": 300,
             "version": "7.2.4",
+            "key_count": 42,
+            "memory_human": "1.2M",
             "keys": {"stats": 1, "recent_messages": 10},
         },
         {

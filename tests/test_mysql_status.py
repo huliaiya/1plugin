@@ -43,6 +43,9 @@ class _FakeDb:
     async def get_mysql_version(self):
         return self._version
 
+    async def get_mysql_db_size(self):
+        return 1048576
+
 
 async def test_payload_mysql_connected_with_version():
     db = _FakeDb(table_count=6, fallback=False, version="8.0.36")
@@ -50,6 +53,8 @@ async def test_payload_mysql_connected_with_version():
     assert payload["running"] is True
     assert payload["mysql_connected"] is True
     assert payload["mysql_version"] == "8.0.36"
+    assert payload["mysql_table_count"] == 6
+    assert payload["mysql_db_size"] == 1048576
     assert payload["fallback_active"] is False
     assert payload["unsynced_count"] == 0
 
@@ -66,6 +71,8 @@ async def test_payload_fallback_sqlite():
     assert payload["running"] is True
     assert payload["mysql_connected"] is False
     assert payload["mysql_version"] is None
+    assert payload["mysql_table_count"] == 5
+    assert payload["mysql_db_size"] is None
     assert payload["fallback_active"] is True
     assert payload["unsynced_count"] == 12
     assert payload["storage_backend"] == "sqlite"
@@ -76,6 +83,8 @@ async def test_payload_no_db():
     assert payload["running"] is False
     assert payload["mysql_connected"] is False
     assert payload["mysql_version"] is None
+    assert payload["mysql_table_count"] is None
+    assert payload["mysql_db_size"] is None
 
 
 async def test_payload_mysql_down_without_fallback():
@@ -97,7 +106,15 @@ def test_draw_mysql_card_connected():
 
     img = Image.new("RGBA", (400, 800), (0, 0, 0, 0))
     y = _draw_mysql_card(
-        img, 10, {"connected": True, "fallback_active": False, "version": "8.0.36"}
+        img,
+        10,
+        {
+            "connected": True,
+            "fallback_active": False,
+            "version": "8.0.36",
+            "table_count": 6,
+            "db_size": 1048576,
+        },
     )
     assert y > 10
 

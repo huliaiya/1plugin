@@ -63,6 +63,15 @@ function extractData(response) {
   return response;
 }
 
+function formatBytes(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) return '-';
+  if (num < 1024) return `${num} B`;
+  if (num < 1024 * 1024) return `${(num / 1024).toFixed(1)} KB`;
+  if (num < 1024 * 1024 * 1024) return `${(num / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(num / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
 function showInitError(message) {
   const main = document.querySelector('.main-content');
   if (main) {
@@ -411,11 +420,15 @@ function updateMysqlCard(dbStatus) {
   const backendEl = document.getElementById('mysqlBackend');
   const versionEl = document.getElementById('mysqlVersion');
   const unsyncedEl = document.getElementById('mysqlUnsynced');
+  const tablesEl = document.getElementById('mysqlTables');
+  const dbSizeEl = document.getElementById('mysqlDbSize');
 
   const fallbackActive = dbStatus && !!dbStatus.fallback_active;
   const mysqlConnected = dbStatus && !!dbStatus.mysql_connected && !fallbackActive;
   const version = dbStatus && dbStatus.mysql_version ? String(dbStatus.mysql_version) : '';
   const unsynced = dbStatus && Number.isFinite(Number(dbStatus.unsynced_count)) ? Number(dbStatus.unsynced_count) : 0;
+  const tableCount = dbStatus && Number.isFinite(Number(dbStatus.mysql_table_count)) ? Number(dbStatus.mysql_table_count) : (dbStatus && Number.isFinite(Number(dbStatus.table_count)) ? Number(dbStatus.table_count) : 0);
+  const dbSize = dbStatus && Number.isFinite(Number(dbStatus.mysql_db_size)) ? Number(dbStatus.mysql_db_size) : null;
 
   if (mysqlConnected) {
     badge.textContent = '运行中';
@@ -434,6 +447,8 @@ function updateMysqlCard(dbStatus) {
   if (backendEl) backendEl.textContent = mysqlConnected ? 'MySQL' : (fallbackActive ? '本地 SQLite' : '未知');
   if (versionEl) versionEl.textContent = version || '-';
   if (unsyncedEl) unsyncedEl.textContent = fallbackActive ? `${unsynced} 条` : '-';
+  if (tablesEl) tablesEl.textContent = mysqlConnected && tableCount > 0 ? `${tableCount} 张` : '-';
+  if (dbSizeEl) dbSizeEl.textContent = mysqlConnected && dbSize !== null ? formatBytes(dbSize) : '-';
 }
 
 function updateRedisCard(redisStatus) {
@@ -457,6 +472,8 @@ function updateRedisCard(redisStatus) {
     setVal('redisDb', '-');
     setVal('redisTtl', '-');
     setVal('redisVersion', '-');
+    setVal('redisKeyCount', '-');
+    setVal('redisMemory', '-');
     setVal('redisStatsKey', '-');
     setVal('redisRecentKey', '-');
     return;
@@ -473,6 +490,8 @@ function updateRedisCard(redisStatus) {
     badge.textContent = '运行中';
     badge.classList.add('online');
     setVal('redisAvailable', '正常连接');
+    setVal('redisKeyCount', redisStatus.key_count != null ? `${redisStatus.key_count} 个` : '-');
+    setVal('redisMemory', redisStatus.memory_human ? String(redisStatus.memory_human) : '-');
     const statsKey = redisStatus.keys && redisStatus.keys.stats != null ? `${redisStatus.keys.stats} 条` : '空';
     const recentKey = redisStatus.keys && redisStatus.keys.recent_messages != null ? `${redisStatus.keys.recent_messages} 条` : '空';
     setVal('redisStatsKey', statsKey);
@@ -482,6 +501,8 @@ function updateRedisCard(redisStatus) {
     badge.textContent = '已降级';
     badge.classList.add('degraded');
     setVal('redisAvailable', '连接失败，已降级');
+    setVal('redisKeyCount', '-');
+    setVal('redisMemory', '-');
     setVal('redisStatsKey', '-');
     setVal('redisRecentKey', '-');
   } else {
@@ -489,6 +510,8 @@ function updateRedisCard(redisStatus) {
     badge.textContent = '未启用';
     badge.classList.add('degraded');
     setVal('redisAvailable', '已配置但未启用');
+    setVal('redisKeyCount', '-');
+    setVal('redisMemory', '-');
     setVal('redisStatsKey', '-');
     setVal('redisRecentKey', '-');
   }
@@ -525,9 +548,10 @@ async function loadDbStatus() {
     const result = await apiGet('status');
     const data = extractData(result);
     if (!data) return;
-    dataCache.dbStatus = data;
-    updateDbStatusCard(data);
-    updateMysqlCard(data);
+    const dbStatus = data.db_status || data;
+    dataCache.dbStatus = dbStatus;
+    updateDbStatusCard(dbStatus);
+    updateMysqlCard(dbStatus);
   } catch (e) {
     logError('loadDbStatus failed:', e);
     valueEl.textContent = '--';

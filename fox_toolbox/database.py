@@ -142,6 +142,7 @@ class Database:
         self._mysql_ready: bool = False
         self._degraded: bool = False
         self._mysql_version: Optional[str] = None
+        self._mysql_db_size: Optional[int] = None
         self._recovery_task: Optional[asyncio.Task] = None
 
     def _sqlite_db_path(self) -> Path:
@@ -186,6 +187,7 @@ class Database:
                         self._mysql_ready = True
                         self._degraded = False
                         self._mysql_version = None
+                        self._mysql_db_size = None
                         logger.info("[FoxToolbox] MySQL 已恢复，切回主存储并开始补写")
                         await self._backfill_unsynced()
                     else:
@@ -300,6 +302,7 @@ class Database:
             self._mysql_ready = True
             self._degraded = False
             self._mysql_version = None
+            self._mysql_db_size = None
             logger.info(
                 f"[FoxToolbox] MySQL 数据库初始化完成: "
                 f"{host}:{port}/{database}"
@@ -399,6 +402,33 @@ class Database:
         except Exception as e:
             logger.warning(f"[FoxToolbox] 获取数据表数量失败: {e}")
             return -1
+
+    async def get_mysql_db_size(self) -> Optional[int]:
+        """返回当前数据库的数据+索引总占用字节数；查询失败返回 None。
+
+        通过 information_schema.TABLES 统计当前库所有表（含视图）的
+        DATA_LENGTH + INDEX_LENGTH 之和，结果缓存到 self._mysql_db_size。
+        """
+        if not self._mysql_ready or not self._pool:
+            self._mysql_db_size = None
+            return None
+        if self._mysql_db_size is not None:
+            return self._mysql_db_size
+        try:
+            async with self._pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        "SELECT COALESCE(SUM(DATA_LENGTH + INDEX_LENGTH), 0) "
+                        "FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()"
+                    )
+                    row = await cur.fetchone()
+            size = int(row[0]) if row else 0
+            self._mysql_db_size = size
+            return size
+        except Exception as e:
+            logger.warning(f"[FoxToolbox] 获取 MySQL 数据库大小失败: {e}")
+            self._mysql_db_size = None
+            return None
 
     async def get_unsynced_count(self) -> int:
         """返回 SQLite 中尚未补写进 MySQL 的消息数量。"""

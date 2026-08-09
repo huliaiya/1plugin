@@ -45,7 +45,12 @@ class _FakeRedisClient:
         return items[start : stop + 1]
 
     async def info(self, section=None):
+        if section == "memory":
+            return {"used_memory_human": "1.2M"}
         return {"redis_version": "7.2.4"}
+
+    async def dbsize(self):
+        return 42
 
 
 class _FakePingFailClient(_FakeRedisClient):
@@ -129,6 +134,8 @@ class TestRedisCacheStatus:
             assert ok is True
             status = await cache.status()
             assert status["version"] == "7.2.4"
+            assert status["key_count"] == 42
+            assert status["memory_human"] == "1.2M"
             assert status["host"] == "127.0.0.1"
             assert status["db"] == 0
             await cache.close()

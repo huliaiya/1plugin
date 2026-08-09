@@ -47,6 +47,8 @@ class RedisCache:
         self._reconnect_task: Optional[asyncio.Task] = None
         self._reconnect_interval: float = 30.0
         self._server_version: Optional[str] = None
+        self._memory_human: Optional[str] = None
+        self._key_count: Optional[int] = None
 
     @property
     def available(self) -> bool:
@@ -67,6 +69,8 @@ class RedisCache:
             "db": self._db,
             "ttl": self._ttl,
             "version": self._server_version,
+            "key_count": self._key_count,
+            "memory_human": self._memory_human,
             "keys": {"stats": None, "recent_messages": None},
         }
         if self._available and self._client is not None:
@@ -136,16 +140,34 @@ class RedisCache:
                 )
             except Exception:
                 self._server_version = None
+            self._memory_human = None
+            self._key_count = None
+            try:
+                mem = await asyncio.wait_for(client.info("memory"), timeout=3)
+                if isinstance(mem, dict):
+                    self._memory_human = mem.get("used_memory_human") or None
+            except Exception:
+                pass
+            try:
+                self._key_count = int(
+                    await asyncio.wait_for(client.dbsize(), timeout=3) or 0
+                )
+            except Exception:
+                pass
             logger.info(
                 f"[FoxToolbox] Redis 缓存连接成功: "
                 f"{self._host}:{self._port}/{self._db} (TTL={self._ttl}s"
                 + (f", version={self._server_version}" if self._server_version else "")
+                + (f", memory={self._memory_human}" if self._memory_human else "")
+                + f", keys={self._key_count if self._key_count is not None else '-'}"
                 + ")"
             )
             return True
         except Exception as e:
             self._available = False
             self._server_version = None
+            self._memory_human = None
+            self._key_count = None
             if self._client is not None:
                 try:
                     await self._client.aclose()
@@ -201,6 +223,8 @@ class RedisCache:
                         # 连接已断开：标记降级并尝试重连
                         self._available = False
                         self._server_version = None
+                        self._memory_human = None
+                        self._key_count = None
                         logger.warning("[FoxToolbox] Redis 连接断开，开始自动重连")
 
                 if not connected:
@@ -231,6 +255,8 @@ class RedisCache:
             self._client = None
         self._available = False
         self._server_version = None
+        self._memory_human = None
+        self._key_count = None
         self._checked = True
 
     async def get_stats(self) -> Optional[dict]:
