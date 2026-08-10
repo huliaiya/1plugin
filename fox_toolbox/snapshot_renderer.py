@@ -55,6 +55,20 @@ def _to_int(value, default=0):
     return default
 
 
+def _safe_time_str(ts_ms: float, fmt: str, fallback: str = "") -> str:
+    """将毫秒时间戳安全格式化为本地时间字符串。
+
+    对超范围/非法时间戳返回 fallback，避免 time.localtime 抛
+    OverflowError/OSError 导致整个快照渲染崩溃。
+    """
+    if not ts_ms:
+        return fallback
+    try:
+        return time.strftime(fmt, time.localtime(float(ts_ms) / 1000))
+    except (ValueError, TypeError, OverflowError, OSError):
+        return fallback
+
+
 def _sanitize_label(value, default="未知") -> str:
     text = str(value or "").strip()
     if not text:
@@ -469,10 +483,15 @@ def _draw_header(img, y, stats: MessageStats, generated_at: float):
     x += int(f_title.size * 1.3)
     _draw_text(draw, (x, y), "狐狸插件 · 仪表盘快照", f_title, _TEXT_DARK, img)
 
-    sub = time.strftime("生成时间 %Y-%m-%d %H:%M:%S", time.localtime(generated_at))
+    sub = _safe_time_str(
+        generated_at, "生成时间 %Y-%m-%d %H:%M:%S",
+        fallback="生成时间 --"
+    )
     newest_ts = _to_int(stats.newest_timestamp, default=0)
     if newest_ts > 0:
-        latest = time.strftime("最新消息 %m-%d %H:%M", time.localtime(newest_ts / 1000))
+        latest = _safe_time_str(
+            newest_ts, "最新消息 %m-%d %H:%M", fallback="最新消息 --"
+        )
         sub = sub + "  ·  " + latest
     _draw_text(draw, (_PADDING * _SCALE, y + _PX(48)), sub, f_sub, _TEXT_MEDIUM, img)
     return y + _PX(80)

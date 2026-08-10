@@ -802,6 +802,7 @@ class MessageRecorder(Star, AfdianFeature):
             lines.append(f"[{ts}] {msg.sender_name or msg.sender_id}: {c}")
         return "\n".join(lines)
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @huli_record.command("统计", alias={"stats"})
     async def cmd_stats(self, event: AstrMessageEvent):
         if not self._cmd_check(event):
@@ -877,15 +878,15 @@ class MessageRecorder(Star, AfdianFeature):
         return         """🦊 狐狸插件 可用指令
 
 📊 统计与管理:
-/狐狸记录 统计 - 查看统计信息
+[管理员] /狐狸记录 统计 - 查看统计信息
 [管理员] /狐狸记录 快照 - 生成 WebUI 仪表盘快照图
 [管理员] /狐狸记录 清理 - 手动清理过期消息
 [管理员] /狐狸记录 表列表 - 查看数据库中的业务表列表
 
 📅 按时间查询:
-/狐狸记录 今日 [limit] - 查看今天的消息
-/狐狸记录 昨日 [limit] - 查看昨天的消息
-/狐狸记录 历史 [时间范围] [limit] - 按时间查询 (day/week/month/all)
+[管理员] /狐狸记录 今日 [limit] - 查看今天的消息
+[管理员] /狐狸记录 昨日 [limit] - 查看昨天的消息
+[管理员] /狐狸记录 历史 [时间范围] [limit] - 按时间查询 (day/week/month/all)
 
 🔍 消息检索:
 [管理员] /狐狸记录 查询 [发送者ID] [limit] - 按发送者查询消息
@@ -925,6 +926,7 @@ class MessageRecorder(Star, AfdianFeature):
             return
         yield event.plain_result(self._build_help_text())
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @huli_record.command("今日", alias={"today"})
     async def cmd_today(self, event: AstrMessageEvent, limit: int = 20):
         if not self._cmd_check(event):
@@ -941,6 +943,7 @@ class MessageRecorder(Star, AfdianFeature):
             return
         yield event.plain_result(self._fmt_msgs(msgs, f"📅 今天共 {len(msgs)} 条消息:"))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @huli_record.command("昨日", alias={"yesterday"})
     async def cmd_yesterday(self, event: AstrMessageEvent, limit: int = 20):
         if not self._cmd_check(event):
@@ -957,6 +960,7 @@ class MessageRecorder(Star, AfdianFeature):
             return
         yield event.plain_result(self._fmt_msgs(msgs, f"📅 昨天共 {len(msgs)} 条消息:"))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @huli_record.command("历史", alias={"history"})
     async def cmd_history(self, event: AstrMessageEvent, time_range: str = "week", limit: int = 30):
         if not self._cmd_check(event):
@@ -1319,7 +1323,11 @@ class MessageRecorder(Star, AfdianFeature):
         """测速 - 对指定 URL 进行下载速率测试"""
         if not self._net_tool_check(event):
             return
-        seconds = max(1, min(int(seconds), 10))
+        try:
+            seconds = max(1, min(int(seconds), 10))
+        except (TypeError, ValueError):
+            yield event.plain_result("参数错误: 秒数必须为数字")
+            return
         try:
             result = await net_tools.download_speed_test(url, seconds=seconds)
         except net_tools.ValidationError as e:

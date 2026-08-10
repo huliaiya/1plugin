@@ -260,7 +260,18 @@ class AfdianFeature:
 
     async def on_afdian_new_order(self, order: dict | None = None):
         """处理新订单回调：通知订阅者 + 针对付款用户的自动回复。"""
-        logger.info(f"[Afdian] 新订单：{order}")
+        # 日志仅记录订单号/金额/商品标题等非敏感字段，避免收货地址、
+        # 电话等 PII 进入日志文件
+        if order:
+            order_id = order.get("out_trade_no")
+            amount = order.get("total_amount")
+            plan_title = str(order.get("plan_title") or "")[:50]
+            logger.info(
+                f"[Afdian] 新订单：out_trade_no={order_id}, "
+                f"total_amount={amount}, plan_title={plan_title}"
+            )
+        else:
+            logger.info("[Afdian] 新订单（测试）")
         message = parse_order(order) if order else "Afdian Test"
 
         # 通知所有订阅会话

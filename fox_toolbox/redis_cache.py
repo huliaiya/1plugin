@@ -113,6 +113,7 @@ class RedisCache:
                 "缓存功能已自动禁用（可执行 pip install redis 后重试）"
             )
             return False
+        client = None
         try:
             kwargs: Dict[str, Any] = {
                 "host": self._host,
@@ -172,6 +173,11 @@ class RedisCache:
             self._server_version = None
             self._memory_human = None
             self._key_count = None
+            if client is not None:
+                try:
+                    await client.aclose()
+                except Exception:
+                    pass
             if self._client is not None:
                 try:
                     await self._client.aclose()

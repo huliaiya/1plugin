@@ -273,9 +273,14 @@ async def download_speed_test(
 
 async def run_ping(host: str, count: int = PING_COUNT_DEFAULT) -> Dict[str, Any]:
     """对主机执行 ping，返回延迟与丢包统计。count 受上限约束。"""
-    count = max(1, min(int(count), PING_COUNT_MAX))
+    try:
+        count = max(1, min(int(count), PING_COUNT_MAX))
+    except (TypeError, ValueError):
+        raise ValidationError("无效的 ping 次数")
     # 仅允许主机名 / IPv4 / IPv6，不做 DNS 之外的变换；
     # 拒绝以 "-" 开头的值，防止被 ping 解析为选项（如 -f 洪泛）
+    if not host or not isinstance(host, str):
+        raise ValidationError("无效的主机名")
     if not re.match(r"^[\w.\-:\[\]]+$", host) or " " in host or "&" in host or "|" in host:
         raise ValidationError("无效的主机名")
     if host.startswith("-"):

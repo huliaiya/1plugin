@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-08-10
+
+### Added
+- **新增「狐狸工具」网络诊断命令组**：`/狐狸工具 请求`（类 curl 发送 HTTP 请求）、`url检测`、`测速`、`ping`、`帮助`，其中请求命令支持 `-X`/`-H`/`-d`/`-b` 参数解析，长响应自动用 LLM 总结并降级截断
+- 版本号 bump 至 2.9.0
+
+### Security
+- **网络工具 SSRF 防护**：`请求`/`url检测`/`测速` 复用媒体下载的 `_is_safe_url` 校验初始 URL，并改为逐跳校验重定向目标，封堵通过重定向绕过访问内网/云元数据地址（169.254.169.254 等）
+- **ping 选项注入**：主机名拒绝以 `-` 开头（`-f` 洪泛、`-i` 篡改间隔等）
+- **狐狸工具命令限制为管理员**：请求/url检测/测速/ping/帮助均要求管理员权限，帮助文本同步标注
+- **消息查询命令补齐管理员鉴权**：`统计`/`今日`/`昨日`/`历史` 此前任何群成员可查看全部消息记录（含私聊），现统一要求管理员权限
+- **爱发电订单日志脱敏**：新订单日志仅记录订单号/金额/商品标题，不再输出收货地址、电话等 PII
+- **支付链接参数编码**：`generate_payment_url` 对 user_id/remark/price 统一 URL 编码，并移除含参数的 debug 日志
+
+### Fixed
+- **Redis 连接泄漏**：`_establish` 连接失败时未关闭新建的 Redis 客户端，重连循环会累积底层 TCP 连接；现失败路径统一关闭新建与旧客户端
+- **时间解析溢出崩溃**：`parse_natural_time` 对超大数值（如 `last999999999d`）`timedelta` 溢出未被捕获，且超长数字串会触发 `int()` 限制；现统一捕获溢出并限制数字位数为 9 位
+- **快照渲染时间戳崩溃**：`_draw_header` 对超范围/非法时间戳调用 `time.localtime` 抛异常，现通过 `_safe_time_str` 安全降级
+- **爱发电数据解析容错**：`format_time`/赞助金额解析对非数字或超范围值返回空而非崩溃；订单 `sku_detail` 序列化对非序列化值降级为字符串；API 响应 JSON 解析失败返回友好错误
+- **狐狸工具参数容错**：`测速` 秒数、`ping` 次数/主机名对非数字或 None 参数返回参数错误而非命令异常
+
 ## [2.8.3] - 2026-08-09
 
 ### Fixed

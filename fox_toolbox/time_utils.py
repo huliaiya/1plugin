@@ -197,37 +197,29 @@ def parse_natural_time(time_str: str) -> Optional[Tuple[int, int]]:
         return natural_time_map[time_str]()
 
     # 支持数字+单位格式，如 "3d"、"7days"、"2h"
-    match = re.match(r'^last(\d+)([dh])$', time_str)
+    # 数字限长 9 位，避免超长数字串触发 int() 限制或 timedelta 溢出崩溃
+    match = re.match(r'^last(\d{1,9})([dh])$', time_str)
     if match:
         value = int(match.group(1))
         unit = match.group(2)
-        if unit == 'd':
-            return (
-                int((now - timedelta(days=value)).timestamp() * 1000),
-                int(now.timestamp() * 1000)
-            )
-        elif unit == 'h':
-            return (
-                int((now - timedelta(hours=value)).timestamp() * 1000),
-                int(now.timestamp() * 1000)
-            )
-
-    match = re.match(r'^(\d+)(days?|hours?|h|d)$', time_str)
-    if match:
+        days = value if unit == 'd' else 0
+        hours = 0 if unit == 'd' else value
+    else:
+        match = re.match(r'^(\d{1,9})(days?|hours?|h|d)$', time_str)
+        if not match:
+            return None
         value = int(match.group(1))
         unit = match.group(2)
         if unit in ('d', 'day', 'days'):
-            return (
-                int((now - timedelta(days=value)).timestamp() * 1000),
-                int(now.timestamp() * 1000)
-            )
-        elif unit in ('h', 'hour', 'hours'):
-            return (
-                int((now - timedelta(hours=value)).timestamp() * 1000),
-                int(now.timestamp() * 1000)
-            )
-
-    return None
+            days, hours = value, 0
+        else:
+            days, hours = 0, value
+    try:
+        start = now - timedelta(days=days, hours=hours)
+    except OverflowError:
+        # 极端值导致 timedelta 溢出，视为无法解析
+        return None
+    return int(start.timestamp() * 1000), int(now.timestamp() * 1000)
 
 
 def parse_time_range(time_str: str) -> Tuple[int, int]:

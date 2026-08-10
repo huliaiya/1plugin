@@ -66,6 +66,9 @@ class AfdianAPIClient:
         except aiohttp.ClientError as e:
             logger.error(f"[Afdian] 请求失败: {e}")
             return {"ec": -1, "em": str(e)}
+        except (ValueError, json.JSONDecodeError) as e:
+            logger.error(f"[Afdian] 响应解析失败: {e}")
+            return {"ec": -1, "em": "响应格式异常"}
 
     async def query_order(
         self, page: int = 1, out_trade_no: str = "", per_page: int = 50
@@ -126,9 +129,8 @@ class AfdianAPIClient:
         price_str = f"{round(price, 2):.2f}"
         url = (
             f"https://afdian.com/order/create?"
-            f"user_id={self.user_id}"
+            f"user_id={quote(self.user_id)}"
             f"&remark={quote(remark)}"
-            f"&custom_price={price_str}"
+            f"&custom_price={quote(price_str)}"
         )
-        logger.debug(f"[Afdian] 生成跳转链接：{url}")
         return url

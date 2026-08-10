@@ -10,7 +10,19 @@ from datetime import datetime
 def format_time(timestamp):
     if not timestamp:
         return None
-    return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        ts = float(timestamp)
+        return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError, OverflowError, OSError):
+        return None
+
+
+def _safe_float(value, default=0.0):
+    """容错解析浮点数，非法值（None/空/非数字）返回 default。"""
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
 
 
 def _format_order_status(status) -> str:
@@ -80,7 +92,7 @@ def parse_sponsors(data: dict) -> list:
         plan_list = [
             {
                 "name": p.get("name", "未知方案"),
-                "price": float(p.get("price", 0)),
+                "price": _safe_float(p.get("price")),
             }
             for p in plans
         ]
@@ -90,10 +102,10 @@ def parse_sponsors(data: dict) -> list:
             "name": user.get("name", ""),
             "user_id": user.get("user_id", ""),
             "avatar": user.get("avatar", ""),
-            "total_amount": float(item.get("all_sum_amount", 0)),
+            "total_amount": _safe_float(item.get("all_sum_amount")),
             "current_plan": {
                 "name": current.get("name", ""),
-                "price": float(current.get("price", 0)),
+                "price": _safe_float(current.get("price")),
             },
             "first_pay": format_time(item.get("first_pay_time", 0)),
             "last_pay": format_time(item.get("last_pay_time", 0)),

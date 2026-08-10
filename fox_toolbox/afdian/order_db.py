@@ -275,7 +275,7 @@ class OrderDB:
             "discount": self._safe_float(order.get("discount")),
             "remark": order.get("remark") or "",
             "redeem_id": order.get("redeem_id") or "",
-            "sku_detail": json.dumps(order.get("sku_detail") or [], ensure_ascii=False),
+            "sku_detail": self._safe_json(order.get("sku_detail")),
             "address_person": order.get("address_person") or "",
             "address_phone": order.get("address_phone") or "",
             "address_address": order.get("address_address") or "",
@@ -289,6 +289,19 @@ class OrderDB:
             return int(value or 0)
         except (ValueError, TypeError):
             return 0
+
+    @staticmethod
+    def _safe_json(value):
+        """容错序列化 JSON 字段，非序列化值（bytes/含非法类型）转为字符串。"""
+        if value is None:
+            return "[]"
+        try:
+            return json.dumps(value, ensure_ascii=False)
+        except (TypeError, ValueError):
+            try:
+                return json.dumps(str(value), ensure_ascii=False)
+            except Exception:
+                return "[]"
 
     # ---- 查询 ----
 
