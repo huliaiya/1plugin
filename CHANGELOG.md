@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 配置项新增：`btpanel_enabled`、`btpanel_url`、`btpanel_api_sk`，均可通过 AstrBot 设置界面配置
 - 版本号 bump 至 2.11.0
 
+## [2.10.1] - 2026-08-10
+
+### Fixed
+- `/狐狸菜单`、`/狐狸记录 帮助` 帮助文本未包含广告助手指令，现补充「📢 广告助手」章节，与 README 指令文档对齐
+- 版本号 bump 至 2.10.1
+
 ## [2.10.0] - 2026-08-10
 
 ### Added
@@ -30,12 +36,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 广告内容以 AstrBot 消息组件字典列表持久化（跨平台通用），发送时重建 MessageChain，无法重建时降级为纯文本；群间发送间隔可配置（默认随机 1-3 秒）
 - 配置项新增：`dsgg_enabled`、`dsgg_platforms`、`dsgg_exclude_platforms`、`disable_gids`、`dsgg_send_interval`，均可通过 AstrBot 设置界面配置
 - 版本号 bump 至 2.10.0
-
-## [2.10.1] - 2026-08-10
-
-### Fixed
-- `/狐狸菜单`、`/狐狸记录 帮助` 帮助文本未包含广告助手指令，现补充「📢 广告助手」章节，与 README 指令文档对齐
-- 版本号 bump 至 2.10.1
 
 ## [2.9.0] - 2026-08-10
 
