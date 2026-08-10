@@ -32,6 +32,7 @@ from .fox_toolbox.serializer import (
     extract_media_url as serializer_extract_media_url,
 )
 from .fox_toolbox.platform_adapter import get_adapter
+from .fox_toolbox import net_tools
 from .fox_toolbox.web_api import register_all_web_apis, cleanup_expired_tasks
 from .fox_toolbox.snapshot_renderer import render_snapshot, _to_int
 
@@ -898,6 +899,13 @@ class MessageRecorder(Star, AfdianFeature):
 [管理员] /查询发电 [用户ID] - 查询收到的赞助记录（支持 /查询赞助）
 [管理员] /开启发电通知 - 在当前会话接收爱发电订单通知
 
+🛠 网络工具:
+/狐狸工具 请求 <url> [-X 方法] [-H '头'] [-d 数据] [-b cookie] - 发送 HTTP 请求
+/狐狸工具 url检测 <url> - 检测状态码/耗时/重定向/响应头
+/狐狸工具 测速 <url> [秒数] - 下载速率测试
+/狐狸工具 ping <主机> [次数] - 延迟与丢包测试
+/狐狸工具 帮助 - 显示网络工具指令说明
+
 🆘 帮助:
 /狐狸菜单 - 查看全部指令说明
 /狐狸记录 帮助 - 查看全部指令说明
@@ -1198,3 +1206,181 @@ class MessageRecorder(Star, AfdianFeature):
             return
         msg = await self.afdian_add_notice_session(event, umo)
         yield event.plain_result(msg)
+
+    # ========== 网络工具（狐狸工具） ==========
+    @filter.command_group("狐狸工具", alias={"fox_tool", "net_tool"})
+    def fox_tool():
+        pass
+
+    def _net_tool_check(self, event) -> bool:
+        return self.config.get("enable_commands", True)
+
+    async def _summarize_or_raw(self, body: bytes, status_code: int, session_id: str) -> str:
+        """LLM 总结长响应，失败时降级为截断原文。"""
+        if len(body) < 100:
+            return f"请求成功 (状态码: {status_code})\n响应内容:\n{body.decode('utf-8', 'replace')}"
+        try:
+            provider = self.context.get_using_provider()
+            if provider is None:
+                raise RuntimeError("未配置 LLM Provider")
+            prompt = (
+                "你是一个专业的 API 响应分析工具。请对以下 API 响应内容进行简洁清晰的总结，"
+                "包括返回的主要数据内容及其含义。请使用中文回答，保持专业、简洁。\n\n"
+                f"API响应内容:\n```\n{body.decode('utf-8', 'replace')[:8000]}\n```"
+            )
+            resp = await provider.text_chat(
+                prompt=prompt,
+                session_id=f"{session_id}_http_summary",
+            )
+            return f"请求成功 (状态码: {status_code})\n\n响应内容总结:\n{resp.completion_text}"
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[FoxTool] LLM 总结失败，降级为原文: {e}")
+            text = body.decode("utf-8", "replace")
+            truncated = text[:1500] + ("...(内容过长已截断)" if len(text) > 1500 else "")
+            return f"请求成功 (状态码: {status_code})\n响应内容:\n{truncated}"
+
+    @fox_tool.command("请求", alias={"请求json", "http"})
+    async def cmd_net_request(self, event: AstrMessageEvent, *args):
+        """请求 - 发送各类 HTTP 请求（类 curl 格式）"""
+        if not self._net_tool_check(event):
+            return
+        command = " ".join(args)
+        if not command.strip():
+            yield event.plain_result("用法: /狐狸工具 请求 <url> [-X 方法] [-H '键: 值'] [-d 数据] [-b cookie]")
+            return
+        try:
+            parsed = net_tools.parse_curl_like(command)
+            if not parsed["url"]:
+                yield event.plain_result("无法解析 URL，请检查格式")
+                return
+            method = parsed["method"] or ("POST" if parsed["data"] is not None else "GET")
+            result = await net_tools.send_http_request(
+                url=parsed["url"],
+                method=method,
+                headers=parsed["headers"] or None,
+                data=parsed["data"],
+                cookies=parsed["cookies"] or None,
+            )
+        except net_tools.ValidationError as e:
+            yield event.plain_result(f"参数错误: {e}")
+            return
+        except Exception as e:  # noqa: BLE001
+            yield event.plain_result(f"请求失败: {e}")
+            return
+        if not result.get("success"):
+            yield event.plain_result(
+                f"请求失败 (状态码: {result.get('status_code')}): {result.get('message')}"
+            )
+            return
+        body = result["body"]
+        text = await self._summarize_or_raw(body, result["status_code"], event.session_id)
+        yield event.plain_result(text)
+
+    @fox_tool.command("url检测", alias={"urldetect", "urlcheck"})
+    async def cmd_net_url_check(self, event: AstrMessageEvent, url: str):
+        """url检测 - 检测 URL 状态码、耗时、重定向链与响应头"""
+        if not self._net_tool_check(event):
+            return
+        try:
+            result = await net_tools.url_check(url)
+        except net_tools.ValidationError as e:
+            yield event.plain_result(f"参数错误: {e}")
+            return
+        except Exception as e:  # noqa: BLE001
+            yield event.plain_result(f"检测失败: {e}")
+            return
+        if not result.get("success"):
+            yield event.plain_result(
+                f"URL 不可达 (状态码: {result.get('status_code')}): {result.get('message')}"
+            )
+            return
+        lines = [
+            f"🌐 URL 检测结果\nURL: {url}",
+            f"状态码: {result['status_code']}",
+            f"耗时: {result['duration'] * 1000:.0f} ms",
+            f"内容大小: {result['content_length'] / 1024:.1f} KB",
+        ]
+        history = result.get("history") or []
+        if history:
+            lines.append("重定向链:\n" + "\n".join(f"  -> {h}" for h in history))
+        else:
+            lines.append("重定向: 无")
+        headers = result.get("headers") or {}
+        if headers:
+            top = {k: v for k, v in list(headers.items())[:8]}
+            lines.append("响应头:\n" + "\n".join(f"  {k}: {v}" for k, v in top.items()))
+        yield event.plain_result("\n".join(lines))
+
+    @fox_tool.command("测速", alias={"speed", "speedtest"})
+    async def cmd_net_speed(self, event: AstrMessageEvent, url: str, seconds: int = 4):
+        """测速 - 对指定 URL 进行下载速率测试"""
+        if not self._net_tool_check(event):
+            return
+        seconds = max(1, min(int(seconds), 10))
+        try:
+            result = await net_tools.download_speed_test(url, seconds=seconds)
+        except net_tools.ValidationError as e:
+            yield event.plain_result(f"参数错误: {e}")
+            return
+        except Exception as e:  # noqa: BLE001
+            yield event.plain_result(f"测速失败: {e}")
+            return
+        speed = result["speed_bps"]
+        if speed >= 1024 * 1024:
+            speed_str = f"{speed / 1024 / 1024:.2f} Mbps"
+        elif speed >= 1024:
+            speed_str = f"{speed / 1024:.1f} Kbps"
+        else:
+            speed_str = f"{speed:.0f} bps"
+        yield event.plain_result(
+            f"⚡ 下载测速结果 ({url})\n"
+            f"状态码: {result['status_code']}\n"
+            f"下载量: {result['total_bytes'] / 1024:.1f} KB\n"
+            f"耗时: {result['elapsed']:.1f} s\n"
+            f"平均速率: {speed_str}"
+        )
+
+    @fox_tool.command("ping", alias={"延迟测试"})
+    async def cmd_net_ping(self, event: AstrMessageEvent, host: str, count: int = 5):
+        """ping - 测试主机连通性与延迟"""
+        if not self._net_tool_check(event):
+            return
+        try:
+            result = await net_tools.run_ping(host, count)
+        except net_tools.ValidationError as e:
+            yield event.plain_result(f"参数错误: {e}")
+            return
+        except Exception as e:  # noqa: BLE001
+            yield event.plain_result(f"ping 失败: {e}")
+            return
+        if not result.get("success"):
+            yield event.plain_result(result.get("message", "ping 失败"))
+            return
+        lines = [f"📡 Ping 结果 ({result['host']})"]
+        if result["transmitted"] is not None:
+            lines.append(f"发包/收包: {result['transmitted']}/{result['received']}")
+        if result["loss"] is not None:
+            lines.append(f"丢包率: {result['loss']}%")
+        if result["rtt_avg"] is not None:
+            lines.append(
+                f"延迟: 平均 {result['rtt_avg']}ms / 最小 {result['rtt_min']}ms / 最大 {result['rtt_max']}ms"
+            )
+        if result.get("error"):
+            lines.append(f"错误: {result['error']}")
+        yield event.plain_result("\n".join(lines))
+
+    @fox_tool.command("帮助", alias={"help", "菜单"})
+    async def cmd_net_help(self, event: AstrMessageEvent):
+        """狐狸工具帮助"""
+        if not self._net_tool_check(event):
+            return
+        yield event.plain_result(
+            "🛠 狐狸工具 可用指令\n"
+            "/狐狸工具 请求 <url> [-X 方法] [-H '头'] [-d 数据] [-b cookie] - 发送 HTTP 请求\n"
+            "  例: /狐狸工具 请求 https://api.x.com -X POST -H 'Content-Type: application/json' -d '{\"a\":1}'\n"
+            "/狐狸工具 url检测 <url> - 检测状态码/耗时/重定向/响应头\n"
+            "/狐狸工具 测速 <url> [秒数] - 下载速率测试\n"
+            "/狐狸工具 ping <主机> [次数] - 延迟与丢包测试\n"
+            "/狐狸工具 帮助 - 显示本帮助\n"
+            "支持方法: GET/POST/PUT/DELETE/PATCH/HEAD/OPTIONS"
+        )
