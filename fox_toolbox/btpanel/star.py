@@ -107,7 +107,10 @@ class BtpanelFeature:
                             "请确认地址与 API 密钥是否正确"
                         )
         except aiohttp.ClientError as e:
-            raise BtpanelError(f"请求宝塔面板失败：{e}")
+            raise BtpanelError(
+                f"请求宝塔面板失败：{e}。请确认 btpanel_url 填写完整地址（含端口，"
+                "如 https://面板IP:8888），并已在面板「设置 → API 接口」开启接口、放行本机 IP"
+            )
         if isinstance(payload, dict) and payload.get("status") is False:
             raise BtpanelError(str(payload.get("msg") or "宝塔 API 请求失败"))
         return payload
