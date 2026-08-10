@@ -27,7 +27,7 @@ class AfdianConfig:
     # ---- webhook 配置 ----
     @property
     def webhook_host(self) -> str:
-        return str(self._cfg.get("afdian_webhook_host", "0.0.0.0"))
+        return str(self._cfg.get("afdian_webhook_host", "127.0.0.1"))
 
     @property
     def webhook_port(self) -> int:

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.4] - 2026-08-10
+
+### Security
+- 爱发电 Webhook 默认仅监听本机地址，非本机监听地址必须配置校验令牌
+- 爱发电 Webhook 日志改为记录脱敏订单摘要，避免写入完整订单隐私数据
+- 宝塔 API HTTPS 请求恢复默认 TLS 证书校验
+- 同步主插件版本号至 3.0.4
+
 ## [3.0.3] - 2026-08-10
 
 ### Changed

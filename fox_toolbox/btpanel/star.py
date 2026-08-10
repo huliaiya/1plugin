@@ -97,7 +97,6 @@ class BtpanelFeature:
                     url + path,
                     data=form,
                     headers=headers,
-                    ssl=False,
                 ) as resp:
                     try:
                         payload = await resp.json()

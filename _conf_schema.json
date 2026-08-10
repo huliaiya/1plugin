@@ -117,8 +117,8 @@
   "afdian_webhook_host": {
     "type": "string",
     "description": "爱发电 Webhook 监听地址",
-    "default": "0.0.0.0",
-    "hint": "默认 0.0.0.0 表示监听所有，一般保持默认"
+    "default": "127.0.0.1",
+    "hint": "默认仅监听本机；需要公网回调时填写 0.0.0.0，并务必配置 afdian_webhook_token"
   },
   "afdian_webhook_port": {
     "type": "int",

@@ -67,11 +67,19 @@ class AfdianWebhookServer:
             return web.json_response({"ec": 403, "em": "forbidden"}, status=403)
         try:
             data = await request.json()
-            logger.info(f"[Afdian] 收到爱发电订单通知：{json.dumps(data, ensure_ascii=False)}")
             order_info = data.get("data", {}).get("order", {})
             if not order_info:
                 logger.warning("[Afdian] 未找到订单信息")
                 return web.json_response({"ec": 200, "em": "无订单"})
+
+            logger.info(
+                "[Afdian] 收到订单通知：out_trade_no=%s, user_id=%s, sku_count=%s",
+                order_info.get("out_trade_no", ""),
+                order_info.get("user_id", ""),
+                len(order_info.get("sku_detail", []))
+                if isinstance(order_info.get("sku_detail"), list)
+                else 0,
+            )
 
             await self.handle_order(order_info)
             resp = {"ec": 200, "em": ""}
@@ -124,6 +132,13 @@ class AfdianWebhookServer:
         if self._started:
             logger.warning("[Afdian] Webhook 已经启动，无需重复绑定")
             return True
+
+        if self.host not in {"127.0.0.1", "::1", "localhost"} and not self._token:
+            logger.error(
+                "[Afdian] 拒绝在非本机地址启动未配置令牌的 Webhook，"
+                "请配置 afdian_webhook_token"
+            )
+            return False
 
         if self.runner or self.site:
             await self.stop()

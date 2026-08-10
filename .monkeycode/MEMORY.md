@@ -66,3 +66,9 @@ Entries discovered by the Agent during task execution should follow this format:
   - pyflakes 命令：`python3 -m pyflakes fox_toolbox/ main.py tests/`
   - vulture 报的 `__aexit__(*exc)`、mock `execute(*a, **k)`、redis `set(ex=None)` 参数是协议/API 兼容性必需，属误报，不要改
   - serializer.py 的 `MEDIA_COMPONENT_TYPES`/`COMPONENT_TYPE_MEDIA_MAP`/`ALL_KNOWN_COMPONENT_TYPES` 被 tests/test_serializer.py 引用，属公共常量，勿删
+
+[User Instruction Summary]
+- Date: 2026-08-10
+- Context: 用户要求全面检查插件目录并处理无用目录
+- Instructions:
+  - 判断插件目录是否无用后，删除前必须先向用户确认；未确认时只做检查和报告
