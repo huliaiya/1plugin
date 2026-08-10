@@ -10,7 +10,9 @@ import pytest
 
 from astrbot_plugin_fox_toolbox.fox_toolbox.web_api import (
     _export_db,
+    _export_sql,
     _import_zip_package,
+    _convert_sql_to_db,
     _iter_db_records,
 )
 
@@ -181,3 +183,39 @@ class TestSqliteBackup:
             conn.execute("CREATE TABLE other (id INTEGER)")
         with pytest.raises(ValueError, match="缺少 messages 表"):
             list(_iter_db_records(str(path)))
+
+    @pytest.mark.asyncio
+    async def test_export_sql_round_trip(self, tmp_path):
+        from astrbot_plugin_fox_toolbox.fox_toolbox.models import MessageRecord, QueryFilter
+
+        record = MessageRecord(
+            id=8,
+            platform="discord",
+            message_id="m-8",
+            sender_id="u-8",
+            message_type="group",
+            message_str="O'Reilly",
+            timestamp=1700000000000,
+            created_at=1700000000000,
+        )
+        task = {"filter": {}, "actual_count": 0}
+        path = await _export_sql(
+            "export_sql_test", _FakeDb([record]), QueryFilter(), tmp_path, task
+        )
+        assert path.suffix == ".sql"
+        converted = _convert_sql_to_db(str(path))
+        rows = list(_iter_db_records(converted))
+        assert task["actual_count"] == 1
+        assert rows[0]["message_str"] == "O'Reilly"
+
+    def test_sql_import_rejects_untrusted_statement(self, tmp_path):
+        path = tmp_path / "unsafe.sql"
+        path.write_text("CREATE TABLE messages (platform TEXT); DROP TABLE messages;", encoding="utf-8")
+        with pytest.raises(Exception):
+            _convert_sql_to_db(str(path))
+
+    def test_sql_import_requires_complete_statement(self, tmp_path):
+        path = tmp_path / "incomplete.sql"
+        path.write_text("CREATE TABLE messages (platform TEXT)", encoding="utf-8")
+        with pytest.raises(ValueError, match="缺少分号"):
+            _convert_sql_to_db(str(path))

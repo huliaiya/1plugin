@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-08-10
+
+### Added
+- **WebUI 备份导入导出新增 SQL 格式**：支持 `.sql` SQLite 文本备份的导出、普通上传和分片上传
+- SQL 导入执行受控语句校验，仅允许插件消息备份结构，完成完整性检查后流式导入 `messages` 表
+- **版本号进位**：`2.12.0` 按项目版本规则进位为 `3.0.0`
+
 ## [2.12.0] - 2026-08-10
 
 ### Added

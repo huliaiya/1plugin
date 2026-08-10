@@ -9,6 +9,7 @@ import uuid
 import shutil
 import asyncio
 import zipfile
+import re
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any
@@ -52,7 +53,7 @@ MAX_IMPORT_MEDIA_FILES = 10000
 MAX_EXPORT_FILE_AGE = 3600
 MAX_DOWNLOAD_DATA_SIZE = 50 * 1024 * 1024
 MAX_STATS_LIMIT = 200
-ALLOWED_IMPORT_EXTENSIONS = {".json", ".csv", ".zip", ".db"}
+ALLOWED_IMPORT_EXTENSIONS = {".json", ".csv", ".zip", ".db", ".sql"}
 CHUNK_SIZE = 5 * 1024 * 1024
 CHUNK_SESSION_MAX_AGE = 3600
 MAX_CHUNK_SESSIONS = 20
@@ -419,7 +420,7 @@ def _build_query_filter_from_dict(data: Dict[str, Any]) -> QueryFilter:
 
 
 def _estimate_size(count: int, format_type: str) -> str:
-    avg_size_per_record = {"json": 500, "csv": 200, "txt": 150, "db": 350}
+    avg_size_per_record = {"json": 500, "csv": 200, "txt": 150, "db": 350, "sql": 550}
     estimated_bytes = count * avg_size_per_record.get(format_type, 500)
     if estimated_bytes < 1024:
         return f"{estimated_bytes} B"
@@ -794,7 +795,7 @@ async def register_all_web_apis(context, db: Database):
         ext = "zip" if format_type == "json" and task.get("options", {}).get("include_media") else format_type
         timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime(completed_at))
         filename = f"messages_export_{timestamp}.{ext}"
-        mime_types = {"json": "application/json", "csv": "text/csv", "txt": "text/plain", "db": "application/vnd.sqlite3", "zip": "application/zip"}
+        mime_types = {"json": "application/json", "csv": "text/csv", "txt": "text/plain", "db": "application/vnd.sqlite3", "sql": "application/sql", "zip": "application/zip"}
         mimetype = mime_types.get(ext, "application/octet-stream")
         response = await _send_attachment(file_path, filename, mimetype)
         response.timeout = None
@@ -824,7 +825,7 @@ async def register_all_web_apis(context, db: Database):
         ext = "zip" if format_type == "json" and task.get("options", {}).get("include_media") else format_type
         timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime(completed_at))
         filename = f"messages_export_{timestamp}.{ext}"
-        mime_types = {"json": "application/json", "csv": "text/csv", "txt": "text/plain", "db": "application/vnd.sqlite3", "zip": "application/zip"}
+        mime_types = {"json": "application/json", "csv": "text/csv", "txt": "text/plain", "db": "application/vnd.sqlite3", "sql": "application/sql", "zip": "application/zip"}
         mimetype = mime_types.get(ext, "application/octet-stream")
         file_size = os.path.getsize(file_path)
         if file_size > MAX_DOWNLOAD_DATA_SIZE:
@@ -1311,7 +1312,7 @@ async def _execute_export_task(task_id: str, db: Database, query_filter: QueryFi
     if not task:
         return
 
-    VALID_FORMATS = {"json", "csv", "txt", "db"}
+    VALID_FORMATS = {"json", "csv", "txt", "db", "sql"}
     if format_type not in VALID_FORMATS:
         task["status"] = "failed"
         task["error"] = f"不支持的导出格式: {format_type}"
@@ -1337,6 +1338,8 @@ async def _execute_export_task(task_id: str, db: Database, query_filter: QueryFi
             file_path = await _export_txt(task_id, db, query_filter, export_dir, task)
         elif format_type == "db":
             file_path = await _export_db(task_id, db, query_filter, export_dir, task)
+        elif format_type == "sql":
+            file_path = await _export_sql(task_id, db, query_filter, export_dir, task)
 
         task["status"] = "completed"
         task["file_path"] = str(file_path)
@@ -1681,6 +1684,57 @@ async def _export_db(task_id, db, query_filter, export_dir, task):
     return file_path
 
 
+def _sql_literal(value):
+    if value is None:
+        return "NULL"
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+async def _export_sql(task_id, db, query_filter, export_dir, task):
+    """导出为 SQLite 可执行的 SQL 文本备份。"""
+    file_path = export_dir / f"{task_id}.sql"
+    columns = [
+        "id", "platform", "message_id", "session_id", "group_id", "channel_id",
+        "sender_id", "sender_name", "message_type", "message_str", "message_chain",
+        "raw_message", "reply_to_id", "content_hash", "content_types", "timestamp",
+        "created_at",
+    ]
+    create_sql = (
+        "CREATE TABLE IF NOT EXISTS messages ("
+        "id INTEGER, platform TEXT NOT NULL, message_id TEXT, session_id TEXT, "
+        "group_id TEXT, channel_id TEXT, sender_id TEXT NOT NULL, sender_name TEXT, "
+        "message_type TEXT NOT NULL, message_str TEXT, message_chain TEXT, raw_message TEXT, "
+        "reply_to_id TEXT, content_hash TEXT, content_types TEXT, timestamp INTEGER NOT NULL, "
+        "created_at INTEGER NOT NULL);"
+    )
+    with file_path.open("w", encoding="utf-8") as f:
+        f.write("-- Fox Toolbox SQLite SQL backup\n")
+        f.write("PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\n")
+        f.write(create_sql + "\n")
+        f.write("CREATE TABLE IF NOT EXISTS export_info (key TEXT PRIMARY KEY, value TEXT NOT NULL);\n")
+        f.write(
+            "INSERT OR REPLACE INTO export_info(key, value) VALUES "
+            f"('format', 'astrbot_plugin_fox_toolbox'), ('schema_version', '{SCHEMA_VERSION}');\n"
+        )
+        count = 0
+        async for msg in db.query_messages_batch(query_filter):
+            values = [getattr(msg, column, None) for column in columns]
+            literals = ", ".join(_sql_literal(value) for value in values)
+            f.write(f"INSERT INTO messages ({', '.join(columns)}) VALUES ({literals});\n")
+            count += 1
+            if count % 500 == 0:
+                task["progress"] = f"已导出 {count} 条消息"
+        f.write("CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);\n")
+        f.write("CREATE INDEX IF NOT EXISTS idx_messages_platform ON messages(platform);\n")
+        f.write("COMMIT;\n")
+    task["actual_count"] = count
+    return file_path
+
+
 async def _export_with_media(task_id, db, query_filter, export_dir,
                              include_chain, include_raw, task):
     media_base = Path(get_astrbot_plugin_data_path()) / PLUGIN_DIR_NAME / "media"
@@ -1780,6 +1834,52 @@ def _iter_db_records(file_path: str):
         conn.close()
 
 
+def _convert_sql_to_db(file_path: str) -> str:
+    """将受控 SQL 备份导入临时 SQLite 文件，拒绝任意管理语句。"""
+    converted_path = f"{file_path}.converted.db"
+    conn = sqlite3.connect(converted_path)
+    try:
+        statement = ""
+        with open(file_path, encoding="utf-8") as sql_file:
+            for line in sql_file:
+                if not statement and line.lstrip().startswith("--"):
+                    continue
+                statement += line
+                if len(statement) > 64 * 1024 * 1024:
+                    raise ValueError("SQL 语句过大")
+                if sqlite3.complete_statement(statement):
+                    stripped = statement.strip()
+                    if stripped and not stripped.startswith("--"):
+                        normalized = re.sub(r"\s+", " ", stripped).upper()
+                        allowed = (
+                            normalized.startswith("PRAGMA FOREIGN_KEYS=OFF")
+                            or normalized in {"BEGIN TRANSACTION;", "COMMIT;"}
+                            or normalized.startswith("CREATE TABLE IF NOT EXISTS MESSAGES")
+                            or normalized.startswith("CREATE TABLE IF NOT EXISTS EXPORT_INFO")
+                            or normalized.startswith("INSERT OR REPLACE INTO EXPORT_INFO")
+                            or normalized.startswith("INSERT INTO MESSAGES")
+                            or normalized.startswith("CREATE INDEX IF NOT EXISTS IDX_MESSAGES_")
+                        )
+                        if not allowed:
+                            raise ValueError("SQL 备份包含不允许的语句")
+                        conn.execute(statement)
+                    statement = ""
+        if statement.strip():
+            raise ValueError("SQL 备份末尾缺少分号")
+        integrity = conn.execute("PRAGMA integrity_check").fetchone()
+        if not integrity or integrity[0] != "ok":
+            raise ValueError("无效的 SQL 备份：完整性检查失败")
+        conn.close()
+        return converted_path
+    except Exception:
+        conn.close()
+        try:
+            Path(converted_path).unlink()
+        except OSError:
+            pass
+        raise
+
+
 async def _execute_import_task(task_id: str, db: Database, file_path: str, mode: str):
     MAX_FIELD_LENGTH = 65535
     VALID_MESSAGE_TYPES = {"group", "private", "channel", "forum"}
@@ -1876,6 +1976,9 @@ async def _execute_import_task(task_id: str, db: Database, file_path: str, mode:
             records = _iter_csv_records(file_path)
         elif file_ext == ".db":
             records = _iter_db_records(file_path)
+        elif file_ext == ".sql":
+            converted_path = await asyncio.to_thread(_convert_sql_to_db, file_path)
+            records = _iter_db_records(converted_path)
         else:
             task["status"] = "failed"
             task["error"] = "不支持的文件格式"
@@ -1980,6 +2083,8 @@ async def _execute_import_task(task_id: str, db: Database, file_path: str, mode:
         task["media_restored"] = media_restored
         task["completed_at"] = time.time()
         await _safe_remove_file(file_path)
+        if file_ext == ".sql":
+            await _safe_remove_file(f"{file_path}.converted.db")
 
         logger.info(f"[FoxToolbox Web] 导入任务 {task_id} 完成: 导入 {imported}, 跳过 {skipped}, 错误 {errors}")
     except Exception as e:
@@ -1988,6 +2093,8 @@ async def _execute_import_task(task_id: str, db: Database, file_path: str, mode:
         task["error"] = str(e)
         task["completed_at"] = time.time()
         await _safe_remove_file(file_path)
+        if Path(file_path).suffix.lower() == ".sql":
+            await _safe_remove_file(f"{file_path}.converted.db")
 
 
 def _import_zip_package(file_path: str) -> tuple:
