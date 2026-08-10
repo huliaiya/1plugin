@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1] - 2026-08-10
+
+### Changed
+- 调整 WebUI 仪表盘图表顺序，将“消息内容类型分布”放置到“平台分布”正下方
+- 版本号 bump 至 3.0.1
+
 ## [3.0.0] - 2026-08-10
 
 ### Added
