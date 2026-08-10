@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.11.2] - 2026-08-10
+
+### Fixed
+- 按发送者和会话隔离广告录入等待器，避免同一群多人同时添加广告时互相覆盖。
+- 拒绝空消息链广告，避免定时广播发送空内容。
+
+## [2.11.1] - 2026-08-10
+
+### Fixed
+- 优化广告添加指令，支持 `/添加广告 广告内容` 直接添加文字广告，并保留下一条消息录入模式；增加 `/加广告` 和 `/新增广告` 别名。
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

@@ -922,7 +922,7 @@ class MessageRecorder(Star, AfdianFeature, DsggFeature, BtpanelFeature):
 /开启广告 [序号] - 当前群接收广告（管理员可传序号，别名 /开广告）
 /关闭广告 [序号] - 当前群停止接收广告（别名 /关广告）
 [管理员] /广告群列表 - 查看已接入群聊及广告状态
-[管理员] /添加广告 - 30秒内发送广告内容（发「取消」中止）
+[管理员] /添加广告 [广告内容] - 可直接添加文字，也可在30秒内发送广告内容（发「取消」中止）；别名 /加广告、/新增广告
 [管理员] /广告列表 - 列出所有广告
 [管理员] /查看广告 <ID> - 查看并预览指定广告
 [管理员] /删除广告 <ID> - 删除指定广告
@@ -1454,38 +1454,73 @@ class MessageRecorder(Star, AfdianFeature, DsggFeature, BtpanelFeature):
         yield event.plain_result(self.dsgg_group_list())
 
     @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("添加广告")
-    async def cmd_dsgg_add_ad(self, event: AstrMessageEvent):
-        """添加广告 - 发送指令后 30 秒内发送要添加的广告内容"""
+    @filter.command("添加广告", alias={"加广告", "新增广告"})
+    async def cmd_dsgg_add_ad(
+        self, event: AstrMessageEvent, ad_text: str = ""
+    ):
+        """添加广告 - 支持直接带文本，也支持等待下一条消息"""
+        direct_text = self._dsgg_extract_direct_text(event, ad_text)
+        if direct_text:
+            ad_id = self._dsgg_add_ad(
+                [{"type": "Plain", "text": direct_text}], direct_text
+            )
+            yield event.plain_result(f"广告内容已添加，ID: {ad_id}")
+            event.stop_event()
+            return
+
         yield event.plain_result("请30秒内发送要添加的广告内容（发送「取消」可中止）")
         try:
             from astrbot.core.utils.session_waiter import (  # noqa: PLC0415
                 session_waiter,
                 SessionController,
+                SessionFilter,
             )
         except Exception as e:
             logger.warning(f"[Dsgg] 会话等待模块不可用: {e}")
             yield event.plain_result("添加广告失败：会话等待模块不可用")
             return
 
+        class AdSessionFilter(SessionFilter):
+            def filter(self, waiting_event: AstrMessageEvent) -> str:
+                sender_id = ""
+                get_sender_id = getattr(waiting_event, "get_sender_id", None)
+                if callable(get_sender_id):
+                    try:
+                        sender_id = str(get_sender_id() or "")
+                    except Exception:
+                        sender_id = ""
+                if not sender_id:
+                    sender = getattr(
+                        getattr(waiting_event, "message_obj", None), "sender", None
+                    )
+                    sender_id = str(getattr(sender, "user_id", "") or "")
+                return f"{waiting_event.unified_msg_origin}:{sender_id}"
+
         @session_waiter(timeout=30, record_history_chains=True)  # type: ignore
         async def wait_for_ad_content(
             controller: SessionController, event: AstrMessageEvent
         ):
-            if event.message_str == "取消":
+            content_text = (event.message_str or "").strip()
+            if content_text == "取消":
                 await event.send(event.make_result().message("已取消添加广告"))
                 controller.stop()
+                return
+            if not content_text and not getattr(event.message_obj, "message", None):
+                await event.send(event.make_result().message("广告内容不能为空，请重新发送"))
                 return
             try:
                 chain_data = serialize_message_chain(event.message_obj.message)
             except Exception:
                 chain_data = []
-            ad_id = self._dsgg_add_ad(chain_data, event.message_str or "")
+            if not content_text and not chain_data:
+                await event.send(event.make_result().message("广告内容不能为空，请重新发送"))
+                return
+            ad_id = self._dsgg_add_ad(chain_data, content_text)
             await event.send(event.make_result().message(f"广告内容已添加，ID: {ad_id}"))
             controller.stop()
 
         try:
-            await wait_for_ad_content(event)
+            await wait_for_ad_content(event, session_filter=AdSessionFilter())
         except TimeoutError:
             yield event.plain_result("等待超时！")
         except Exception as e:
@@ -1493,6 +1528,20 @@ class MessageRecorder(Star, AfdianFeature, DsggFeature, BtpanelFeature):
             yield event.plain_result(f"添加广告失败：{e}")
         finally:
             event.stop_event()
+
+    @staticmethod
+    def _dsgg_extract_direct_text(event: AstrMessageEvent, parsed_text: str = "") -> str:
+        """兼容不同 AstrBot 版本，提取命令后的完整文本参数。"""
+        parsed_text = (parsed_text or "").strip()
+        raw_text = (getattr(event, "message_str", "") or "").strip()
+        command_names = ("/添加广告", "添加广告", "/加广告", "加广告", "/新增广告", "新增广告")
+        for command_name in command_names:
+            if raw_text == command_name:
+                return parsed_text
+            prefix = f"{command_name} "
+            if raw_text.startswith(prefix):
+                return raw_text[len(prefix):].strip()
+        return parsed_text
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("删除广告")
