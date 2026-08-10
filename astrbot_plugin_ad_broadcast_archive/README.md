@@ -1,14 +1,14 @@
-# astrbot_plugin_ad_broadcast（广告广播助手）
+# astrbot_plugin_ad_broadcast_archive（广告广播助手归档副本）
 
 [![Version](https://img.shields.io/badge/Version-1.0.1-orange?style=for-the-badge)](README.md)
 
-独立 AstrBot 插件，多平台定时广告广播。从 [astrbot_plugin_fox_toolbox](https://github.com/huliaiya/1plugin) 的广告助手（DsggFeature）抽离而来，解决了原版插件在 Telegram 上因访问 `event.bot` 抛 `AttributeError` 导致无法添加广告的问题。
+狐狸插件内置广告助手的历史归档副本，保留独立运行所需的实现，供代码追溯和兼容性参考。正式功能请使用狐狸插件内置的广告助手。
 
 ## 版本记录
 
 ### 1.0.1
 
-- 同步独立插件版本号与 README 版本标识。
+- 重命名为 `astrbot_plugin_ad_broadcast_archive`，明确其归档副本用途。
 
 ## 功能特性
 
@@ -57,6 +57,8 @@
 
 ```
 <astrbot_plugin_data_path>/astrbot_plugin_ad_broadcast/
+
+该路径沿用原副本的数据目录名称，用于兼容已有归档数据。
 ├── ads.json            # 广告列表
 ├── schedule.json       # 定时广播时间点
 └── known_groups.json   # 已接入的群聊

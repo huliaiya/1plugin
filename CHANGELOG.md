@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.2] - 2026-08-10
+
+### Changed
+- 将重复的独立广告助手副本重命名为 `astrbot_plugin_ad_broadcast_archive`，明确其归档用途
+- 保留狐狸插件内置广告助手作为正式功能入口
+- 同步主插件版本号至 3.0.2
+
 ## [3.0.1] - 2026-08-10
 
 ### Changed

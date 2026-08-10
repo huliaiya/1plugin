@@ -1,4 +1,4 @@
-"""广告广播助手（astrbot_plugin_ad_broadcast）单元测试"""
+"""广告广播助手归档副本单元测试"""
 
 import asyncio
 import sys
@@ -6,8 +6,8 @@ import types
 
 import pytest
 
-import astrbot_plugin_ad_broadcast.main as ad_main
-from astrbot_plugin_ad_broadcast.main import AdBroadcastStar
+import astrbot_plugin_ad_broadcast_archive.main as ad_main
+from astrbot_plugin_ad_broadcast_archive.main import AdBroadcastStar
 
 
 @pytest.fixture(autouse=True)
@@ -21,7 +21,7 @@ def _bypass_magicmock_star():
 
     real = api_star_mod.Star
     api_star_mod.Star = _RealStar
-    import astrbot_plugin_ad_broadcast.main as m
+    import astrbot_plugin_ad_broadcast_archive.main as m
 
     bases = m.AdBroadcastStar.__bases__
     m.AdBroadcastStar.__bases__ = (_RealStar,)
