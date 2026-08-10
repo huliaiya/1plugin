@@ -1,0 +1,27 @@
+name: astrbot_plugin_ad_broadcast
+desc: 广告广播助手 - AstrBot 多平台定时广告广播插件（自动记录群聊会话，定时向群聊广播富媒体广告；复刻自狐狸插件广告助手 / astrbot_plugin_furry_dsgg）
+version: 1.0.0
+author: huli
+repo: https://github.com/huliaiya/1plugin
+display_name: 广告广播助手
+support_platforms:
+  - aiocqhttp
+  - telegram
+  - discord
+  - slack
+  - kook
+  - qq_official
+  - qq_official_webhook
+  - dingtalk
+  - lark
+  - wecom
+  - wecom_ai_bot
+  - weixin_oc
+  - weixin_official_account
+  - line
+  - misskey
+  - mattermost
+  - satori
+  - vocechat
+  - matrix
+astrbot_version: ">=4.16,<5"
