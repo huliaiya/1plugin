@@ -268,5 +268,35 @@
     "description": "Redis 缓存周期刷新间隔（秒）",
     "default": 1800,
     "hint": "每隔此周期（默认 1800 秒即 30 分钟）从数据库重建最近消息缓存并强制对齐统计缓存，避免长期增量累积导致的数据漂移"
+  },
+  "dsgg_enabled": {
+    "type": "bool",
+    "description": "是否启用广告助手功能",
+    "default": true,
+    "hint": "开启后插件会记录所有平台的群聊会话，并按设定时间点向群聊定时广播广告，支持「添加广告」「定时广告」等指令"
+  },
+  "dsgg_platforms": {
+    "type": "list",
+    "description": "参与广告广播的平台白名单",
+    "default": [],
+    "hint": "留空表示所有平台都参与广播；填写平台名（如 aiocqhttp、telegram）则仅这些平台参与"
+  },
+  "dsgg_exclude_platforms": {
+    "type": "list",
+    "description": "不参与广告广播的平台黑名单",
+    "default": [],
+    "hint": "填写平台名则这些平台不参与广告广播，其余平台正常参与"
+  },
+  "disable_gids": {
+    "type": "list",
+    "description": "不接收广告的群聊ID列表",
+    "default": [],
+    "hint": "支持两种格式：纯群ID（如 123456）表示所有平台中该群都不接收；platform:群ID（如 aiocqhttp:123456）表示仅该平台的该群不接收。可在群聊中用「/关闭广告」自动添加当前群"
+  },
+  "dsgg_send_interval": {
+    "type": "int",
+    "description": "广告群间发送间隔（秒）",
+    "default": 0,
+    "hint": "设置为 0 表示随机间隔 1-3 秒；设置为正数则按固定秒数间隔发送，避免触发平台频率限制"
   }
 }

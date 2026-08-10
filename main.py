@@ -18,6 +18,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 
 from .fox_toolbox.models import PLUGIN_DIR_NAME
 from .fox_toolbox.afdian.star import AfdianFeature
+from .fox_toolbox.dsgg.star import DsggFeature
 
 from .fox_toolbox.database import Database
 from .fox_toolbox.redis_cache import RedisCache
@@ -197,8 +198,8 @@ def _generate_message_summary(chain_data: list) -> str:
     return summary
 
 
-class MessageRecorder(Star, AfdianFeature):
-    """消息记录器插件主类（集成爱发电功能）"""
+class MessageRecorder(Star, AfdianFeature, DsggFeature):
+    """消息记录器插件主类（集成爱发电与广告助手功能）"""
 
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -218,6 +219,7 @@ class MessageRecorder(Star, AfdianFeature):
         self._init_error: Optional[str] = None
         self._tg_channel_handlers: list = []  # [(platform, handler), ...]
         self._init_afdian()
+        self._init_dsgg()
 
     async def initialize(self):
         """插件初始化"""
@@ -300,6 +302,9 @@ class MessageRecorder(Star, AfdianFeature):
         # 爱发电 Webhook 独立于消息记录初始化，失败不影响主功能
         await self.afdian_start()
 
+        # 广告助手定时广播（仅配置了定时时间点时启动）
+        await self.dsgg_start()
+
     async def _init_redis_cache(self) -> Optional[RedisCache]:
         """根据配置初始化 Redis 缓存；未启用或连接失败时返回可用的降级实例。"""
         if not self.config.get("redis_enabled", False):
@@ -372,6 +377,9 @@ class MessageRecorder(Star, AfdianFeature):
 
         # 先停止爱发电轮询/同步/Webhook，避免其在连接池关闭后继续访问
         await self.afdian_stop()
+
+        # 停止广告助手定时广播
+        await self.dsgg_stop()
 
         if self._db:
             await self._db.close()
@@ -706,6 +714,14 @@ class MessageRecorder(Star, AfdianFeature):
 
             if record_id == -1:
                 return
+
+            # 记录群聊会话，供广告助手跨平台广播使用
+            self._dsgg_record_group(
+                platform,
+                record.group_id or record.channel_id,
+                getattr(event, "unified_msg_origin", None),
+                record.message_type,
+            )
 
             content_preview = (
                 (event.message_str[:30] + "...")
@@ -1397,3 +1413,110 @@ class MessageRecorder(Star, AfdianFeature):
             "/狐狸工具 帮助 - 显示本帮助\n"
             "支持方法: GET/POST/PUT/DELETE/PATCH/HEAD/OPTIONS"
         )
+
+    # ========== 广告助手（复刻自 astrbot_plugin_furry_dsgg） ==========
+
+    @filter.command("开启广告", alias={"开广告"})
+    async def cmd_dsgg_enable(self, event: AstrMessageEvent, group_index: int | None = None):
+        """开启广告 - 当前群聊可接收来自管理员的定时广告"""
+        msg = await self.dsgg_enable_ad(event, group_index)
+        yield event.plain_result(msg)
+
+    @filter.command("关闭广告", alias={"关广告"})
+    async def cmd_dsgg_disable(self, event: AstrMessageEvent, group_index: int | None = None):
+        """关闭广告 - 当前群聊不再接收定时广告"""
+        msg = await self.dsgg_disable_ad(event, group_index)
+        yield event.plain_result(msg)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("广告群列表")
+    async def cmd_dsgg_group_list(self, event: AstrMessageEvent):
+        """广告群列表 - 查看所有已接入群聊及其广告接收状态"""
+        yield event.plain_result(self.dsgg_group_list())
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("添加广告")
+    async def cmd_dsgg_add_ad(self, event: AstrMessageEvent):
+        """添加广告 - 发送指令后 30 秒内发送要添加的广告内容"""
+        yield event.plain_result("请30秒内发送要添加的广告内容（发送「取消」可中止）")
+        try:
+            from astrbot.core.utils.session_waiter import (  # noqa: PLC0415
+                session_waiter,
+                SessionController,
+            )
+        except Exception as e:
+            logger.warning(f"[Dsgg] 会话等待模块不可用: {e}")
+            yield event.plain_result("添加广告失败：会话等待模块不可用")
+            return
+
+        @session_waiter(timeout=30, record_history_chains=True)  # type: ignore
+        async def wait_for_ad_content(
+            controller: SessionController, event: AstrMessageEvent
+        ):
+            if event.message_str == "取消":
+                await event.send(event.make_result().message("已取消添加广告"))
+                controller.stop()
+                return
+            try:
+                chain_data = serialize_message_chain(event.message_obj.message)
+            except Exception:
+                chain_data = []
+            ad_id = self._dsgg_add_ad(chain_data, event.message_str or "")
+            await event.send(event.make_result().message(f"广告内容已添加，ID: {ad_id}"))
+            controller.stop()
+
+        try:
+            await wait_for_ad_content(event)
+        except TimeoutError:
+            yield event.plain_result("等待超时！")
+        except Exception as e:
+            logger.warning(f"[Dsgg] 添加广告时出错: {e}")
+            yield event.plain_result(f"添加广告失败：{e}")
+        finally:
+            event.stop_event()
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("删除广告")
+    async def cmd_dsgg_remove_ad(self, event: AstrMessageEvent, ad_id: int):
+        """删除广告 <ID> - 删除指定广告"""
+        yield event.plain_result(self.dsgg_remove_ad(ad_id))
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("广告列表")
+    async def cmd_dsgg_list_ads(self, event: AstrMessageEvent):
+        """广告列表 - 列出所有已添加的广告"""
+        yield event.plain_result(self.dsgg_list_ads())
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("查看广告")
+    async def cmd_dsgg_view_ad(self, event: AstrMessageEvent, ad_id: int):
+        """查看广告 <ID> - 查看并预览指定广告内容"""
+        ad = self.dsgg_get_ad(ad_id)
+        if ad is None:
+            yield event.plain_result(f"未找到广告 ID: {ad_id}")
+            return
+        basic = (
+            f"广告ID: {ad_id}\n"
+            f"创建时间: {ad.get('created_at', '')}\n"
+            f"内容: {self._dsgg_content_info(ad)}"
+        )
+        yield event.plain_result(basic)
+        umo = getattr(event, "unified_msg_origin", None)
+        if umo:
+            try:
+                await self.dsgg_send_ad_to(umo, ad)
+            except Exception as e:
+                logger.warning(f"[Dsgg] 预览广告发送失败: {e}")
+                yield event.plain_result("广告内容发送失败，可能包含不支持的元素")
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("定时广告")
+    async def cmd_dsgg_schedule(self, event: AstrMessageEvent, time_str: str | None = None):
+        """定时广告 <HH:MM[,HH:MM...]> - 设置定时广告发送时间"""
+        yield event.plain_result(self.dsgg_schedule(time_str))
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("停止广告")
+    async def cmd_dsgg_stop_schedule(self, event: AstrMessageEvent):
+        """停止广告 - 停止定时广告发送"""
+        yield event.plain_result(self.dsgg_stop_schedule())

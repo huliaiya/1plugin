@@ -1,6 +1,6 @@
 name: astrbot_plugin_fox_toolbox
-desc: 狐狸插件 - AstrBot 消息记录器插件（MySQL 5.7 存储），集成爱发电打赏对接（订单实时推送）
-version: 2.9.0
+desc: 狐狸插件 - AstrBot 消息记录器插件（MySQL 5.7 存储），集成爱发电打赏对接（订单实时推送）与多平台定时广告广播
+version: 2.10.0
 author: huli
 repo: https://github.com/huliaiya/1plugin/tree/main
 display_name: 狐狸插件

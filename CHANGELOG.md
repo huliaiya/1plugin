@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.0] - 2026-08-10
+
+### Added
+- **新增「广告助手」功能（多平台定时广告广播）**：复刻自 furryHM-mrz 的 astrbot_plugin_furry_dsgg（v1.0.3，AGPL-3.0），并改造为全平台通用
+  - 广播目标不再依赖 QQ 平台的群列表 API，而是自动记录插件所见过的所有群聊/频道会话（platform + group_id + unified_msg_origin），通过 `context.send_message` 向任意平台群聊发送广告
+  - 支持平台级开关：`dsgg_platforms`（白名单）与 `dsgg_exclude_platforms`（黑名单），默认全部平台参与广播
+  - `disable_gids` 群黑名单支持「群ID」（屏蔽所有平台该群）与「platform:群ID」（精确到平台）两种格式
+  - 指令：`/开启广告`、`/关闭广告`（所有人，群级开关）、`/广告群列表`、`/添加广告`（30 秒富媒体采集，支持「取消」）、`/删除广告`、`/广告列表`、`/查看广告`、`/定时广告 HH:MM[,HH:MM...]`、`/停止广告`（管理类命令）
+  - 广告内容以 AstrBot 消息组件字典列表持久化（跨平台通用），发送时重建 MessageChain，无法重建时降级为纯文本；群间发送间隔可配置（默认随机 1-3 秒）
+- 配置项新增：`dsgg_enabled`、`dsgg_platforms`、`dsgg_exclude_platforms`、`disable_gids`、`dsgg_send_interval`，均可通过 AstrBot 设置界面配置
+- 版本号 bump 至 2.10.0
+
 ## [2.9.0] - 2026-08-10
 
 ### Added
