@@ -899,7 +899,7 @@ class MessageRecorder(Star, AfdianFeature):
 [管理员] /查询发电 [用户ID] - 查询收到的赞助记录（支持 /查询赞助）
 [管理员] /开启发电通知 - 在当前会话接收爱发电订单通知
 
-🛠 网络工具:
+🛠 网络工具 (仅管理员):
 /狐狸工具 请求 <url> [-X 方法] [-H '头'] [-d 数据] [-b cookie] - 发送 HTTP 请求
 /狐狸工具 url检测 <url> - 检测状态码/耗时/重定向/响应头
 /狐狸工具 测速 <url> [秒数] - 下载速率测试
@@ -1239,6 +1239,7 @@ class MessageRecorder(Star, AfdianFeature):
             truncated = text[:1500] + ("...(内容过长已截断)" if len(text) > 1500 else "")
             return f"请求成功 (状态码: {status_code})\n响应内容:\n{truncated}"
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @fox_tool.command("请求", alias={"请求json", "http"})
     async def cmd_net_request(self, event: AstrMessageEvent, *args):
         """请求 - 发送各类 HTTP 请求（类 curl 格式）"""
@@ -1276,6 +1277,7 @@ class MessageRecorder(Star, AfdianFeature):
         text = await self._summarize_or_raw(body, result["status_code"], event.session_id)
         yield event.plain_result(text)
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @fox_tool.command("url检测", alias={"urldetect", "urlcheck"})
     async def cmd_net_url_check(self, event: AstrMessageEvent, url: str):
         """url检测 - 检测 URL 状态码、耗时、重定向链与响应头"""
@@ -1311,6 +1313,7 @@ class MessageRecorder(Star, AfdianFeature):
             lines.append("响应头:\n" + "\n".join(f"  {k}: {v}" for k, v in top.items()))
         yield event.plain_result("\n".join(lines))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @fox_tool.command("测速", alias={"speed", "speedtest"})
     async def cmd_net_speed(self, event: AstrMessageEvent, url: str, seconds: int = 4):
         """测速 - 对指定 URL 进行下载速率测试"""
@@ -1340,6 +1343,7 @@ class MessageRecorder(Star, AfdianFeature):
             f"平均速率: {speed_str}"
         )
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @fox_tool.command("ping", alias={"延迟测试"})
     async def cmd_net_ping(self, event: AstrMessageEvent, host: str, count: int = 5):
         """ping - 测试主机连通性与延迟"""
@@ -1369,13 +1373,14 @@ class MessageRecorder(Star, AfdianFeature):
             lines.append(f"错误: {result['error']}")
         yield event.plain_result("\n".join(lines))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @fox_tool.command("帮助", alias={"help", "菜单"})
     async def cmd_net_help(self, event: AstrMessageEvent):
         """狐狸工具帮助"""
         if not self._net_tool_check(event):
             return
         yield event.plain_result(
-            "🛠 狐狸工具 可用指令\n"
+            "🛠 狐狸工具 可用指令（仅管理员）\n"
             "/狐狸工具 请求 <url> [-X 方法] [-H '头'] [-d 数据] [-b cookie] - 发送 HTTP 请求\n"
             "  例: /狐狸工具 请求 https://api.x.com -X POST -H 'Content-Type: application/json' -d '{\"a\":1}'\n"
             "/狐狸工具 url检测 <url> - 检测状态码/耗时/重定向/响应头\n"

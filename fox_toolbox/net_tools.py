@@ -10,13 +10,16 @@ import re
 import shlex
 import time
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import aiohttp
+
+from .media_downloader import _is_safe_url
 
 MAX_RESPONSE_SIZE = 10 * 1024 * 1024  # 10 MB
 DEFAULT_TIMEOUT = 15  # 秒
 MAX_RETRIES = 2
+MAX_REDIRECTS = 10
 SPEED_CHUNK = 64 * 1024
 PING_COUNT_DEFAULT = 5
 PING_COUNT_MAX = 20
@@ -28,7 +31,11 @@ class ValidationError(ValueError):
 
 
 def validate_url(url: str) -> str:
-    """校验并规范化 URL，限制为 http/https 且必须包含主机名。"""
+    """校验并规范化 URL，限制为 http/https 且必须包含主机名。
+
+    复用 media_downloader 的 SSRF 防护：拒绝指向本地/内网地址的目标，
+    防止聊天用户诱导机器人访问内网服务或云元数据地址。
+    """
     if not url or len(url) > 2048:
         raise ValidationError("URL 为空或过长")
     parsed = urlparse(url)
@@ -36,6 +43,8 @@ def validate_url(url: str) -> str:
         raise ValidationError("仅支持 http/https 协议")
     if not parsed.hostname:
         raise ValidationError("URL 缺少主机名")
+    if not _is_safe_url(url):
+        raise ValidationError("URL 指向本地/内网地址，已被 SSRF 防护拒绝")
     return url
 
 
@@ -117,40 +126,76 @@ async def send_http_request(
                     kwargs["json"] = data
                 elif data is not None:
                     kwargs["data"] = data
-                async with session.request(method, url, **kwargs) as resp:
-                    duration = time.perf_counter() - started
-                    cl = resp.headers.get("Content-Length")
-                    if cl and int(cl) > MAX_RESPONSE_SIZE:
+                history: List[str] = []
+                current_url = url
+                # 手动逐跳处理重定向，每跳重新做 SSRF 校验，防止重定向到
+                # 内网/云元数据地址绕过 validate_url 的初始检查
+                while True:
+                    async with session.request(
+                        method, current_url, allow_redirects=False, **kwargs
+                    ) as resp:
+                        if resp.status in (301, 302, 303, 307, 308):
+                            location = resp.headers.get("Location")
+                            history.append(str(resp.url))
+                            if not location:
+                                return {
+                                    "success": False,
+                                    "status_code": resp.status,
+                                    "message": "重定向响应缺少 Location 头",
+                                }
+                            next_url = urljoin(str(resp.url), location)
+                            if not _is_safe_url(next_url):
+                                return {
+                                    "success": False,
+                                    "status_code": resp.status,
+                                    "message": "重定向目标被 SSRF 防护拒绝",
+                                }
+                            if len(history) > MAX_REDIRECTS:
+                                return {
+                                    "success": False,
+                                    "status_code": resp.status,
+                                    "message": f"重定向次数超过 {MAX_REDIRECTS} 次上限",
+                                }
+                            current_url = next_url
+                            continue
+                        duration = time.perf_counter() - started
+                        cl = resp.headers.get("Content-Length")
+                        if cl:
+                            try:
+                                cl_int = int(cl)
+                            except ValueError:
+                                cl_int = None
+                            if cl_int and cl_int > MAX_RESPONSE_SIZE:
+                                return {
+                                    "success": False,
+                                    "status_code": resp.status,
+                                    "message": (
+                                        f"响应过大: {cl_int / 1024 / 1024:.2f}MB "
+                                        f"(上限 {MAX_RESPONSE_SIZE / 1024 / 1024}MB)"
+                                    ),
+                                }
+                        buffer = bytearray()
+                        async for chunk in resp.content.iter_chunked(8 * 1024):
+                            buffer.extend(chunk)
+                            if len(buffer) > MAX_RESPONSE_SIZE:
+                                return {
+                                    "success": False,
+                                    "status_code": resp.status,
+                                    "message": f"响应超过 {MAX_RESPONSE_SIZE / 1024 / 1024}MB 上限",
+                                }
+                        final_url = str(resp.url)
+                        headers_out = {k: v for k, v in resp.headers.items()}
+                        body = bytes(buffer)
                         return {
-                            "success": False,
+                            "success": True,
                             "status_code": resp.status,
-                            "message": (
-                                f"响应过大: {int(cl) / 1024 / 1024:.2f}MB "
-                                f"(上限 {MAX_RESPONSE_SIZE / 1024 / 1024}MB)"
-                            ),
+                            "duration": duration,
+                            "final_url": final_url,
+                            "headers": headers_out,
+                            "content_length": len(body),
+                            "body": body,
+                            "history": history,
                         }
-                    buffer = bytearray()
-                    async for chunk in resp.content.iter_chunked(8 * 1024):
-                        buffer.extend(chunk)
-                        if len(buffer) > MAX_RESPONSE_SIZE:
-                            return {
-                                "success": False,
-                                "status_code": resp.status,
-                                "message": f"响应超过 {MAX_RESPONSE_SIZE / 1024 / 1024}MB 上限",
-                            }
-                    final_url = str(resp.url)
-                    headers_out = {k: v for k, v in resp.headers.items()}
-                    body = bytes(buffer)
-                    return {
-                        "success": True,
-                        "status_code": resp.status,
-                        "duration": duration,
-                        "final_url": final_url,
-                        "headers": headers_out,
-                        "content_length": len(body),
-                        "body": body,
-                        "history": [str(h.url) for h in resp.history],
-                    }
             except (aiohttp.ClientConnectorError, aiohttp.ServerTimeoutError,
                     asyncio.TimeoutError, aiohttp.ClientPayloadError) as e:
                 last_err = e
@@ -193,15 +238,29 @@ async def download_speed_test(
     total_bytes = 0
     status_code: Optional[int] = None
     async with aiohttp.ClientSession(connector=connector, timeout=timeout_obj) as session:
-        async with session.get(url) as resp:
-            status_code = resp.status
-            deadline = started + seconds
-            async for chunk in resp.content.iter_chunked(SPEED_CHUNK):
-                if time.perf_counter() >= deadline:
-                    break
-                total_bytes += len(chunk)
-                if total_bytes > 200 * 1024 * 1024:
-                    break
+        current_url = url
+        history: List[str] = []
+        while True:
+            async with session.get(current_url, allow_redirects=False) as resp:
+                if resp.status in (301, 302, 303, 307, 308):
+                    location = resp.headers.get("Location")
+                    history.append(str(resp.url))
+                    if not location or len(history) > MAX_REDIRECTS:
+                        raise ValidationError("重定向次数过多或缺少 Location")
+                    next_url = urljoin(str(resp.url), location)
+                    if not _is_safe_url(next_url):
+                        raise ValidationError("重定向目标被 SSRF 防护拒绝")
+                    current_url = next_url
+                    continue
+                status_code = resp.status
+                deadline = started + seconds
+                async for chunk in resp.content.iter_chunked(SPEED_CHUNK):
+                    if time.perf_counter() >= deadline:
+                        break
+                    total_bytes += len(chunk)
+                    if total_bytes > 200 * 1024 * 1024:
+                        break
+                break
     elapsed = time.perf_counter() - started
     speed_bps = total_bytes * 8 / elapsed if elapsed > 0 else 0
     return {
@@ -215,8 +274,11 @@ async def download_speed_test(
 async def run_ping(host: str, count: int = PING_COUNT_DEFAULT) -> Dict[str, Any]:
     """对主机执行 ping，返回延迟与丢包统计。count 受上限约束。"""
     count = max(1, min(int(count), PING_COUNT_MAX))
-    # 仅允许主机名 / IPv4 / IPv6，不做 DNS 之外的变换
+    # 仅允许主机名 / IPv4 / IPv6，不做 DNS 之外的变换；
+    # 拒绝以 "-" 开头的值，防止被 ping 解析为选项（如 -f 洪泛）
     if not re.match(r"^[\w.\-:\[\]]+$", host) or " " in host or "&" in host or "|" in host:
+        raise ValidationError("无效的主机名")
+    if host.startswith("-"):
         raise ValidationError("无效的主机名")
     cmd = ["ping", "-c", str(count)]
     cmd.append(host)
