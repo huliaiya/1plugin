@@ -3,6 +3,7 @@
 import os
 import json
 import csv
+import sqlite3
 import time
 import uuid
 import shutil
@@ -51,7 +52,7 @@ MAX_IMPORT_MEDIA_FILES = 10000
 MAX_EXPORT_FILE_AGE = 3600
 MAX_DOWNLOAD_DATA_SIZE = 50 * 1024 * 1024
 MAX_STATS_LIMIT = 200
-ALLOWED_IMPORT_EXTENSIONS = {".json", ".csv", ".zip"}
+ALLOWED_IMPORT_EXTENSIONS = {".json", ".csv", ".zip", ".db"}
 CHUNK_SIZE = 5 * 1024 * 1024
 CHUNK_SESSION_MAX_AGE = 3600
 MAX_CHUNK_SESSIONS = 20
@@ -418,7 +419,7 @@ def _build_query_filter_from_dict(data: Dict[str, Any]) -> QueryFilter:
 
 
 def _estimate_size(count: int, format_type: str) -> str:
-    avg_size_per_record = {"json": 500, "csv": 200, "txt": 150}
+    avg_size_per_record = {"json": 500, "csv": 200, "txt": 150, "db": 350}
     estimated_bytes = count * avg_size_per_record.get(format_type, 500)
     if estimated_bytes < 1024:
         return f"{estimated_bytes} B"
@@ -793,7 +794,7 @@ async def register_all_web_apis(context, db: Database):
         ext = "zip" if format_type == "json" and task.get("options", {}).get("include_media") else format_type
         timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime(completed_at))
         filename = f"messages_export_{timestamp}.{ext}"
-        mime_types = {"json": "application/json", "csv": "text/csv", "txt": "text/plain", "zip": "application/zip"}
+        mime_types = {"json": "application/json", "csv": "text/csv", "txt": "text/plain", "db": "application/vnd.sqlite3", "zip": "application/zip"}
         mimetype = mime_types.get(ext, "application/octet-stream")
         response = await _send_attachment(file_path, filename, mimetype)
         response.timeout = None
@@ -823,7 +824,7 @@ async def register_all_web_apis(context, db: Database):
         ext = "zip" if format_type == "json" and task.get("options", {}).get("include_media") else format_type
         timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime(completed_at))
         filename = f"messages_export_{timestamp}.{ext}"
-        mime_types = {"json": "application/json", "csv": "text/csv", "txt": "text/plain", "zip": "application/zip"}
+        mime_types = {"json": "application/json", "csv": "text/csv", "txt": "text/plain", "db": "application/vnd.sqlite3", "zip": "application/zip"}
         mimetype = mime_types.get(ext, "application/octet-stream")
         file_size = os.path.getsize(file_path)
         if file_size > MAX_DOWNLOAD_DATA_SIZE:
@@ -1310,7 +1311,7 @@ async def _execute_export_task(task_id: str, db: Database, query_filter: QueryFi
     if not task:
         return
 
-    VALID_FORMATS = {"json", "csv", "txt"}
+    VALID_FORMATS = {"json", "csv", "txt", "db"}
     if format_type not in VALID_FORMATS:
         task["status"] = "failed"
         task["error"] = f"不支持的导出格式: {format_type}"
@@ -1334,6 +1335,8 @@ async def _execute_export_task(task_id: str, db: Database, query_filter: QueryFi
             file_path = await _export_csv(task_id, db, query_filter, export_dir, task)
         elif format_type == "txt":
             file_path = await _export_txt(task_id, db, query_filter, export_dir, task)
+        elif format_type == "db":
+            file_path = await _export_db(task_id, db, query_filter, export_dir, task)
 
         task["status"] = "completed"
         task["file_path"] = str(file_path)
@@ -1606,6 +1609,78 @@ async def _export_txt(task_id, db, query_filter, export_dir, task):
     return file_path
 
 
+async def _export_db(task_id, db, query_filter, export_dir, task):
+    """导出为可独立打开的 SQLite 数据库文件。"""
+    file_path = export_dir / f"{task_id}.db"
+    schema = """
+        CREATE TABLE messages (
+            id INTEGER,
+            platform TEXT NOT NULL,
+            message_id TEXT,
+            session_id TEXT,
+            group_id TEXT,
+            channel_id TEXT,
+            sender_id TEXT NOT NULL,
+            sender_name TEXT,
+            message_type TEXT NOT NULL,
+            message_str TEXT,
+            message_chain TEXT,
+            raw_message TEXT,
+            reply_to_id TEXT,
+            content_hash TEXT,
+            content_types TEXT,
+            timestamp INTEGER NOT NULL,
+            created_at INTEGER NOT NULL
+        )
+    """
+
+    def _init_file():
+        conn = sqlite3.connect(file_path, check_same_thread=False)
+        conn.execute(schema)
+        conn.execute("CREATE INDEX idx_messages_timestamp ON messages(timestamp)")
+        conn.execute("CREATE INDEX idx_messages_platform ON messages(platform)")
+        conn.execute("CREATE TABLE export_info (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        conn.executemany(
+            "INSERT INTO export_info(key, value) VALUES (?, ?)",
+            [("format", "astrbot_plugin_fox_toolbox"), ("schema_version", str(SCHEMA_VERSION))],
+        )
+        conn.commit()
+        conn.close()
+
+    def _write_batch(batch):
+        conn = sqlite3.connect(file_path)
+        conn.executemany(
+            "INSERT INTO messages VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    m.id, m.platform, m.message_id, m.session_id, m.group_id,
+                    m.channel_id, m.sender_id, m.sender_name, m.message_type,
+                    m.message_str, m.message_chain, m.raw_message, m.reply_to_id,
+                    m.content_hash, m.content_types, m.timestamp, m.created_at,
+                )
+                for m in batch
+            ],
+        )
+        conn.commit()
+        conn.close()
+
+    await asyncio.to_thread(_init_file)
+    count = 0
+    batch = []
+    async for msg in db.query_messages_batch(query_filter):
+        batch.append(msg)
+        if len(batch) >= 500:
+            await asyncio.to_thread(_write_batch, batch)
+            count += len(batch)
+            task["progress"] = f"已导出 {count} 条消息"
+            batch = []
+    if batch:
+        await asyncio.to_thread(_write_batch, batch)
+        count += len(batch)
+    task["actual_count"] = count
+    return file_path
+
+
 async def _export_with_media(task_id, db, query_filter, export_dir,
                              include_chain, include_raw, task):
     media_base = Path(get_astrbot_plugin_data_path()) / PLUGIN_DIR_NAME / "media"
@@ -1677,6 +1752,32 @@ def _iter_csv_records(file_path: str):
     """流式迭代 CSV 记录"""
     with open(file_path, encoding="utf-8", newline="") as f:
         yield from csv.DictReader(f)
+
+
+def _iter_db_records(file_path: str):
+    """只读流式迭代 SQLite 备份中的 messages 表。"""
+    uri = f"file:{Path(file_path).resolve()}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True)
+    conn.row_factory = sqlite3.Row
+    try:
+        integrity = conn.execute("PRAGMA integrity_check").fetchone()
+        if not integrity or integrity[0] != "ok":
+            raise ValueError("无效的 SQLite 备份：完整性检查失败")
+        columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(messages)").fetchall()
+        }
+        required = {"platform", "sender_id", "message_type", "timestamp", "created_at"}
+        if not required.issubset(columns):
+            raise ValueError("无效的 SQLite 备份：缺少 messages 表或必要字段")
+        cursor = conn.execute("SELECT * FROM messages ORDER BY id")
+        while True:
+            rows = cursor.fetchmany(500)
+            if not rows:
+                break
+            for row in rows:
+                yield dict(row)
+    finally:
+        conn.close()
 
 
 async def _execute_import_task(task_id: str, db: Database, file_path: str, mode: str):
@@ -1773,6 +1874,8 @@ async def _execute_import_task(task_id: str, db: Database, file_path: str, mode:
             records = _iter_json_records(file_path)
         elif file_ext == ".csv":
             records = _iter_csv_records(file_path)
+        elif file_ext == ".db":
+            records = _iter_db_records(file_path)
         else:
             task["status"] = "failed"
             task["error"] = "不支持的文件格式"

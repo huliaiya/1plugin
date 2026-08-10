@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.0] - 2026-08-10
+
+### Added
+- **WebUI 数据备份新增 SQLite DB 格式**：导出为 `.db` 文件，保留消息表完整字段、索引与导出元信息，支持离线查询和跨实例迁移
+- **SQLite DB 导入**：支持 `.db` 文件上传及分片上传，执行只读完整性检查后流式导入 `messages` 表数据
+- WebUI 导入文件选择器支持 `.db` 后缀，导出格式新增 SQLite DB 选项
+- 版本号 bump 至 2.12.0
+
 ## [2.11.0] - 2026-08-10
 
 ### Added

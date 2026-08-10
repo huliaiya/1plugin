@@ -1,5 +1,5 @@
 const bridge = window.AstrBotPluginPage;
-const BUILD_VERSION = '2.4.3';
+const BUILD_VERSION = '2.12.0';
 
 let bridgeReady = false;
 let pluginContext = null;
@@ -1353,6 +1353,15 @@ function initExport() {
       document.querySelectorAll('.format-option').forEach(o => o.classList.remove('selected'));
       opt.classList.add('selected');
       selectedExportFormat = opt.dataset.format;
+      const includeMedia = document.getElementById('includeMedia');
+      if (includeMedia) {
+        const isJson = selectedExportFormat === 'json';
+        includeMedia.disabled = !isJson;
+        if (!isJson) {
+          includeMedia.checked = false;
+          document.getElementById('mediaNote').style.display = 'none';
+        }
+      }
     });
   });
 

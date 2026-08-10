@@ -2,12 +2,17 @@
 
 import io
 import json
+import sqlite3
 import zipfile
 from unittest.mock import patch
 
 import pytest
 
-from astrbot_plugin_fox_toolbox.fox_toolbox.web_api import _import_zip_package
+from astrbot_plugin_fox_toolbox.fox_toolbox.web_api import (
+    _export_db,
+    _import_zip_package,
+    _iter_db_records,
+)
 
 
 def _make_zip(
@@ -122,3 +127,57 @@ class TestImportZipPackage:
         assert records == []
         assert restored == 0
         assert not (tmp_path / "evil.txt").exists()
+
+
+class _FakeDb:
+    def __init__(self, records):
+        self.records = records
+
+    async def query_messages_batch(self, query_filter):
+        for record in self.records:
+            yield record
+
+
+class TestSqliteBackup:
+    @pytest.mark.asyncio
+    async def test_export_db_round_trip(self, tmp_path):
+        from astrbot_plugin_fox_toolbox.fox_toolbox.models import MessageRecord, QueryFilter
+
+        record = MessageRecord(
+            id=7,
+            platform="telegram",
+            message_id="m-7",
+            session_id="s-7",
+            group_id="g-7",
+            sender_id="u-7",
+            sender_name="Alice",
+            message_type="group",
+            message_str="hello",
+            message_chain='[{"type":"Plain","text":"hello"}]',
+            timestamp=1700000000000,
+            created_at=1700000000000,
+        )
+        task = {"filter": {}, "actual_count": 0}
+        path = await _export_db(
+            "export_test", _FakeDb([record]), QueryFilter(), tmp_path, task
+        )
+        assert path.suffix == ".db"
+        assert task["actual_count"] == 1
+        rows = list(_iter_db_records(str(path)))
+        assert rows[0]["platform"] == "telegram"
+        assert rows[0]["message_id"] == "m-7"
+        with sqlite3.connect(path) as conn:
+            assert conn.execute("SELECT value FROM export_info WHERE key='schema_version'").fetchone()[0]
+
+    def test_import_db_rejects_invalid_file(self, tmp_path):
+        path = tmp_path / "invalid.db"
+        path.write_bytes(b"not a sqlite database")
+        with pytest.raises(sqlite3.DatabaseError):
+            list(_iter_db_records(str(path)))
+
+    def test_import_db_requires_messages_table(self, tmp_path):
+        path = tmp_path / "missing.db"
+        with sqlite3.connect(path) as conn:
+            conn.execute("CREATE TABLE other (id INTEGER)")
+        with pytest.raises(ValueError, match="缺少 messages 表"):
+            list(_iter_db_records(str(path)))

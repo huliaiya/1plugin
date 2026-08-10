@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>狐狸插件</title>
-  <link rel="stylesheet" href="./style.css?v=2.4.3" />
+  <link rel="stylesheet" href="./style.css?v=2.12.0" />
 </head>
 <body>
   <nav class="navbar">
@@ -348,6 +348,11 @@
             <div class="format-name">TXT</div>
             <p class="format-desc">纯文本，聊天记录风格</p>
           </div>
+          <div class="format-option" data-format="db">
+            <div class="format-icon">🗄️</div>
+            <div class="format-name">SQLite DB</div>
+            <p class="format-desc">数据库备份，适合完整迁移</p>
+          </div>
         </div>
       </div>
       <div class="card">
@@ -382,9 +387,9 @@
         <div class="upload-area" id="uploadArea">
           <div class="upload-icon">📁</div>
           <p>拖拽文件到这里，或点击选择文件</p>
-          <p class="text-muted">支持 JSON、CSV、ZIP（含媒体文件包）格式，最大 4GB</p>
+          <p class="text-muted">支持 JSON、CSV、SQLite DB、ZIP（含媒体文件包）格式，最大 4GB</p>
           <p class="text-muted" style="font-size: 0.8rem;">大文件（超过 50MB）将自动使用分片上传</p>
-          <input type="file" id="importFile" accept=".json,.csv,.zip" style="display: none;">
+          <input type="file" id="importFile" accept=".json,.csv,.db,.zip" style="display: none;">
         </div>
         <div id="fileInfo" style="display: none; margin-top: 1rem;"></div>
       </div>
@@ -459,6 +464,6 @@
     </div>
   </div>
 
-  <script type="module" src="./app.js?v=0.3.2"></script>
+  <script type="module" src="./app.js?v=2.12.0"></script>
 </body>
 </html>
