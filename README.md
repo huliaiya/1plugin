@@ -5,7 +5,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E4.16%2C%3C5-blue?style=for-the-badge)](https://github.com/Soulter/astrbot)
 [![Python](https://img.shields.io/badge/Python-3.12+-green?style=for-the-badge)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.10.1-orange?style=for-the-badge)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.11.0-orange?style=for-the-badge)](CHANGELOG.md)
 
 **全平台聊天消息自动记录 | MySQL 5.7 存储 | Web 管理面板 | 全文搜索 | 插件 API**
 
@@ -42,6 +42,7 @@
 - ⚡ **Redis 缓存** — 可选接入 Redis 缓存消息统计与最近消息，减轻 WebUI 高频查询对数据库的压力；未配置或连接失败时自动降级为无缓存模式，不影响任何功能
 - ⚡ **爱发电打赏对接** — 对接爱发电平台，接受用户打赏、实时推送订单，支持生成支付链接、查询订单与赞助记录；无公网机器可启用订单轮询检测，替代 Webhook 推送（复刻自 astrbot_plugin_afdian）
 - 📢 **广告助手** — 支持全平台（默认全部平台参与）的定时广告广播：自动记录插件所见过的所有群聊，按配置的时间点随机挑选广告广播，可设置平台白名单/黑名单与群级开关（复刻自 astrbot_plugin_furry_dsgg，由 QQ 专用改为全平台通用）
+- 🗄 **宝塔面板管理** — 基于宝塔面板官方 API 的远程运维：系统状态/磁盘/内存/CPU/负载/网络流量、网站列表与启停/备份/SSL、数据库列表与备份、计划任务启停与日志、服务启停（nginx/mysqld/redis）、FTP 列表、后台任务、安全扫描与评分（复刻自 btpanel-plugin，由 Yunzai 插件改为 AstrBot 命令组）
 
 ---
 
@@ -187,6 +188,20 @@ MySQL 不可用、故障或连接中断时，插件自动降级到本地 SQLite 
 > **广告内容**：`/添加广告` 后 30 秒内发送要广播的内容（支持文字、图片等富媒体），发送「取消」可中止；`/广告列表`、`/查看广告 <ID>`、`/删除广告 <ID>` 管理已有广告。
 > **定时广播**：`/定时广告 09:00,14:30` 设置每天发送时间点（支持多个，英文逗号分隔），`/停止广告` 停止定时广播。
 > **群级开关**：任何群成员都可在群内用 `/开启广告` / `/关闭广告` 控制本群是否接收广告（`disable_gids` 同步更新）。
+
+### 宝塔面板管理（可选）
+
+通过宝塔面板官方 API 远程管理面板（复刻自 [btpanel-plugin](https://gitee.com/yll14/btpanel-plugin)）。需在宝塔「面板设置 → API 接口」中开启接口、放行机器人服务器 IP，并获取接口密钥；面板需部署在可通过网络访问的地址上。
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `btpanel_enabled` | `true` | 是否启用宝塔面板管理功能 |
+| `btpanel_url` | `` | 宝塔面板 API 地址，如 `https://127.0.0.1:8080`（支持自签证书） |
+| `btpanel_api_sk` | `` | 宝塔面板「面板设置 → API 接口」中的接口密钥 |
+
+> **查询指令**（所有人可用）：`/宝塔 系统状态`、`/宝塔 磁盘信息`、`/宝塔 内存详情`、`/宝塔 CPU详情`、`/宝塔 系统负载`、`/宝塔 网络流量`、`/宝塔 网站列表`、`/宝塔 网站SSL <域名>`、`/宝塔 数据库列表`、`/宝塔 数据库状态`、`/宝塔 MySQL配置`、`/宝塔 计划任务`、`/宝塔 任务日志 <ID>`、`/宝塔 FTP列表`、`/宝塔 后台任务`、`/宝塔 安全扫描`、`/宝塔 安全评分`。
+> **管理指令**（仅管理员）：`/宝塔 释放内存`、`/宝塔 重启面板`、`/宝塔 清理系统`、`/宝塔 服务 <重启|启动|停止|重载> <服务名>`、`/宝塔 网站开启|网站停止|网站备份 <域名>`、`/宝塔 数据库备份 <库名>`、`/宝塔 任务启用|任务暂停 <ID>`。
+> 完整清单见 `/宝塔 帮助`。
 
 ### Redis 缓存（可选）
 
@@ -352,6 +367,43 @@ Web 面板采用 **Liquid Glass** 液态玻璃设计风格，通过现代 CSS �
 > **平台过滤**：`dsgg_platforms`（白名单）与 `dsgg_exclude_platforms`（黑名单）决定哪些平台参与广播，默认全部平台参与。
 > **群级过滤**：`disable_gids` 支持纯群 ID 与 `platform:群ID` 两种格式，可精确到平台下的单个群。
 > **致谢**：广告助手复刻自 [astrbot_plugin_furry_dsgg](https://github.com/furryHM-mrz/astrbot_plugin_furry_dsgg)（作者 furryHM-mrz，AGPL-3.0），在原 QQ 平台实现基础上改造为全平台通用（通过 `unified_msg_origin` 记录会话并经 `context.send_message` 广播，不依赖 QQ 群列表 API）。
+
+## 🗄 宝塔面板指令
+
+> 需在插件配置中填写 `btpanel_url` 与 `btpanel_api_sk`（宝塔「面板设置 → API 接口」开启接口后获取）。查询指令所有人可用，管理指令仅管理员。
+
+| 指令 | 说明 | 权限 |
+|------|------|------|
+| `/宝塔 帮助` | 查看宝塔面板全部指令 | 所有人 |
+| `/宝塔 系统状态` | 查看服务器完整状态（系统/内存/CPU 汇总） | 所有人 |
+| `/宝塔 磁盘信息` | 查看磁盘分区信息 | 所有人 |
+| `/宝塔 内存详情` | 查看内存详细信息 | 所有人 |
+| `/宝塔 CPU详情` | 查看 CPU 详细信息 | 所有人 |
+| `/宝塔 系统负载` | 查看系统负载（1/5/15 分钟） | 所有人 |
+| `/宝塔 网络流量` | 查看网络流量与各网卡速率 | 所有人 |
+| `/宝塔 释放内存` | 释放系统内存缓存 | 管理员 |
+| `/宝塔 重启面板` | 重启宝塔面板服务 | 管理员 |
+| `/宝塔 清理系统` | 清理系统垃圾文件 | 管理员 |
+| `/宝塔 服务 <重启\|启动\|停止\|重载> <服务名>` | 管理服务启停，如 `/宝塔 服务 重启 nginx`（支持 nginx/mysqld/redis 等） | 管理员 |
+| `/宝塔 网站列表` | 查看所有网站 | 所有人 |
+| `/宝塔 网站开启 <域名>` | 启用指定网站 | 管理员 |
+| `/宝塔 网站停止 <域名>` | 停止指定网站 | 管理员 |
+| `/宝塔 网站备份 <域名>` | 备份指定网站 | 管理员 |
+| `/宝塔 网站SSL <域名>` | 查看网站 SSL 证书信息 | 所有人 |
+| `/宝塔 数据库列表` | 查看所有数据库 | 所有人 |
+| `/宝塔 数据库状态` | 查看 MySQL 运行状态 | 所有人 |
+| `/宝塔 MySQL配置` | 查看 MySQL 配置信息 | 所有人 |
+| `/宝塔 数据库备份 <库名>` | 备份指定数据库 | 管理员 |
+| `/宝塔 计划任务` | 查看所有计划任务 | 所有人 |
+| `/宝塔 任务启用 <ID>` | 启用指定计划任务 | 管理员 |
+| `/宝塔 任务暂停 <ID>` | 暂停指定计划任务 | 管理员 |
+| `/宝塔 任务日志 <ID>` | 查看指定计划任务日志 | 所有人 |
+| `/宝塔 FTP列表` | 查看 FTP 用户列表 | 所有人 |
+| `/宝塔 后台任务` | 查看面板后台任务队列 | 所有人 |
+| `/宝塔 安全扫描` | 查看安全扫描结果 | 所有人 |
+| `/宝塔 安全评分` | 查看安全扫描评分 | 所有人 |
+
+> **致谢**：宝塔面板管理功能复刻自 [btpanel-plugin](https://gitee.com/yll14/btpanel-plugin)（作者 桉南/yll14，MIT License），由 Yunzai-Bot 插件改为 AstrBot 命令组，命令前缀统一为 `/宝塔`。
 
 ---
 
@@ -963,6 +1015,8 @@ ruff format .
 - [astrbot_plugin_message_recorder](https://github.com/leafliber/astrbot_plugin_message_recorder) - 原项目 **消息记录器**，由 [Leafiber](https://github.com/leafliber) 开发，狐狸插件在此基础上进行存储引擎迁移和二次开发
 - [astrbot_plugin_mysql](https://github.com/Chris95743/astrbot_plugin_mysql) - 数据库表浏览 / 只读 SQL 查询的设计参考，由 [Chris95743](https://github.com/Chris95743) 开发，狐狸插件借鉴其安全校验与表浏览思路
 - [astrbot_plugin_afdian](https://github.com/Zhalslar/astrbot_plugin_afdian) - 爱发电对接功能（发电打赏 / Webhook 订单推送 / 订单与赞助查询），复刻自 [Zhalslar](https://github.com/Zhalslar) 开发的同名单体插件，狐狸插件将其集成并适配扁平配置
+- [btpanel-plugin](https://gitee.com/yll14/btpanel-plugin) - 宝塔面板运维功能（系统状态 / 网站 / 数据库 / 计划任务 / 服务启停 / 安全扫描），复刻自 [桉南/yll14](https://gitee.com/yll14) 开发的 Yunzai 插件，狐狸插件将其改为 AstrBot 命令组并适配扁平配置
+- [宝塔面板 (BT Panel)](https://www.bt.cn) - 服务器管理面板，本插件的宝塔面板管理功能基于其官方 API 实现
 - [爱发电 (AFDian)](https://afdian.com) - 创作者服务与打赏平台，本插件的发电打赏、订单推送与赞助查询均基于爱发电开放平台 API 实现，感谢官方提供稳定可靠的服务与开放接口
 - [redis-py](https://github.com/redis/redis-py) - Python 异步 Redis 客户端库，本插件的消息统计与最近消息缓存基于其 `redis.asyncio` 接口实现
 - [Redis](https://redis.io) - 高性能内存数据库，本插件可选的统计与最近消息缓存功能构建其上

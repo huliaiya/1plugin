@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.11.0] - 2026-08-10
+
+### Added
+- **新增「宝塔面板管理」功能（远程运维）**：复刻自 桉南/yll14 的 btpanel-plugin（v1.0.0，MIT），基于宝塔面板官方 API，由 Yunzai 插件改为 AstrBot 命令组（`/宝塔 <子命令>`）
+  - 系统管理：`/宝塔 系统状态`、`磁盘信息`、`内存详情`、`CPU详情`、`系统负载`、`网络流量`、`释放内存`、`重启面板`、`清理系统`、`服务 <重启|启动|停止|重载> <服务名>`
+  - 网站管理：`网站列表`、`网站开启|网站停止|网站备份 <域名>`、`网站SSL <域名>`
+  - 数据库管理：`数据库列表`、`数据库状态`、`MySQL配置`、`数据库备份 <库名>`
+  - 计划任务：`计划任务`、`任务启用|任务暂停 <ID>`、`任务日志 <ID>`
+  - 其他：`FTP列表`、`后台任务`、`安全扫描`、`安全评分`、`帮助`
+  - API 签名与原插件一致（`request_time + md5(request_time + md5(API_SK))` 表单 POST），支持自签证书
+  - 查询类指令所有人可用，写操作（服务启停、网站/数据库备份与启停、任务启停等）仅管理员
+- 配置项新增：`btpanel_enabled`、`btpanel_url`、`btpanel_api_sk`，均可通过 AstrBot 设置界面配置
+- 版本号 bump 至 2.11.0
+
 ## [2.10.0] - 2026-08-10
 
 ### Added

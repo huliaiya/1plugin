@@ -19,6 +19,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 from .fox_toolbox.models import PLUGIN_DIR_NAME
 from .fox_toolbox.afdian.star import AfdianFeature
 from .fox_toolbox.dsgg.star import DsggFeature
+from .fox_toolbox.btpanel.star import BtpanelFeature
 
 from .fox_toolbox.database import Database
 from .fox_toolbox.redis_cache import RedisCache
@@ -198,8 +199,8 @@ def _generate_message_summary(chain_data: list) -> str:
     return summary
 
 
-class MessageRecorder(Star, AfdianFeature, DsggFeature):
-    """消息记录器插件主类（集成爱发电与广告助手功能）"""
+class MessageRecorder(Star, AfdianFeature, DsggFeature, BtpanelFeature):
+    """消息记录器插件主类（集成爱发电、广告助手与宝塔面板功能）"""
 
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -220,6 +221,7 @@ class MessageRecorder(Star, AfdianFeature, DsggFeature):
         self._tg_channel_handlers: list = []  # [(platform, handler), ...]
         self._init_afdian()
         self._init_dsgg()
+        self._init_btpanel()
 
     async def initialize(self):
         """插件初始化"""
@@ -927,6 +929,12 @@ class MessageRecorder(Star, AfdianFeature, DsggFeature):
 [管理员] /定时广告 HH:MM[,HH:MM...] - 设置定时广播时间点
 [管理员] /停止广告 - 停止定时广播
 
+🗄 宝塔面板:
+/宝塔 帮助 - 查看宝塔面板全部指令
+/宝塔 系统状态 / 磁盘信息 / 内存详情 / CPU详情 / 系统负载 / 网络流量
+/宝塔 网站列表 / 数据库列表 / 数据库状态 / MySQL配置 / 计划任务 / FTP列表
+/宝塔 安全扫描 / 安全评分 / 后台任务 / 任务日志 <ID> / 网站SSL <域名>
+
 🛠 网络工具 (仅管理员):
 /狐狸工具 请求 <url> [-X 方法] [-H '头'] [-d 数据] [-b cookie] - 发送 HTTP 请求
 /狐狸工具 url检测 <url> - 检测状态码/耗时/重定向/响应头
@@ -1531,3 +1539,197 @@ class MessageRecorder(Star, AfdianFeature, DsggFeature):
     async def cmd_dsgg_stop_schedule(self, event: AstrMessageEvent):
         """停止广告 - 停止定时广告发送"""
         yield event.plain_result(self.dsgg_stop_schedule())
+
+    # ========== 宝塔面板（复刻自 btpanel-plugin，作者 桉南/yll14，MIT） ==========
+
+    @filter.command_group("宝塔", alias={"btpanel"})
+    def btpanel_cmd():
+        pass
+
+    @btpanel_cmd.command("帮助", alias={"help"})
+    async def cmd_btpanel_help(self, event: AstrMessageEvent):
+        """宝塔面板帮助"""
+        yield event.plain_result(
+            "🗄 宝塔面板（配置 btpanel_url / btpanel_api_sk 后可用）\n\n"
+            "📊 查询:\n"
+            "/宝塔 系统状态 / 磁盘信息 / 内存详情 / CPU详情\n"
+            "/宝塔 系统负载 / 网络流量 / 后台任务 / 安全扫描 / 安全评分\n"
+            "/宝塔 网站列表 / 网站SSL <域名>\n"
+            "/宝塔 数据库列表 / 数据库状态 / MySQL配置\n"
+            "/宝塔 计划任务 / 任务日志 <ID> / FTP列表\n\n"
+            "🔧 管理（仅管理员）:\n"
+            "/宝塔 释放内存 / 重启面板 / 清理系统\n"
+            "/宝塔 服务 <重启|启动|停止|重载> <服务名>\n"
+            "/宝塔 网站开启|网站停止|网站备份 <域名>\n"
+            "/宝塔 数据库备份 <库名> / 任务启用|任务暂停 <ID>"
+        )
+
+    @btpanel_cmd.command("系统状态", alias={"系统信息"})
+    async def cmd_btpanel_system_total(self, event: AstrMessageEvent):
+        """宝塔 - 服务器完整状态"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_system_total))
+
+    @btpanel_cmd.command("磁盘信息")
+    async def cmd_btpanel_disk_info(self, event: AstrMessageEvent):
+        """宝塔 - 磁盘分区信息"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_disk_info))
+
+    @btpanel_cmd.command("内存详情")
+    async def cmd_btpanel_mem_info(self, event: AstrMessageEvent):
+        """宝塔 - 内存详细信息"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_mem_info))
+
+    @btpanel_cmd.command("CPU详情", alias={"cpu详情"})
+    async def cmd_btpanel_cpu_info(self, event: AstrMessageEvent):
+        """宝塔 - CPU 详细信息"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_cpu_info))
+
+    @btpanel_cmd.command("系统负载", alias={"负载"})
+    async def cmd_btpanel_load(self, event: AstrMessageEvent):
+        """宝塔 - 系统负载"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_load_average))
+
+    @btpanel_cmd.command("网络流量", alias={"流量"})
+    async def cmd_btpanel_net(self, event: AstrMessageEvent):
+        """宝塔 - 网络流量"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_net_work))
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @btpanel_cmd.command("释放内存")
+    async def cmd_btpanel_re_memory(self, event: AstrMessageEvent):
+        """宝塔 - 释放系统内存缓存"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_re_memory))
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @btpanel_cmd.command("重启面板")
+    async def cmd_btpanel_re_web(self, event: AstrMessageEvent):
+        """宝塔 - 重启宝塔面板服务"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_re_web))
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @btpanel_cmd.command("清理系统")
+    async def cmd_btpanel_clear(self, event: AstrMessageEvent):
+        """宝塔 - 清理系统垃圾文件"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_clear_system))
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @btpanel_cmd.command("服务")
+    async def cmd_btpanel_service(self, event: AstrMessageEvent, action: str, name: str):
+        """宝塔 - 服务启停，如：/宝塔 服务 重启 nginx"""
+        service_type_map = {"重启": "restart", "启动": "start",
+                            "停止": "stop", "重载": "reload"}
+        if action not in service_type_map:
+            yield event.plain_result("动作仅支持：重启 / 启动 / 停止 / 重载")
+            return
+        yield event.plain_result(
+            await self._btpanel_cmd(
+                lambda: self.btpanel_service_admin(name, service_type_map[action])
+            )
+        )
+
+    @btpanel_cmd.command("网站列表")
+    async def cmd_btpanel_sites(self, event: AstrMessageEvent):
+        """宝塔 - 查看所有网站"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_list_sites))
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @btpanel_cmd.command("网站开启")
+    async def cmd_btpanel_site_start(self, event: AstrMessageEvent, name: str):
+        """宝塔 - 启用网站，如：/宝塔 网站开启 example.com"""
+        yield event.plain_result(
+            await self._btpanel_cmd(lambda: self.btpanel_site_start(name))
+        )
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @btpanel_cmd.command("网站停止")
+    async def cmd_btpanel_site_stop(self, event: AstrMessageEvent, name: str):
+        """宝塔 - 停止网站，如：/宝塔 网站停止 example.com"""
+        yield event.plain_result(
+            await self._btpanel_cmd(lambda: self.btpanel_site_stop(name))
+        )
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @btpanel_cmd.command("网站备份")
+    async def cmd_btpanel_site_backup(self, event: AstrMessageEvent, name: str):
+        """宝塔 - 备份网站，如：/宝塔 网站备份 example.com"""
+        yield event.plain_result(
+            await self._btpanel_cmd(lambda: self.btpanel_site_backup(name))
+        )
+
+    @btpanel_cmd.command("网站SSL")
+    async def cmd_btpanel_site_ssl(self, event: AstrMessageEvent, name: str):
+        """宝塔 - 查看网站 SSL 证书，如：/宝塔 网站SSL example.com"""
+        yield event.plain_result(
+            await self._btpanel_cmd(lambda: self.btpanel_site_ssl(name))
+        )
+
+    @btpanel_cmd.command("数据库列表")
+    async def cmd_btpanel_dbs(self, event: AstrMessageEvent):
+        """宝塔 - 查看所有数据库"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_list_databases))
+
+    @btpanel_cmd.command("数据库状态")
+    async def cmd_btpanel_db_status(self, event: AstrMessageEvent):
+        """宝塔 - 查看 MySQL 运行状态"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_db_status))
+
+    @btpanel_cmd.command("MySQL配置", alias={"mysql配置"})
+    async def cmd_btpanel_mysql_info(self, event: AstrMessageEvent):
+        """宝塔 - 查看 MySQL 配置信息"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_mysql_info))
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @btpanel_cmd.command("数据库备份")
+    async def cmd_btpanel_db_backup(self, event: AstrMessageEvent, name: str):
+        """宝塔 - 备份数据库，如：/宝塔 数据库备份 test_db"""
+        yield event.plain_result(
+            await self._btpanel_cmd(lambda: self.btpanel_db_backup(name))
+        )
+
+    @btpanel_cmd.command("计划任务")
+    async def cmd_btpanel_crontab(self, event: AstrMessageEvent):
+        """宝塔 - 查看所有计划任务"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_list_crontab))
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @btpanel_cmd.command("任务启用")
+    async def cmd_btpanel_cron_enable(self, event: AstrMessageEvent, task_id: int):
+        """宝塔 - 启用计划任务，如：/宝塔 任务启用 1"""
+        yield event.plain_result(
+            await self._btpanel_cmd(lambda: self.btpanel_cron_status(task_id, 1))
+        )
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @btpanel_cmd.command("任务暂停")
+    async def cmd_btpanel_cron_disable(self, event: AstrMessageEvent, task_id: int):
+        """宝塔 - 暂停计划任务，如：/宝塔 任务暂停 1"""
+        yield event.plain_result(
+            await self._btpanel_cmd(lambda: self.btpanel_cron_status(task_id, 0))
+        )
+
+    @btpanel_cmd.command("任务日志")
+    async def cmd_btpanel_cron_logs(self, event: AstrMessageEvent, task_id: int):
+        """宝塔 - 查看计划任务日志，如：/宝塔 任务日志 1"""
+        yield event.plain_result(
+            await self._btpanel_cmd(lambda: self.btpanel_cron_logs(task_id))
+        )
+
+    @btpanel_cmd.command("FTP列表")
+    async def cmd_btpanel_ftp(self, event: AstrMessageEvent):
+        """宝塔 - 查看 FTP 用户列表"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_list_ftp))
+
+    @btpanel_cmd.command("后台任务")
+    async def cmd_btpanel_tasks(self, event: AstrMessageEvent):
+        """宝塔 - 查看面板后台任务队列"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_list_tasks))
+
+    @btpanel_cmd.command("安全扫描")
+    async def cmd_btpanel_warning(self, event: AstrMessageEvent):
+        """宝塔 - 查看安全扫描结果"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_warning_list))
+
+    @btpanel_cmd.command("安全评分")
+    async def cmd_btpanel_warning_score(self, event: AstrMessageEvent):
+        """宝塔 - 查看安全扫描评分"""
+        yield event.plain_result(await self._btpanel_cmd(self.btpanel_warning_score))
