@@ -1,6 +1,14 @@
 # astrbot_plugin_ad_broadcast（广告广播助手）
 
+[![Version](https://img.shields.io/badge/Version-1.0.1-orange?style=for-the-badge)](README.md)
+
 独立 AstrBot 插件，多平台定时广告广播。从 [astrbot_plugin_fox_toolbox](https://github.com/huliaiya/1plugin) 的广告助手（DsggFeature）抽离而来，解决了原版插件在 Telegram 上因访问 `event.bot` 抛 `AttributeError` 导致无法添加广告的问题。
+
+## 版本记录
+
+### 1.0.1
+
+- 同步独立插件版本号与 README 版本标识。
 
 ## 功能特性
 
